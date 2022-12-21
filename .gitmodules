@@ -1,0 +1,3 @@
+[submodule "ext/GViZDoom"]
+	path = ext/GViZDoom
+	url = git@github.com:Lehdari/GViZDoom.git
