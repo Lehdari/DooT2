@@ -97,7 +97,8 @@ void App::loop()
             }
         }
 
-        doomGame.update(generateRandomAction());
+        if (doomGame.update(generateRandomAction()))
+            doomGame.restart();
 
         auto screenHeight = doomGame.getScreenHeight();
         auto screenWidth = doomGame.getScreenWidth();
