@@ -25,6 +25,9 @@ target_link_libraries(doot2
     PUBLIC  gvizdoom
     PUBLIC  ${SDL2_LIBRARIES}
 )
+target_compile_definitions(doot2
+    PUBLIC  ASSETS_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/assets\"
+)
 set_target_properties(doot2 PROPERTIES
     CXX_STANDARD    20
 )
