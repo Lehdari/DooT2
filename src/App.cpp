@@ -16,11 +16,16 @@
 using namespace gvizdoom;
 
 
+std::default_random_engine      App::_rnd       (1507715517);
+std::normal_distribution<float> App::_rndNormal (0.0f, 0.666f);
+
+
 App::App() :
-    _window     (nullptr),
-    _renderer   (nullptr),
-    _texture    (nullptr),
-    _quit       (false)
+    _window             (nullptr),
+    _renderer           (nullptr),
+    _texture            (nullptr),
+    _quit               (false),
+    _actionConverter    ()
 {
     auto& doomGame = DoomGame::instance();
 
@@ -55,6 +60,14 @@ App::App() :
         printf("Error: SDL Texture could not be created! SDL_Error: %s\n", SDL_GetError());
         return;
     }
+
+    // Setup action converter
+    _actionConverter.setAngleIndex(0);
+    _actionConverter.setKeyIndex(1, Action::Key::ACTION_FORWARD);
+    _actionConverter.setKeyIndex(2, Action::Key::ACTION_BACK);
+    _actionConverter.setKeyIndex(3, Action::Key::ACTION_LEFT);
+    _actionConverter.setKeyIndex(4, Action::Key::ACTION_RIGHT);
+    _actionConverter.setKeyIndex(5, Action::Key::ACTION_USE);
 }
 
 App::~App()
@@ -84,7 +97,7 @@ void App::loop()
             }
         }
 
-        doomGame.update(Action());
+        doomGame.update(generateRandomAction());
 
         auto screenHeight = doomGame.getScreenHeight();
         auto screenWidth = doomGame.getScreenWidth();
@@ -99,4 +112,17 @@ void App::loop()
         SDL_RenderCopy(_renderer, _texture, nullptr, nullptr);
         SDL_RenderPresent(_renderer);
     }
+}
+
+gvizdoom::Action App::generateRandomAction()
+{
+    constexpr size_t actionVectorLength = 6;
+    constexpr float smoothing = 0.75f; // smoothing effectively causes discrete actions to "stick"
+    static std::vector<float> actionVector(actionVectorLength, 0.0f);
+
+    for (size_t i=0; i<actionVectorLength; ++i) {
+        actionVector[i] = smoothing*actionVector[i] + (1.0f-smoothing)*_rndNormal(_rnd);
+    }
+
+    return _actionConverter(actionVector);
 }
