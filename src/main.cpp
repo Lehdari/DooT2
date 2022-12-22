@@ -1,17 +1,17 @@
-#include "DoomGame.hpp"
+#include "gvizdoom/DoomGame.hpp"
+
+#include "App.hpp"
 
 
 int main()
 {
     gvizdoom::GameConfig config;
 
-    auto& game = gvizdoom::DoomGame::instance();
-    game.init(config);
+    auto& doomGame = gvizdoom::DoomGame::instance();
+    doomGame.init(config);
 
-    for (int i=0; i<1000; ++i) {
-        game.update(gvizdoom::Action());
-        printf("%d\r", i);
-    }
+    App app;
+    app.loop();
 
     return 0;
 }
