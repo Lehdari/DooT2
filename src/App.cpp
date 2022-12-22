@@ -12,6 +12,8 @@
 
 #include "gvizdoom/DoomGame.hpp"
 
+#include <opencv2/highgui.hpp>
+
 
 using namespace gvizdoom;
 
@@ -25,7 +27,8 @@ App::App() :
     _renderer           (nullptr),
     _texture            (nullptr),
     _quit               (false),
-    _actionConverter    ()
+    _actionConverter    (),
+    _positionPlot       (1024, 1024, CV_32FC1, cv::Scalar(0.0f))
 {
     auto& doomGame = DoomGame::instance();
 
@@ -112,6 +115,23 @@ void App::loop()
         SDL_UnlockTexture(_texture);
         SDL_RenderCopy(_renderer, _texture, nullptr, nullptr);
         SDL_RenderPresent(_renderer);
+
+        static const float initPlayerX = doomGame.getGameState<GameState::X>();
+        static const float initPlayerY = doomGame.getGameState<GameState::Y>();
+        float playerX = doomGame.getGameState<GameState::X>() - initPlayerX;
+        float playerY = doomGame.getGameState<GameState::Y>() - initPlayerY;
+        playerX *= 0.25f;
+        playerY *= 0.25f;
+        if (playerX >= -512.0f && playerY >= -512.0f && playerX < 512.0f && playerY < 512.0f)
+            _positionPlot.at<float>((int)playerX + 512, (int)playerY + 512) = 1.0f;
+
+        // Render position plot
+        static uint64_t i = 0;
+        if (++i%10 == 0) {
+            cv::imshow("Position Plot", _positionPlot);
+            cv::waitKey(1);
+            _positionPlot *= 0.995f;
+        }
     }
 }
 

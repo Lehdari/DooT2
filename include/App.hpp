@@ -12,6 +12,7 @@
 
 
 #include <SDL.h>
+#include <opencv2/core/mat.hpp>
 #include "gvizdoom/Action.hpp"
 
 #include "ActionConverter.hpp"
@@ -34,6 +35,7 @@ private:
 
     bool                    _quit;
     ActionConverter<float>  _actionConverter;
+    cv::Mat                 _positionPlot;
 
     static std::default_random_engine       _rnd;
     static std::normal_distribution<float>  _rndNormal;

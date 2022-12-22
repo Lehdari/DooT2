@@ -6,6 +6,7 @@ project(DooT2)
 add_subdirectory(ext)
 
 find_package(SDL2 REQUIRED)
+find_package(OpenCV REQUIRED)
 
 
 # Source files
@@ -24,6 +25,7 @@ target_include_directories(doot2
 target_link_libraries(doot2
     PUBLIC  gvizdoom
     PUBLIC  ${SDL2_LIBRARIES}
+    PUBLIC  ${OpenCV_LIBS}
 )
 target_compile_definitions(doot2
     PUBLIC  ASSETS_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/assets\"
