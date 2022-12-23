@@ -14,28 +14,25 @@
 #include "ActionConverter.hpp"
 
 #include <random>
-#include <opencv2/core/mat.hpp>
+
+
+class Heatmap;
 
 
 class ActionManager {
 public:
-    struct Settings {
-        int     heatmapSize;        // width and height of the exploration heatmap
-        float   heatmapCellSize;    // exploration heatmap cell size
-    };
+    ActionManager();
 
-    ActionManager(const Settings& settings);
+    // Add heatmap module
+    void setHeatmap(const Heatmap* heatmap);
 
-    gvizdoom::Action operator()(float playerXRelative, float playerYRelative);
-
-    float sampleHeatmap()
+    gvizdoom::Action operator()();
 
 private:
-    Settings                                _settings;
     ActionConverter<float>                  _actionConverter;
-    cv::Mat                                 _heatmap;
-    float                                   _heatmapMaxValue;
-    cv::Mat                                 _heatmapNormalized;
+
+    // modules
+    const Heatmap*                          _heatmap;
 
     static std::default_random_engine       _rnd;
     static std::normal_distribution<float>  _rndNormal;

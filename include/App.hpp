@@ -16,6 +16,7 @@
 #include "gvizdoom/Action.hpp"
 
 #include "ActionManager.hpp"
+#include "Heatmap.hpp"
 
 
 class App {
@@ -33,5 +34,6 @@ private:
 
     bool            _quit;
     ActionManager   _actionManager;
+    Heatmap         _heatmap;
     cv::Mat         _positionPlot;
 };

@@ -19,7 +19,8 @@ std::normal_distribution<float> ActionManager::_rndNormal (0.0f, 0.666f);
 
 
 ActionManager::ActionManager() :
-    _actionConverter()
+    _actionConverter    (),
+    _heatmap            (nullptr)
 {
     // Setup action converter
     _actionConverter.setAngleIndex(0);
@@ -30,7 +31,16 @@ ActionManager::ActionManager() :
     _actionConverter.setKeyIndex(5, Action::Key::ACTION_USE);
 }
 
-gvizdoom::Action ActionManager::operator()() {
+void ActionManager::setHeatmap(const Heatmap* heatmap)
+{
+    _heatmap = heatmap;
+}
+
+gvizdoom::Action ActionManager::operator()()
+{
+    if (_heatmap) {
+        // TODO
+    }
     return generateRandomAction();
 }
 
