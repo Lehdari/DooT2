@@ -15,9 +15,7 @@
 #include <opencv2/core/mat.hpp>
 #include "gvizdoom/Action.hpp"
 
-#include "ActionConverter.hpp"
-
-#include <random>
+#include "ActionManager.hpp"
 
 
 class App {
@@ -29,16 +27,11 @@ public:
     void loop();
 
 private:
-    SDL_Window*             _window;
-    SDL_Renderer*           _renderer;
-    SDL_Texture*            _texture;
+    SDL_Window*     _window;
+    SDL_Renderer*   _renderer;
+    SDL_Texture*    _texture;
 
-    bool                    _quit;
-    ActionConverter<float>  _actionConverter;
-    cv::Mat                 _positionPlot;
-
-    static std::default_random_engine       _rnd;
-    static std::normal_distribution<float>  _rndNormal;
-
-    gvizdoom::Action generateRandomAction();
+    bool            _quit;
+    ActionManager   _actionManager;
+    cv::Mat         _positionPlot;
 };
