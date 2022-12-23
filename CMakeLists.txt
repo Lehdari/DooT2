@@ -12,6 +12,7 @@ find_package(OpenCV REQUIRED)
 # Source files
 set(DOOT2_SOURCES
     src/main.cpp
+    src/ActionManager.cpp
     src/App.cpp
 )
 
