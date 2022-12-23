@@ -23,7 +23,8 @@ App::App() :
     _renderer           (nullptr),
     _texture            (nullptr),
     _quit               (false),
-    _positionPlot       (1024, 1024, CV_32FC1, cv::Scalar(0.0f))
+    _heatmap            (Heatmap::Settings{256, 32.0f}),
+    _positionPlot       (1024, 1024, CV_32FC3, cv::Scalar(0.0f))
 {
     auto& doomGame = DoomGame::instance();
 
@@ -87,6 +88,10 @@ void App::loop()
             }
         }
 
+        static Vec2f playerPosRelative(0.0f, 0.0f);
+
+        _heatmap.addSample(playerPosRelative);
+
         if (doomGame.update(_actionManager()))
             doomGame.restart();
 
@@ -105,19 +110,28 @@ void App::loop()
 
         static const float initPlayerX = doomGame.getGameState<GameState::X>();
         static const float initPlayerY = doomGame.getGameState<GameState::Y>();
-        float playerX = doomGame.getGameState<GameState::X>() - initPlayerX;
-        float playerY = doomGame.getGameState<GameState::Y>() - initPlayerY;
-        playerX *= 0.25f;
-        playerY *= 0.25f;
-        if (playerX >= -512.0f && playerY >= -512.0f && playerX < 512.0f && playerY < 512.0f)
-            _positionPlot.at<float>((int)playerX + 512, (int)playerY + 512) = 1.0f;
+        playerPosRelative(0) = doomGame.getGameState<GameState::X>() - initPlayerX;
+        playerPosRelative(1) = initPlayerY - doomGame.getGameState<GameState::Y>(); // invert y
+        printf("%0.5f %0.5f \n", playerPosRelative(0), playerPosRelative(1));
+        Vec2f playerPosScreen = playerPosRelative * 0.125f;
+
+        if (playerPosScreen(0) >= -512.0f && playerPosScreen(1) >= -512.0f &&
+            playerPosScreen(0) < 512.0f && playerPosScreen(1) < 512.0f)
+            _positionPlot.at<Vec3f>((int)playerPosScreen(1) + 512, (int)playerPosScreen(0) + 512)(1) = 1.0f;
 
         // Render position plot
-        static uint64_t i = 0;
-        if (++i%10 == 0) {
+        static uint64_t a = 0;
+        if (++a%10 == 0) {
+            for (int j=0; j<1023; ++j) {
+                auto* p = _positionPlot.ptr<Vec3f>(j);
+                for (int i=0; i<1023; ++i) {
+                    p[i](1) *= 0.995f;
+                    p[i](2) = _heatmap.normalizedSample(Vec2f(i*0.25f, j*0.25f));
+                }
+            }
+
             cv::imshow("Position Plot", _positionPlot);
             cv::waitKey(1);
-            _positionPlot *= 0.995f;
         }
     }
 }
