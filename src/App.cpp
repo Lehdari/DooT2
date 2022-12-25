@@ -90,7 +90,8 @@ void App::loop()
 
         static Vec2f playerPosRelative(0.0f, 0.0f);
 
-        _heatmap.addSample(playerPosRelative);
+        _heatmap.addGaussianSample(playerPosRelative, 1.0f, 100.0f);
+        _heatmap.refreshNormalization();
 
         if (doomGame.update(_actionManager()))
             doomGame.restart();
@@ -112,7 +113,6 @@ void App::loop()
         static const float initPlayerY = doomGame.getGameState<GameState::Y>();
         playerPosRelative(0) = doomGame.getGameState<GameState::X>() - initPlayerX;
         playerPosRelative(1) = initPlayerY - doomGame.getGameState<GameState::Y>(); // invert y
-        printf("%0.5f %0.5f \n", playerPosRelative(0), playerPosRelative(1));
         Vec2f playerPosScreen = playerPosRelative * 0.125f;
 
         if (playerPosScreen(0) >= -512.0f && playerPosScreen(1) >= -512.0f &&
