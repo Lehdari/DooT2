@@ -18,13 +18,22 @@
 using namespace gvizdoom;
 
 
+constexpr std::size_t batchSize = 16;
+
+constexpr size_t recordBeginFrameId = 32;//480;
+constexpr size_t recordEndFrameId = 64;//512;
+
+
 App::App() :
     _window             (nullptr),
     _renderer           (nullptr),
     _texture            (nullptr),
     _quit               (false),
     _heatmap            (Heatmap::Settings{256, 32.0f}),
-    _positionPlot       (1024, 1024, CV_32FC3, cv::Scalar(0.0f))
+    _sequenceStorage    (batchSize, 32),
+    _positionPlot       (1024, 1024, CV_32FC3, cv::Scalar(0.0f)),
+    _frameId            (0),
+    _batchId            (0)
 {
     auto& doomGame = DoomGame::instance();
 
@@ -94,20 +103,22 @@ void App::loop()
         }
 
         static Vec2f playerPosRelative(0.0f, 0.0f);
-        if (doomGame.update(_actionManager(playerPosRelative))) {
-            // proceed to next map
-            _actionManager.reset();
-            _positionPlot *= 0.0f;
-
-            gvizdoom::GameConfig newGameConfig = doomGame.getGameConfig();
-            newGameConfig.map = (newGameConfig.map+1)%16;
-            doomGame.restart(newGameConfig);
+        if (_frameId >= recordEndFrameId || doomGame.update(_actionManager(playerPosRelative))) {
+            nextMap();
+            continue;
         }
 
-        auto screenHeight = doomGame.getScreenHeight();
-        auto screenWidth = doomGame.getScreenWidth();
+        if (_frameId >= recordBeginFrameId) {
+            auto recordFrameId = _frameId - recordBeginFrameId;
+            printf("[%lu %lu]\n", recordFrameId, _batchId);
+            _sequenceStorage[recordFrameId][_batchId].bgraFrame =
+                Image<uint8_t>(doomGame.getScreenWidth(), doomGame.getScreenHeight(),
+                ImageFormat::BGRA, doomGame.getPixelsBGRA());
+        }
 
         // Render screen
+        auto screenHeight = doomGame.getScreenHeight();
+        auto screenWidth = doomGame.getScreenWidth();
         uint8_t* sdlPixels;
         int pitch;
         SDL_LockTexture(_texture, nullptr, reinterpret_cast<void**>(&sdlPixels), &pitch);
@@ -152,5 +163,23 @@ void App::loop()
             cv::imshow("Position Plot", _positionPlot);
             cv::waitKey(1);
         }
+
+        ++_frameId;
     }
+}
+
+void App::nextMap()
+{
+    auto& doomGame = DoomGame::instance();
+
+    _actionManager.reset();
+    _positionPlot *= 0.0f;
+
+    _frameId = 0;
+    _batchId = (_batchId+1)%(int)batchSize;
+
+    gvizdoom::GameConfig newGameConfig = doomGame.getGameConfig();
+    newGameConfig.map = _batchId + 1;
+
+    doomGame.restart(newGameConfig);
 }
