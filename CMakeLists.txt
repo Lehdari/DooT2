@@ -16,6 +16,7 @@ set(DOOT2_SOURCES
     src/ActionManager.cpp
     src/App.cpp
     src/Heatmap.cpp
+    src/SequenceStorage.cpp
 )
 
 

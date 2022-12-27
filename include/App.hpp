@@ -17,6 +17,7 @@
 
 #include "ActionManager.hpp"
 #include "Heatmap.hpp"
+#include "SequenceStorage.hpp"
 
 
 class App {
@@ -35,5 +36,11 @@ private:
     bool            _quit;
     ActionManager   _actionManager;
     Heatmap         _heatmap;
+    SequenceStorage _sequenceStorage;
     cv::Mat         _positionPlot;
+
+    size_t          _frameId;
+    size_t          _batchId;
+
+    void nextMap(); // proceed to next map
 };
