@@ -64,3 +64,10 @@ void Heatmap::refreshNormalization()
 {
     _heatmapNormalized = _heatmap / _heatmapMaxValue;
 }
+
+void Heatmap::reset()
+{
+    _heatmap = cv::Mat(_settings.resolution, _settings.resolution, CV_32FC1, 0.0f);
+    _heatmapNormalized = cv::Mat(_settings.resolution, _settings.resolution, CV_32FC1, 0.0f);
+    _heatmapMaxValue = 0.0f;
+}

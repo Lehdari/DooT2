@@ -59,6 +59,9 @@ App::App() :
         printf("Error: SDL Texture could not be created! SDL_Error: %s\n", SDL_GetError());
         return;
     }
+
+    // Setup ActionManager
+    _actionManager.setHeatmap(&_heatmap);
 }
 
 App::~App()
@@ -77,6 +80,8 @@ void App::loop()
     auto& doomGame = DoomGame::instance();
     SDL_Event event;
 
+    Vec2f playerPosScreen(0.0f, 0.0f);
+
     while (!_quit) {
         while(SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT ||
@@ -89,12 +94,15 @@ void App::loop()
         }
 
         static Vec2f playerPosRelative(0.0f, 0.0f);
+        if (doomGame.update(_actionManager(playerPosRelative))) {
+            // proceed to next map
+            _actionManager.reset();
+            _positionPlot *= 0.0f;
 
-        _heatmap.addGaussianSample(playerPosRelative, 1.0f, 100.0f);
-        _heatmap.refreshNormalization();
-
-        if (doomGame.update(_actionManager()))
-            doomGame.restart();
+            gvizdoom::GameConfig newGameConfig = doomGame.getGameConfig();
+            newGameConfig.map = (newGameConfig.map+1)%16;
+            doomGame.restart(newGameConfig);
+        }
 
         auto screenHeight = doomGame.getScreenHeight();
         auto screenWidth = doomGame.getScreenWidth();
@@ -113,20 +121,31 @@ void App::loop()
         static const float initPlayerY = doomGame.getGameState<GameState::Y>();
         playerPosRelative(0) = doomGame.getGameState<GameState::X>() - initPlayerX;
         playerPosRelative(1) = initPlayerY - doomGame.getGameState<GameState::Y>(); // invert y
-        Vec2f playerPosScreen = playerPosRelative * 0.125f;
 
+        // Update heatmap
+        _heatmap.addGaussianSample(playerPosRelative, 1.0f, 100.0f);
+        _heatmap.refreshNormalization();
+
+        // Update position plot
+        playerPosScreen = playerPosRelative * 0.125f;
         if (playerPosScreen(0) >= -512.0f && playerPosScreen(1) >= -512.0f &&
-            playerPosScreen(0) < 512.0f && playerPosScreen(1) < 512.0f)
-            _positionPlot.at<Vec3f>((int)playerPosScreen(1) + 512, (int)playerPosScreen(0) + 512)(1) = 1.0f;
+            playerPosScreen(0) < 512.0f && playerPosScreen(1) < 512.0f) {
+            if (_actionManager._heatmapDiff > 0.0f)
+                _positionPlot.at<Vec3f>((int)playerPosScreen(1)+512, (int)playerPosScreen(0)+512)(1) = 1.0f;
+            else
+                _positionPlot.at<Vec3f>((int)playerPosScreen(1)+512, (int)playerPosScreen(0)+512)(0) = 1.0f;
+        }
 
         // Render position plot
         static uint64_t a = 0;
         if (++a%10 == 0) {
+            // Heatmap to red channel
             for (int j=0; j<1023; ++j) {
                 auto* p = _positionPlot.ptr<Vec3f>(j);
                 for (int i=0; i<1023; ++i) {
+                    p[i](0) *= 0.995f;
                     p[i](1) *= 0.995f;
-                    p[i](2) = _heatmap.normalizedSample(Vec2f(i*0.25f, j*0.25f));
+                    p[i](2) = _heatmap.normalizedSample(Vec2f(i * 0.25f, j * 0.25f), false);
                 }
             }
 

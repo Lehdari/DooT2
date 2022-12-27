@@ -28,8 +28,10 @@ public:
     void addGaussianSample(const Vec2f& playerPos, float s, float sigma);
     void refreshNormalization();
 
-    inline float sample(const Vec2f& p) const noexcept;
-    inline float normalizedSample(const Vec2f& p) const noexcept;
+    inline float sample(Vec2f p, bool worldCoords=false) const noexcept;
+    inline float normalizedSample(Vec2f p, bool worldCoords=false) const noexcept;
+
+    void reset();
 
 private:
     Settings    _settings;
@@ -42,8 +44,10 @@ private:
 };
 
 
-float Heatmap::sample(const Vec2f& p) const noexcept
+float Heatmap::sample(Vec2f p, bool worldCoords) const noexcept
 {
+    if (worldCoords)
+        p = p/_settings.cellSize + Vec2f(_settings.resolution/2.0f, _settings.resolution/2.0f);
     int px = p(0);
     int py = p(1);
     Vec2f frac(p(0)-px, p(1)-py);
@@ -53,8 +57,10 @@ float Heatmap::sample(const Vec2f& p) const noexcept
            frac(0)*frac(1)*_heatmap.at<float>(py+1, px+1);
 }
 
-float Heatmap::normalizedSample(const Vec2f& p) const noexcept
+float Heatmap::normalizedSample(Vec2f p, bool worldCoords) const noexcept
 {
+    if (worldCoords)
+        p = p/_settings.cellSize + Vec2f(_settings.resolution/2.0f, _settings.resolution/2.0f);
     int px = p(0);
     int py = p(1);
     Vec2f frac(p(0)-px, p(1)-py);

@@ -9,18 +9,27 @@
 //
 
 #include "ActionManager.hpp"
+#include "Heatmap.hpp"
 
 
 using namespace gvizdoom;
 
 
+static constexpr size_t actionVectorLength = 6;
+
+
 std::default_random_engine      ActionManager::_rnd       (1507715517);
-std::normal_distribution<float> ActionManager::_rndNormal (0.0f, 0.666f);
+std::normal_distribution<float> ActionManager::_rndNormal (0.0f, 1.0f);
 
 
 ActionManager::ActionManager() :
     _actionConverter    (),
-    _heatmap            (nullptr)
+    _actionVector       (actionVectorLength, 0.0f),
+    _heatmap            (nullptr),
+    _forwardHoldTimer   (0),
+    _wallHitTimer       (0),
+    _pPrev              (0.0f, 0.0f),
+    _sPrev              (0.0f)
 {
     // Setup action converter
     _actionConverter.setAngleIndex(0);
@@ -31,28 +40,78 @@ ActionManager::ActionManager() :
     _actionConverter.setKeyIndex(5, Action::Key::ACTION_USE);
 }
 
-void ActionManager::setHeatmap(const Heatmap* heatmap)
+void ActionManager::setHeatmap(Heatmap* heatmap)
 {
     _heatmap = heatmap;
 }
 
-gvizdoom::Action ActionManager::operator()()
+void ActionManager::reset()
 {
-    if (_heatmap) {
-        // TODO
-    }
-    return generateRandomAction();
+    if (_heatmap)
+        _heatmap->reset();
+
+    _actionVector = std::vector<float>(actionVectorLength, 0.0f);
+    _forwardHoldTimer = 0;
+    _wallHitTimer = 0;
+    _pPrev << 0.0f, 0.0f;
+    _sPrev = 0.0f;
 }
 
-gvizdoom::Action ActionManager::generateRandomAction()
+gvizdoom::Action ActionManager::operator()(const Vec2f& playerPos)
 {
-    constexpr size_t actionVectorLength = 6;
-    constexpr float smoothing = 0.75f; // smoothing effectively causes discrete actions to "stick"
-    static std::vector<float> actionVector(actionVectorLength, 0.0f);
-
-    for (size_t i=0; i<actionVectorLength; ++i) {
-        actionVector[i] = smoothing*actionVector[i] + (1.0f-smoothing)*_rndNormal(_rnd);
+    if (_heatmap) {
+        float heatmapSample = _heatmap->sample(playerPos, true);
+        _heatmapDiff = heatmapSample-_heatmapSamplePrev;
+        _heatmapSamplePrev = heatmapSample;
     }
 
-    return _actionConverter(actionVector);
+    // velocity, speed and acceleration
+    Vec2f v = playerPos - _pPrev;
+    float s = v.norm();
+    float a = s-_sPrev;
+    _pPrev = playerPos;
+    _sPrev = s;
+
+    // count consequent forward presses
+    if (_actionVector[1] > 0.0f && _actionVector[2] <= 0.0f)
+        _forwardHoldTimer++;
+    else
+        _forwardHoldTimer = 0;
+
+    if (_wallHitTimer == 0) {
+        // detect when forward motion has hit a wall
+        if (_forwardHoldTimer>15 && a<-0.5f) {
+            _wallHitTimer = 60;
+        }
+        else if (_heatmapDiff > 0.0f) { // randomize action in case we're moving towards areas
+            // which has been visited more (reuse actions otherwise)
+            if (_heatmapDiff > 0.15f) {
+                // invert action in case heatmap value grows rapidly (we're approaching region
+                // that has been visited often)
+                for (int i=0; i<actionVectorLength; ++i)
+                    _actionVector[i] *= -1.0f;
+            }
+            updateActionVector(0.75, 1.0f);
+        }
+    }
+    else {
+        // in case wall has been hit, cycle use to open potential door
+        // and keep moving forward for 60 tics
+        if (_wallHitTimer == 60)
+            _actionVector = {0.0f, 1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
+        else if (_wallHitTimer == 59)
+            _actionVector = {0.0f, 1.0f, -1.0f, -1.0f, -1.0f, 1.0f};
+
+        --_wallHitTimer;
+    }
+
+    return _actionConverter(_actionVector);
+}
+
+void ActionManager::updateActionVector(float smoothing, float sigma)
+{
+    for (size_t i=0; i<actionVectorLength; ++i) {
+        _actionVector[i] = smoothing*_actionVector[i] + (1.0f-smoothing)*sigma*_rndNormal(_rnd);
+        _actionVector[i] = std::clamp(_actionVector[i], -1.0f, 1.0f);
+    }
 }
