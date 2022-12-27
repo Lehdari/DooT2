@@ -12,6 +12,7 @@
 
 
 #include "ActionConverter.hpp"
+#include "MathTypes.hpp"
 
 #include <random>
 
@@ -24,18 +25,29 @@ public:
     ActionManager();
 
     // Add heatmap module
-    void setHeatmap(const Heatmap* heatmap);
+    void setHeatmap(Heatmap* heatmap);
 
-    gvizdoom::Action operator()();
+    void reset();
+
+    gvizdoom::Action operator()(const Vec2f& playerPos);
+
+    float                                   _heatmapDiff;
 
 private:
     ActionConverter<float>                  _actionConverter;
+    std::vector<float>                      _actionVector;
 
     // modules
-    const Heatmap*                          _heatmap;
+    Heatmap*                                _heatmap;
+    float                                   _heatmapSamplePrev;
+    Vec2f                                   _pPrev;
+    float                                   _sPrev;
+
+    int                                     _forwardHoldTimer;
+    int                                     _wallHitTimer;
 
     static std::default_random_engine       _rnd;
     static std::normal_distribution<float>  _rndNormal;
 
-    gvizdoom::Action generateRandomAction();
+    void updateActionVector(float smoothing, float sigma);
 };
