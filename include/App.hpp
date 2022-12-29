@@ -18,6 +18,7 @@
 #include "ActionManager.hpp"
 #include "Heatmap.hpp"
 #include "SequenceStorage.hpp"
+#include "ModelProto.hpp"
 
 
 class App {
@@ -41,6 +42,9 @@ private:
 
     size_t          _frameId;
     size_t          _batchId;
+    bool            _newPatchReady;
+
+    ModelProto      _model;
 
     void nextMap(); // proceed to next map
 };
