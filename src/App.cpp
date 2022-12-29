@@ -33,7 +33,8 @@ App::App() :
     _sequenceStorage    (batchSize, 32),
     _positionPlot       (1024, 1024, CV_32FC3, cv::Scalar(0.0f)),
     _frameId            (0),
-    _batchId            (0)
+    _batchId            (0),
+    _newPatchReady      (false)
 {
     auto& doomGame = DoomGame::instance();
 
@@ -110,7 +111,6 @@ void App::loop()
 
         if (_frameId >= recordBeginFrameId) {
             auto recordFrameId = _frameId - recordBeginFrameId;
-            printf("[%lu %lu]\n", recordFrameId, _batchId);
             _sequenceStorage[recordFrameId][_batchId].bgraFrame =
                 Image<uint8_t>(doomGame.getScreenWidth(), doomGame.getScreenHeight(),
                 ImageFormat::BGRA, doomGame.getPixelsBGRA());
@@ -164,6 +164,13 @@ void App::loop()
             cv::waitKey(1);
         }
 
+        // Train
+        if (_newPatchReady) {
+            printf("Training...\n");
+            _model.train(_sequenceStorage);
+            _newPatchReady = false;
+        }
+
         ++_frameId;
     }
 }
@@ -176,7 +183,10 @@ void App::nextMap()
     _positionPlot *= 0.0f;
 
     _frameId = 0;
-    _batchId = (_batchId+1)%(int)batchSize;
+    if (++_batchId >= batchSize) {
+        _newPatchReady = true;
+        _batchId = 0;
+    }
 
     gvizdoom::GameConfig newGameConfig = doomGame.getGameConfig();
     newGameConfig.map = _batchId + 1;
