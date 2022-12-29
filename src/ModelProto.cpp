@@ -42,7 +42,8 @@ void ModelProto::train(const SequenceStorage& storage)
     _autoEncoder->to(device);
 
     // Put data into a tensor
-    std::vector<float> batchData(batchSize*4*480*640);
+    torch::Tensor batchCPU = torch::ones({batchSize, 4, 480, 640}, torch::kCPU);
+    auto* batchData = batchCPU.data_ptr<float>();
     Image<float> frame;
     for (int64_t epoch=0; epoch<256; ++epoch) {
         for (int b=0; b<batchSize; ++b) {
@@ -56,9 +57,6 @@ void ModelProto::train(const SequenceStorage& storage)
                 }
             }
         }
-        auto options = torch::TensorOptions().device(torch::kCPU).dtype<float>();
-        torch::Tensor batchCPU = torch::from_blob(batchData.data(), {batchSize, 4, 480, 640}, options);
-        //batchCPU = batchCPU.transpose(1,3); // BHWC to BCHW
         torch::Tensor batchGPU = batchCPU.to(device);
 
         _autoEncoder->zero_grad();
