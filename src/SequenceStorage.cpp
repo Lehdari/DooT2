@@ -48,3 +48,8 @@ const SequenceStorage::BatchHandle SequenceStorage::operator[](std::size_t id) c
     batchHandle._cEntry = &_data.at(id*_batchSize);
     return batchHandle;
 }
+
+size_t SequenceStorage::size() const
+{
+    return _data.size() / _batchSize;
+}

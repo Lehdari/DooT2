@@ -34,8 +34,11 @@ public:
 
     SequenceStorage(std::size_t batchSize, std::size_t length=0);
 
+    // Access a batch
     BatchHandle& operator[](std::size_t id);
     const BatchHandle operator[](std::size_t id) const noexcept;
+
+    size_t size() const;
 
 private:
     std::size_t         _batchSize;
