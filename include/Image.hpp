@@ -19,6 +19,8 @@ enum class ImageFormat {
     BGRA // only BGRA supported for now
 };
 
+inline int getImageFormatNChannels(ImageFormat imageFormat);
+
 
 template <typename T_Data>
 class Image {

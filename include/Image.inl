@@ -8,12 +8,21 @@
 // with this source code package.
 //
 
+inline int getImageFormatNChannels(ImageFormat imageFormat)
+{
+    if (imageFormat == ImageFormat::BGRA)
+        return 4;
+
+    return -1;
+}
+
+
 template<typename T_Data>
 Image<T_Data>::Image(int width, int height, ImageFormat format, const T_Data* data) :
     _width  (width),
     _height (height),
     _format (format),
-    _data   (width*height)
+    _data   (width*height*getImageFormatNChannels(ImageFormat::BGRA))
 {
     for (size_t i=0; i<_data.size(); ++i) {
         _data[i] = data[i];
