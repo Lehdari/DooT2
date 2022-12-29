@@ -11,13 +11,19 @@
 #include "SequenceStorage.hpp"
 
 
-SequenceStorage::Entry& SequenceStorage::BatchPointer::operator[](std::size_t id)
+SequenceStorage::Entry& SequenceStorage::BatchHandle::operator[](std::size_t id)
 {
     return _entry[id];
 }
 
-SequenceStorage::BatchPointer::BatchPointer() :
-    _entry  (nullptr)
+const SequenceStorage::Entry& SequenceStorage::BatchHandle::operator[](std::size_t id) const noexcept
+{
+    return _cEntry[id];
+}
+
+SequenceStorage::BatchHandle::BatchHandle() :
+    _entry  (nullptr),
+    _cEntry (nullptr)
 {
 }
 
@@ -27,11 +33,18 @@ SequenceStorage::SequenceStorage(std::size_t batchSize, std::size_t length) :
 {
 }
 
-SequenceStorage::BatchPointer& SequenceStorage::operator[](std::size_t id)
+SequenceStorage::BatchHandle& SequenceStorage::operator[](std::size_t id)
 {
     if (_data.size() < id*_batchSize) {
         _data.resize(id*_batchSize);
     }
-    _batchPointer._entry = &_data[id*_batchSize];
-    return _batchPointer;
+    _batchHandle._entry = &_data[id*_batchSize];
+    return _batchHandle;
+}
+
+const SequenceStorage::BatchHandle SequenceStorage::operator[](std::size_t id) const noexcept
+{
+    BatchHandle batchHandle;
+    batchHandle._cEntry = &_data.at(id*_batchSize);
+    return batchHandle;
 }
