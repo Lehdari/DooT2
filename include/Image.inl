@@ -52,3 +52,33 @@ const T_Data* Image<T_Data>::data() const noexcept
 {
     return _data.data();
 }
+
+
+template <typename T_DataSrc, typename T_DataDest>
+inline void convertImage(const Image<T_DataSrc>& srcImage, Image<T_DataDest>& destImage)
+{
+    destImage._data.resize(srcImage._data.size());
+    for (int i=0; i<srcImage._data.size(); ++i) {
+        destImage._data[i] = static_cast<T_DataDest>(srcImage._data[i]);
+    }
+}
+
+template <>
+inline void convertImage<uint8_t, float>(const Image<uint8_t>& srcImage, Image<float>& destImage)
+{
+    constexpr float convertRatio = 1.0f / 255.0f;
+    destImage._data.resize(srcImage._data.size());
+    for (int i=0; i<srcImage._data.size(); ++i) {
+        destImage._data[i] = static_cast<float>(srcImage._data[i]) * convertRatio;
+    }
+}
+
+template <>
+inline void convertImage<float, uint8_t>(const Image<float>& srcImage, Image<uint8_t>& destImage)
+{
+    constexpr float convertRatio = 255.0f;
+    destImage._data.resize(srcImage._data.size());
+    for (int i=0; i<srcImage._data.size(); ++i) {
+        destImage._data[i] = static_cast<uint8_t>(srcImage._data[i] * convertRatio);
+    }
+}

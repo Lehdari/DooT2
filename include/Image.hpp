@@ -36,12 +36,19 @@ public:
     const ImageFormat& format() const noexcept;
     const T_Data* data() const noexcept;
 
+    template <typename T_DataSrc, typename T_DataDest>
+    friend void convertImage(const Image<T_DataSrc>&, Image<T_DataDest>&);
+
 private:
     int                 _width;
     int                 _height;
     ImageFormat         _format;
     std::vector<T_Data> _data;
 };
+
+
+template <typename T_DataSrc, typename T_DataDest>
+inline void convertImage(const Image<T_DataSrc>& srcImage, Image<T_DataDest>& destImage);
 
 
 #include "Image.inl"
