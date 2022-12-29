@@ -19,23 +19,26 @@ public:
         Image<uint8_t>  bgraFrame;
     };
 
-    class BatchPointer {
+    class BatchHandle {
     public:
         Entry& operator[](std::size_t id);
+        const Entry& operator[](std::size_t id) const noexcept;
 
         friend class SequenceStorage;
 
     private:
-        BatchPointer();
-        Entry*  _entry;
+        BatchHandle();
+        Entry*          _entry;
+        const Entry*    _cEntry;
     };
 
     SequenceStorage(std::size_t batchSize, std::size_t length=0);
 
-    BatchPointer& operator[](std::size_t id);
+    BatchHandle& operator[](std::size_t id);
+    const BatchHandle operator[](std::size_t id) const noexcept;
 
 private:
     std::size_t         _batchSize;
     std::vector<Entry>  _data;
-    BatchPointer        _batchPointer;
+    BatchHandle         _batchHandle;
 };
