@@ -17,12 +17,11 @@
 
 static constexpr int    batchSize           = 16; // TODO move somewhere sensible
 static constexpr double learningRate        = 1.0e-3; // TODO
-static constexpr double weightDecay         = 1.0e-7; // TODO
 static constexpr int    nTrainingEpochs     = 256;
 
 
 ModelProto::ModelProto() :
-    _optimizer  (_autoEncoder->parameters(), torch::optim::AdamOptions(2e-4).betas({0.9, 0.999}))
+    _optimizer  (_autoEncoder->parameters(), torch::optim::AdamOptions(learningRate).betas({0.9, 0.999}))
 {
 }
 
@@ -36,52 +35,67 @@ void ModelProto::train(const SequenceStorage& storage)
     }
     //torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU); // shorthand for above
 
+    cv::Mat imageIn(480, 640, CV_32FC4); // TODO temp
     cv::Mat imageOut(480, 640, CV_32FC4); // TODO temp
 
     // Move model parameters to GPU
     _autoEncoder->to(device);
 
-    // Put data into a tensor
-    torch::Tensor batchCPU = torch::ones({batchSize, 4, 480, 640}, torch::kCPU);
-    auto* batchData = batchCPU.data_ptr<float>();
+    torch::Tensor batchIn = torch::ones({batchSize, 4, 480, 640}, torch::kCPU);
+    auto* batchDataIn = batchIn.data_ptr<float>();
     Image<float> frame;
-    for (int64_t epoch=0; epoch<256; ++epoch) {
+    static uint64_t displayId = 0;
+    for (int64_t epoch=0; epoch<nTrainingEpochs; ++epoch) {
+        // ID of the frame (in sequence) to be used in the training batch
+        size_t trainFrameId = epoch%storage.size();
+
+        // Transfer data into the input tensor
         for (int b=0; b<batchSize; ++b) {
-            convertImage(storage[0/*TODO*/][b].bgraFrame, frame); // do inline conversion for now (TODO)
+            convertImage(storage[trainFrameId][b].bgraFrame, frame); // do inline conversion for now (TODO)
             // transpose the image and add it to the batch data vector
             for (int c=0; c<4; ++c) {
                 for (int j=0; j<480; ++j) {
                     for (int i=0; i<640; ++i) {
-                        batchData[b*4*480*640 + c*480*640 + j*640 + i] = frame.data()[j*640*4 + i*4 + c];
+                        batchDataIn[b*4*480*640 + c*480*640 + j*640 + i] = frame.data()[j*640*4 + i*4 + c];
                     }
                 }
             }
         }
-        torch::Tensor batchGPU = batchCPU.to(device);
+        torch::Tensor batchInGPU = batchIn.to(device);
 
+        // Forward and backward passes
         _autoEncoder->zero_grad();
-        torch::Tensor output = _autoEncoder->forward(batchGPU);
-        torch::Tensor loss = torch::mse_loss(batchGPU, output);
+        torch::Tensor batchOut = _autoEncoder->forward(batchInGPU);
+        torch::Tensor loss = torch::mse_loss(batchInGPU, batchOut);
         loss.backward();
 
+        // Apply gradients
         _optimizer.step();
 
-        torch::Tensor outputCPU = output.to(torch::kCPU);
-        auto* dataOut = outputCPU.data_ptr<float>();
+        // Cycle through displayed sequences
+        size_t displayFrameId = displayId++/storage.size();
+        if (displayFrameId >= batchSize) {
+            displayId = 0;
+            displayFrameId = displayId/storage.size();
+        }
+        torch::Tensor outputCPU = batchOut.to(torch::kCPU);
+        auto* batchDataOut = outputCPU.data_ptr<float>();
         for (int c=0; c<4; ++c) {
             for (int j=0; j<480; ++j) {
                 for (int i=0; i<640; ++i) {
-                    imageOut.ptr<float>(j)[i*4 + c] = dataOut[0*4*480*640 + c*480*640 + j*640 + i];
+                    imageIn.ptr<float>(j)[i*4 + c] = batchDataIn[displayFrameId*4*480*640 + c*480*640 + j*640 + i];
+                    imageOut.ptr<float>(j)[i*4 + c] = batchDataOut[displayFrameId*4*480*640 + c*480*640 + j*640 + i];
                 }
             }
         }
-        cv::imshow("pred", imageOut);
+        cv::imshow("Target", imageIn);
+        cv::imshow("Prediction", imageOut);
         cv::waitKey(1);
 
         printf(
-            "\r[%2ld/%2ld][%3ld/%3ld] loss: %.4f",
+            "\r[%2ld/%2ld][%3ld/%3ld] loss: %.6f",
             epoch,
-            256,//kNumberOfEpochs,
+            nTrainingEpochs,
             0,//++batch_index,
             0,//batches_per_epoch,
             loss.item<float>());
