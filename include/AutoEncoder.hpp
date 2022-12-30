@@ -32,7 +32,15 @@ private:
     torch::nn::BatchNorm2d      _bnEnc5;
     torch::nn::Conv2d           _conv6;
     torch::nn::BatchNorm2d      _bnEnc6;
+    torch::nn::Conv2d           _conv7;
+    torch::nn::BatchNorm2d      _bnEnc7;
+    torch::nn::Conv2d           _conv8;
+    torch::nn::BatchNorm2d      _bnEnc8;
 
+    torch::nn::ConvTranspose2d  _convTranspose8;
+    torch::nn::BatchNorm2d      _bnDec8;
+    torch::nn::ConvTranspose2d  _convTranspose7;
+    torch::nn::BatchNorm2d      _bnDec7;
     torch::nn::ConvTranspose2d  _convTranspose6;
     torch::nn::BatchNorm2d      _bnDec6;
     torch::nn::ConvTranspose2d  _convTranspose5;
