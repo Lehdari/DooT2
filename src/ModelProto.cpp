@@ -17,7 +17,7 @@
 
 static constexpr int    batchSize           = 16; // TODO move somewhere sensible
 static constexpr double learningRate        = 1.0e-3; // TODO
-static constexpr int    nTrainingEpochs     = 256;
+static constexpr int    nTrainingEpochs     = 1024;
 
 
 ModelProto::ModelProto() :
@@ -44,7 +44,6 @@ void ModelProto::train(const SequenceStorage& storage)
     torch::Tensor batchIn = torch::ones({batchSize, 4, 480, 640}, torch::kCPU);
     auto* batchDataIn = batchIn.data_ptr<float>();
     Image<float> frame;
-    static uint64_t displayId = 0;
     for (int64_t epoch=0; epoch<nTrainingEpochs; ++epoch) {
         // ID of the frame (in sequence) to be used in the training batch
         size_t trainFrameId = epoch%storage.size();
@@ -73,11 +72,7 @@ void ModelProto::train(const SequenceStorage& storage)
         _optimizer.step();
 
         // Cycle through displayed sequences
-        size_t displayFrameId = displayId++/storage.size();
-        if (displayFrameId >= batchSize) {
-            displayId = 0;
-            displayFrameId = displayId/storage.size();
-        }
+        size_t displayFrameId = (epoch/storage.size())%batchSize;
         torch::Tensor outputCPU = batchOut.to(torch::kCPU);
         auto* batchDataOut = outputCPU.data_ptr<float>();
         for (int c=0; c<4; ++c) {

@@ -20,8 +20,8 @@ using namespace gvizdoom;
 
 constexpr std::size_t batchSize = 16;
 
-constexpr size_t recordBeginFrameId = 128;//480;
-constexpr size_t recordEndFrameId = 192;//512;
+constexpr size_t recordBeginFrameId = 1024;
+constexpr size_t recordEndFrameId = 1088;
 
 
 App::App() :
