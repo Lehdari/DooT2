@@ -14,6 +14,9 @@
 
 #include <vector>
 #include <memory>
+#include <atomic>
+#include <mutex>
+#include <thread>
 
 
 class SequenceStorage;
@@ -28,8 +31,14 @@ public:
     ModelProto& operator=(ModelProto&&) = delete;
 
     void train(const SequenceStorage& storage);
+    void trainAsync(const SequenceStorage& storage);
+    bool trainingFinished() const noexcept;
+    void waitForTrainingFinish();
 
 private:
     AutoEncoder         _autoEncoder;
     torch::optim::Adam  _optimizer;
+    std::mutex          _trainingMutex;
+    std::thread         _trainingThread;
+    std::atomic_bool    _trainingFinished;
 };
