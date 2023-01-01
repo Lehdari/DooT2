@@ -33,6 +33,10 @@ public:
     };
 
     SequenceStorage(std::size_t batchSize, std::size_t length=0);
+    SequenceStorage(const SequenceStorage&) = default;
+    SequenceStorage(SequenceStorage&&) = default;
+    SequenceStorage& operator=(const SequenceStorage&) = default;
+    SequenceStorage& operator=(SequenceStorage&&) = default;
 
     // Access a batch
     BatchHandle& operator[](std::size_t id);
