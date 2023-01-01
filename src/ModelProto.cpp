@@ -21,12 +21,20 @@ static constexpr int    nTrainingEpochs     = 1024;
 
 
 ModelProto::ModelProto() :
-    _optimizer  (_autoEncoder->parameters(), torch::optim::AdamOptions(learningRate).betas({0.9, 0.999}))
+    _optimizer          (_autoEncoder->parameters(), torch::optim::AdamOptions(learningRate).betas({0.9, 0.999})),
+    _trainingFinished   (true)
 {
 }
 
 void ModelProto::train(const SequenceStorage& storage)
 {
+    // Return immediately in case there's previous training by another thread already running
+    if (!_trainingFinished)
+        return;
+
+    _trainingFinished = false;
+    std::lock_guard<std::mutex> lock(_trainingMutex);
+
     // Check CUDA availability
     torch::Device device{torch::kCPU};
     if (torch::cuda::is_available()) {
@@ -65,7 +73,7 @@ void ModelProto::train(const SequenceStorage& storage)
         // Forward and backward passes
         _autoEncoder->zero_grad();
         torch::Tensor batchOut = _autoEncoder->forward(batchInGPU);
-        torch::Tensor loss = torch::mse_loss(batchInGPU, batchOut);
+        torch::Tensor loss = torch::l1_loss(batchInGPU, batchOut) + torch::mse_loss(batchInGPU, batchOut);
         loss.backward();
 
         // Apply gradients
@@ -96,4 +104,27 @@ void ModelProto::train(const SequenceStorage& storage)
             loss.item<float>());
         fflush(stdout);
     }
+
+    _trainingFinished = true;
+}
+
+void ModelProto::trainAsync(const SequenceStorage& storage)
+{
+    if (_trainingThread.joinable())
+        _trainingThread.join();
+    _trainingThread = std::thread{&ModelProto::train, this, storage};
+}
+
+bool ModelProto::trainingFinished() const noexcept
+{
+    return _trainingFinished;
+}
+
+void ModelProto::waitForTrainingFinish()
+{
+    if (_trainingFinished)
+        return;
+
+    if (_trainingThread.joinable())
+        _trainingThread.join();
 }
