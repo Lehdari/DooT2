@@ -57,21 +57,21 @@ void ActionManager::reset()
     _sPrev = 0.0f;
 }
 
-gvizdoom::Action ActionManager::operator()(const Vec2f& playerPos)
+gvizdoom::Action ActionManager::operator()(const CallParams& callParams)
 {
     UpdateParams updateParams;
 
     if (_heatmap) {
-        float heatmapSample = _heatmap->sample(playerPos, true);
+        float heatmapSample = _heatmap->sample(callParams.playerPos, true);
         _heatmapDiff = heatmapSample-_heatmapSamplePrev;
         _heatmapSamplePrev = heatmapSample;
     }
 
     // velocity, speed and acceleration
-    Vec2f v = playerPos - _pPrev;
+    Vec2f v = callParams.playerPos - _pPrev;
     float s = v.norm();
     float a = s-_sPrev;
-    _pPrev = playerPos;
+    _pPrev = callParams.playerPos;
     _sPrev = s;
 
     // count consequent forward presses

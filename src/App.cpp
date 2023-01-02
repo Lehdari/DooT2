@@ -105,7 +105,7 @@ void App::loop()
         }
 
         static Vec2f playerPosRelative(0.0f, 0.0f);
-        if (_frameId >= recordEndFrameId || doomGame.update(_actionManager(playerPosRelative))) {
+        if (_frameId >= recordEndFrameId || doomGame.update(_actionManager({playerPosRelative}))) {
             nextMap();
             recordBeginFrameId = 768+_rnd()%512;
             recordEndFrameId = recordBeginFrameId+64;
