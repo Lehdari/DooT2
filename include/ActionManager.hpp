@@ -22,6 +22,11 @@ class Heatmap;
 
 class ActionManager {
 public:
+    struct UpdateParams {
+        double  smoothing   {0.8f};
+        double  sigma       {1.0f};
+    };
+
     ActionManager();
 
     // Add heatmap module
@@ -49,5 +54,6 @@ private:
     static std::default_random_engine       _rnd;
     static std::normal_distribution<float>  _rndNormal;
 
-    void updateActionVector(float smoothing, float sigma);
+
+    void updateActionVector(const UpdateParams& params);
 };

@@ -59,6 +59,8 @@ void ActionManager::reset()
 
 gvizdoom::Action ActionManager::operator()(const Vec2f& playerPos)
 {
+    UpdateParams updateParams;
+
     if (_heatmap) {
         float heatmapSample = _heatmap->sample(playerPos, true);
         _heatmapDiff = heatmapSample-_heatmapSamplePrev;
@@ -91,7 +93,7 @@ gvizdoom::Action ActionManager::operator()(const Vec2f& playerPos)
                 for (int i=0; i<actionVectorLength; ++i)
                     _actionVector[i] *= -1.0f;
             }
-            updateActionVector(0.75, 1.0f);
+            updateActionVector(updateParams);
         }
     }
     else {
@@ -108,10 +110,11 @@ gvizdoom::Action ActionManager::operator()(const Vec2f& playerPos)
     return _actionConverter(_actionVector);
 }
 
-void ActionManager::updateActionVector(float smoothing, float sigma)
+void ActionManager::updateActionVector(const UpdateParams& params)
 {
     for (size_t i=0; i<actionVectorLength; ++i) {
-        _actionVector[i] = smoothing*_actionVector[i] + (1.0f-smoothing)*sigma*_rndNormal(_rnd);
+        _actionVector[i] = params.smoothing*_actionVector[i] +
+            (1.0f-params.smoothing)*params.sigma*_rndNormal(_rnd);
         _actionVector[i] = std::clamp(_actionVector[i], -1.0f, 1.0f);
     }
 }
