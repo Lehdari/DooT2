@@ -15,6 +15,7 @@
 #include "MathTypes.hpp"
 
 #include <random>
+#include <functional>
 
 
 class Heatmap;
@@ -25,30 +26,32 @@ public:
     struct UpdateParams {
         double  smoothing   {0.8f};
         double  sigma       {1.0f};
+        float   heatmapDiff {0.0f}; // TODO remove
     };
 
     struct CallParams {
         Vec2f   playerPos   {0.0f, 0.0f};
     };
 
+
     ActionManager();
 
-    // Add heatmap module
-    void setHeatmap(Heatmap* heatmap);
+    template <typename T_Module>
+    void addModule(T_Module* module);
 
     void reset();
 
     gvizdoom::Action operator()(const CallParams& callParams);
 
-    float                                   _heatmapDiff;
-
 private:
+    using ModuleCall = std::function<void(const CallParams&, UpdateParams&)>;
+    using ModuleReset = std::function<void()>;
+
     ActionConverter<float>                  _actionConverter;
     std::vector<float>                      _actionVector;
+    std::vector<ModuleCall>                 _moduleCalls;
+    std::vector<ModuleReset>                _moduleResets;
 
-    // modules
-    Heatmap*                                _heatmap;
-    float                                   _heatmapSamplePrev;
     Vec2f                                   _pPrev;
     float                                   _sPrev;
 
@@ -61,3 +64,12 @@ private:
 
     void updateActionVector(const UpdateParams& params);
 };
+
+
+template<typename T_Module>
+void ActionManager::addModule(T_Module* module)
+{
+    _moduleCalls.push_back(std::bind(&T_Module::operator(), module,
+        std::placeholders::_1, std::placeholders::_2));
+    _moduleResets.push_back(std::bind(&T_Module::reset, module));
+}

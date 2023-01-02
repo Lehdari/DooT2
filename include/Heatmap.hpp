@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "ActionManager.hpp"
 #include "MathTypes.hpp"
 
 #include <opencv2/core/mat.hpp>
@@ -33,12 +34,23 @@ public:
 
     void reset();
 
+    void operator()(
+        const ActionManager::CallParams& callParams,
+        ActionManager::UpdateParams& updateParams);
+
+    // TODO temp
+    float getDiff() const { return _diff; }
+
 private:
     Settings    _settings;
 
     cv::Mat     _heatmap;
     float       _heatmapMaxValue;
     cv::Mat     _heatmapNormalized;
+
+    // State for action synthesis
+    float       _samplePrev;
+    float       _diff;
 
     inline void addSubSample(int x, int y, float s);
 };

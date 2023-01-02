@@ -69,7 +69,7 @@ App::App() :
     }
 
     // Setup ActionManager
-    _actionManager.setHeatmap(&_heatmap);
+    _actionManager.addModule(&_heatmap);
 }
 
 App::~App()
@@ -144,7 +144,7 @@ void App::loop()
         playerPosScreen = playerPosRelative * 0.125f;
         if (playerPosScreen(0) >= -512.0f && playerPosScreen(1) >= -512.0f &&
             playerPosScreen(0) < 512.0f && playerPosScreen(1) < 512.0f) {
-            if (_actionManager._heatmapDiff > 0.0f)
+            if (_heatmap.getDiff() > 0.0f)
                 _positionPlot.at<Vec3f>((int)playerPosScreen(1)+512, (int)playerPosScreen(0)+512)(1) = 1.0f;
             else
                 _positionPlot.at<Vec3f>((int)playerPosScreen(1)+512, (int)playerPosScreen(0)+512)(0) = 1.0f;
