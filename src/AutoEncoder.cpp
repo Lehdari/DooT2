@@ -15,9 +15,9 @@ using namespace torch;
 
 
 AutoEncoderImpl::AutoEncoderImpl() :
-    _conv1          (nn::Conv2dOptions(4, 8, {2, 2}).stride({2, 2}).bias(false)),
-    _bnEnc1         (nn::BatchNorm2dOptions(8)),
-    _conv2          (nn::Conv2dOptions(8, 32, {3, 4}).stride({3, 4}).bias(false)),
+    _conv1          (nn::Conv2dOptions(4, 16, {4, 4}).stride({2, 2}).bias(false).padding(1)),
+    _bnEnc1         (nn::BatchNorm2dOptions(16)),
+    _conv2          (nn::Conv2dOptions(16, 32, {5, 6}).stride({3, 4}).bias(false).padding(1)),
     _bnEnc2         (nn::BatchNorm2dOptions(32)),
     _conv3          (nn::Conv2dOptions(32, 64, {4, 4}).stride({2, 2}).bias(false).padding({1, 1})),
     _bnEnc3         (nn::BatchNorm2dOptions(64)),
@@ -44,8 +44,8 @@ AutoEncoderImpl::AutoEncoderImpl() :
     _bnDec4         (nn::BatchNorm2dOptions(64)),
     _convTranspose3 (nn::ConvTranspose2dOptions(64, 32, {4, 4}).stride({2, 2})),
     _bnDec3         (nn::BatchNorm2dOptions(32)),
-    _convTranspose2 (nn::ConvTranspose2dOptions(32, 8, {3, 4}).stride({3, 4})),
-    _convTranspose1 (nn::ConvTranspose2dOptions(8, 4, {2, 2}).stride({2, 2}))
+    _convTranspose2 (nn::ConvTranspose2dOptions(32, 16, {5, 6}).stride({3, 4})),
+    _convTranspose1 (nn::ConvTranspose2dOptions(16, 4, {4, 4}).stride({2, 2}))
 {
     register_module("conv1", _conv1);
     register_module("bnEnc1", _bnEnc1);
@@ -105,7 +105,9 @@ torch::Tensor AutoEncoderImpl::forward(torch::Tensor x)
     x = torch::tanh(_bnDec3(_convTranspose3(x)));
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)});
     x = torch::tanh(_convTranspose2(x));
+    x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)});
     x = torch::tanh(_convTranspose1(x)) * 0.5f + 0.5f;
+    x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)});
 
     return x;
 }
