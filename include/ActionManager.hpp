@@ -27,6 +27,10 @@ public:
         double  sigma       {1.0f};
     };
 
+    struct CallParams {
+        Vec2f   playerPos   {0.0f, 0.0f};
+    };
+
     ActionManager();
 
     // Add heatmap module
@@ -34,7 +38,7 @@ public:
 
     void reset();
 
-    gvizdoom::Action operator()(const Vec2f& playerPos);
+    gvizdoom::Action operator()(const CallParams& callParams);
 
     float                                   _heatmapDiff;
 
