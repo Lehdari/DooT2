@@ -25,7 +25,6 @@ std::normal_distribution<float> ActionManager::_rndNormal (0.0f, 1.0f);
 ActionManager::ActionManager() :
     _actionConverter    (),
     _actionVector       (actionVectorLength, 0.0f),
-    _heatmap            (nullptr),
     _forwardHoldTimer   (0),
     _wallHitTimer       (0),
     _pPrev              (0.0f, 0.0f),
@@ -40,15 +39,10 @@ ActionManager::ActionManager() :
     _actionConverter.setKeyIndex(5, Action::Key::ACTION_USE);
 }
 
-void ActionManager::setHeatmap(Heatmap* heatmap)
-{
-    _heatmap = heatmap;
-}
-
 void ActionManager::reset()
 {
-    if (_heatmap)
-        _heatmap->reset();
+    for (auto& moduleReset : _moduleResets)
+        moduleReset();
 
     _actionVector = std::vector<float>(actionVectorLength, 0.0f);
     _forwardHoldTimer = 0;
@@ -61,11 +55,17 @@ gvizdoom::Action ActionManager::operator()(const CallParams& callParams)
 {
     UpdateParams updateParams;
 
+    for (auto& moduleCall : _moduleCalls) {
+        moduleCall(callParams, updateParams);
+    }
+
+#if 0
     if (_heatmap) {
         float heatmapSample = _heatmap->sample(callParams.playerPos, true);
         _heatmapDiff = heatmapSample-_heatmapSamplePrev;
         _heatmapSamplePrev = heatmapSample;
     }
+#endif
 
     // velocity, speed and acceleration
     Vec2f v = callParams.playerPos - _pPrev;
@@ -85,9 +85,9 @@ gvizdoom::Action ActionManager::operator()(const CallParams& callParams)
         if (_forwardHoldTimer>15 && a<-0.5f) {
             _wallHitTimer = 60;
         }
-        else if (_heatmapDiff > 0.0f) { // randomize action in case we're moving towards areas
+        else if (updateParams.heatmapDiff > 0.0f) { // randomize action in case we're moving towards areas
             // which has been visited more (reuse actions otherwise)
-            if (_heatmapDiff > 0.15f) {
+            if (updateParams.heatmapDiff > 0.15f) {
                 // invert action in case heatmap value grows rapidly (we're approaching region
                 // that has been visited often)
                 for (int i=0; i<actionVectorLength; ++i)
