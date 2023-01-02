@@ -20,11 +20,9 @@ using namespace gvizdoom;
 
 constexpr std::size_t batchSize = 16;
 
-constexpr size_t recordBeginFrameId = 1024;
-constexpr size_t recordEndFrameId = 1088;
-
 
 App::App() :
+    _rnd                (1507715517),
     _window             (nullptr),
     _renderer           (nullptr),
     _texture            (nullptr),
@@ -92,6 +90,9 @@ void App::loop()
 
     Vec2f playerPosScreen(0.0f, 0.0f);
 
+    size_t recordBeginFrameId = 768+_rnd()%512;
+    size_t recordEndFrameId = recordBeginFrameId+64;
+
     while (!_quit) {
         while(SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT ||
@@ -106,6 +107,8 @@ void App::loop()
         static Vec2f playerPosRelative(0.0f, 0.0f);
         if (_frameId >= recordEndFrameId || doomGame.update(_actionManager(playerPosRelative))) {
             nextMap();
+            recordBeginFrameId = 768+_rnd()%512;
+            recordEndFrameId = recordBeginFrameId+64;
             continue;
         }
 

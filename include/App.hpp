@@ -11,14 +11,16 @@
 #pragma once
 
 
-#include <SDL.h>
-#include <opencv2/core/mat.hpp>
-#include "gvizdoom/Action.hpp"
-
 #include "ActionManager.hpp"
 #include "Heatmap.hpp"
 #include "SequenceStorage.hpp"
 #include "ModelProto.hpp"
+
+#include <SDL.h>
+#include <opencv2/core/mat.hpp>
+#include "gvizdoom/Action.hpp"
+
+#include <random>
 
 
 class App {
@@ -30,6 +32,10 @@ public:
     void loop();
 
 private:
+    using Rnd = std::default_random_engine;
+
+    Rnd             _rnd;
+
     SDL_Window*     _window;
     SDL_Renderer*   _renderer;
     SDL_Texture*    _texture;
@@ -45,6 +51,7 @@ private:
     bool            _newPatchReady;
 
     ModelProto      _model;
+
 
     void nextMap(); // proceed to next map
 };
