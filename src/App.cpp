@@ -135,10 +135,10 @@ void App::loop()
         SDL_RenderCopy(_renderer, _texture, nullptr, nullptr);
         SDL_RenderPresent(_renderer);
 
-        static const float initPlayerX = doomGame.getGameState<GameState::X>();
-        static const float initPlayerY = doomGame.getGameState<GameState::Y>();
-        playerPosRelative(0) = doomGame.getGameState<GameState::X>() - initPlayerX;
-        playerPosRelative(1) = initPlayerY - doomGame.getGameState<GameState::Y>(); // invert y
+        static const float initPlayerX = doomGame.getGameState<GameState::PlayerPos>()(0);
+        static const float initPlayerY = doomGame.getGameState<GameState::PlayerPos>()(1);
+        playerPosRelative(0) = doomGame.getGameState<GameState::PlayerPos>()(0) - initPlayerX;
+        playerPosRelative(1) = initPlayerY - doomGame.getGameState<GameState::PlayerPos>()(1); // invert y
 
         // Update heatmap
         _heatmapActionModule.addGaussianSample(playerPosRelative, 1.0f, 100.0f);
