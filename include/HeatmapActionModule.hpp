@@ -31,6 +31,8 @@ public:
 
     HeatmapActionModule(const Settings& settings);
 
+    void applyExitPositionPriori(Vec2f exitPos, float scale=0.25f);
+
     void addSample(const Vec2f& playerPos, float s=1.0f);
     void addGaussianSample(const Vec2f& playerPos, float s, float sigma);
     void refreshNormalization();
