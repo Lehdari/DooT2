@@ -24,6 +24,11 @@ public:
         float   cellSize;   // exploration heatmap cell size
     };
 
+    struct State {
+        float   samplePrev  {0.0f};
+        float   diff        {0.0f};
+    };
+
     HeatmapActionModule(const Settings& settings);
 
     void addSample(const Vec2f& playerPos, float s=1.0f);
@@ -37,10 +42,13 @@ public:
 
     void operator()(
         const ActionManager::CallParams& callParams,
-        ActionManager::UpdateParams& updateParams);
+        ActionManager::UpdateParams& updateParams,
+        ActionManager& actionManager);
+
+    State   state;
 
     // TODO temp
-    float getDiff() const { return _diff; }
+    float getDiff() const { return state.diff; }
 
 private:
     Settings    _settings;
@@ -48,10 +56,6 @@ private:
     cv::Mat     _heatmap;
     float       _heatmapMaxValue;
     cv::Mat     _heatmapNormalized;
-
-    // State for action synthesis
-    float       _samplePrev;
-    float       _diff;
 
     inline void addSubSample(int x, int y, float s);
 };

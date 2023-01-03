@@ -17,9 +17,7 @@ HeatmapActionModule::HeatmapActionModule(const HeatmapActionModule::Settings &se
     _settings           (settings),
     _heatmap            (settings.resolution, settings.resolution, CV_32FC1, 0.0f),
     _heatmapMaxValue    (0.0f),
-    _heatmapNormalized  (settings.resolution, settings.resolution, CV_32FC1, 0.0f),
-    _samplePrev         (0.0f),
-    _diff               (0.0f)
+    _heatmapNormalized  (settings.resolution, settings.resolution, CV_32FC1, 0.0f)
 {
 }
 
@@ -72,15 +70,15 @@ void HeatmapActionModule::reset()
     _heatmap = cv::Mat(_settings.resolution, _settings.resolution, CV_32FC1, 0.0f);
     _heatmapNormalized = cv::Mat(_settings.resolution, _settings.resolution, CV_32FC1, 0.0f);
     _heatmapMaxValue = 0.0f;
+    state = State();
 }
 
 void HeatmapActionModule::operator()(
     const ActionManager::CallParams& callParams,
-    ActionManager::UpdateParams& updateParams
+    ActionManager::UpdateParams& updateParams,
+    ActionManager& actionManager
 ) {
     float heatmapSample = sample(callParams.playerPos, true);
-    _diff = heatmapSample-_samplePrev;
-    _samplePrev = heatmapSample;
-
-    updateParams.heatmapDiff = _diff;
+    state.diff = heatmapSample-state.samplePrev;
+    state.samplePrev = heatmapSample;
 }

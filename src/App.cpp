@@ -22,17 +22,18 @@ constexpr std::size_t batchSize = 16;
 
 
 App::App() :
-    _rnd                (1507715517),
-    _window             (nullptr),
-    _renderer           (nullptr),
-    _texture            (nullptr),
-    _quit               (false),
-    _heatmap            (HeatmapActionModule::Settings{256, 32.0f}),
-    _sequenceStorage    (batchSize, 64),
-    _positionPlot       (1024, 1024, CV_32FC3, cv::Scalar(0.0f)),
-    _frameId            (0),
-    _batchId            (0),
-    _newPatchReady      (false)
+    _rnd                        (1507715517),
+    _window                     (nullptr),
+    _renderer                   (nullptr),
+    _texture                    (nullptr),
+    _quit                       (false),
+    _heatmapActionModule        (HeatmapActionModule::Settings{256, 32.0f}),
+    _doorTraversalActionModule  (),
+    _sequenceStorage            (batchSize, 64),
+    _positionPlot               (1024, 1024, CV_32FC3, cv::Scalar(0.0f)),
+    _frameId                    (0),
+    _batchId                    (0),
+    _newPatchReady              (false)
 {
     auto& doomGame = DoomGame::instance();
 
@@ -69,7 +70,8 @@ App::App() :
     }
 
     // Setup ActionManager
-    _actionManager.addModule(&_heatmap);
+    _actionManager.addModule(&_heatmapActionModule);
+    _actionManager.addModule(&_doorTraversalActionModule);
 }
 
 App::~App()
@@ -137,14 +139,14 @@ void App::loop()
         playerPosRelative(1) = initPlayerY - doomGame.getGameState<GameState::Y>(); // invert y
 
         // Update heatmap
-        _heatmap.addGaussianSample(playerPosRelative, 1.0f, 100.0f);
-        _heatmap.refreshNormalization();
+        _heatmapActionModule.addGaussianSample(playerPosRelative, 1.0f, 100.0f);
+        _heatmapActionModule.refreshNormalization();
 
         // Update position plot
         playerPosScreen = playerPosRelative * 0.125f;
         if (playerPosScreen(0) >= -512.0f && playerPosScreen(1) >= -512.0f &&
             playerPosScreen(0) < 512.0f && playerPosScreen(1) < 512.0f) {
-            if (_heatmap.getDiff() > 0.0f)
+            if (_heatmapActionModule.getDiff() > 0.0f)
                 _positionPlot.at<Vec3f>((int)playerPosScreen(1)+512, (int)playerPosScreen(0)+512)(1) = 1.0f;
             else
                 _positionPlot.at<Vec3f>((int)playerPosScreen(1)+512, (int)playerPosScreen(0)+512)(0) = 1.0f;
@@ -159,7 +161,7 @@ void App::loop()
                 for (int i=0; i<1023; ++i) {
                     p[i](0) *= 0.995f;
                     p[i](1) *= 0.995f;
-                    p[i](2) = _heatmap.normalizedSample(Vec2f(i * 0.25f, j * 0.25f), false);
+                    p[i](2) = _heatmapActionModule.normalizedSample(Vec2f(i * 0.25f, j * 0.25f), false);
                 }
             }
 

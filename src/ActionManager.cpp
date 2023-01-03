@@ -21,14 +21,14 @@ static constexpr size_t actionVectorLength = 6;
 std::default_random_engine      ActionManager::_rnd       (1507715517);
 std::normal_distribution<float> ActionManager::_rndNormal (0.0f, 1.0f);
 
+int64_t ActionManager::moduleIdCounter  {0};
+
 
 ActionManager::ActionManager() :
     _actionConverter    (),
     _actionVector       (actionVectorLength, 0.0f),
-    _forwardHoldTimer   (0),
-    _wallHitTimer       (0),
     _pPrev              (0.0f, 0.0f),
-    _sPrev              (0.0f)
+    _vPrev              (0.0f, 0.0f)
 {
     // Setup action converter
     _actionConverter.setAngleIndex(0);
@@ -45,69 +45,43 @@ void ActionManager::reset()
         moduleReset();
 
     _actionVector = std::vector<float>(actionVectorLength, 0.0f);
-    _forwardHoldTimer = 0;
-    _wallHitTimer = 0;
+    _updateParams = UpdateParams();
     _pPrev << 0.0f, 0.0f;
-    _sPrev = 0.0f;
+    _vPrev << 0.0f, 0.0f;
 }
 
 gvizdoom::Action ActionManager::operator()(const CallParams& callParams)
 {
-    UpdateParams updateParams;
+    // compute velocity and acceleration
+    _updateParams.p = callParams.playerPos;
+    _updateParams.v = _updateParams.p - _pPrev;
+    _updateParams.a = _updateParams.v - _vPrev;
+    _pPrev = _updateParams.p;
+    _vPrev = _updateParams.v;
 
+    // reset overwrite
+    _updateParams.actionVectorOverwrite.clear();
+
+    // process modules
     for (auto& moduleCall : _moduleCalls) {
-        moduleCall(callParams, updateParams);
+        moduleCall(callParams, _updateParams, *this);
+
+        // skip rest of the modules in case overwrite was forced
+        if (!_updateParams.actionVectorOverwrite.empty())
+            break;
     }
 
-#if 0
-    if (_heatmap) {
-        float heatmapSample = _heatmap->sample(callParams.playerPos, true);
-        _heatmapDiff = heatmapSample-_heatmapSamplePrev;
-        _heatmapSamplePrev = heatmapSample;
-    }
-#endif
-
-    // velocity, speed and acceleration
-    Vec2f v = callParams.playerPos - _pPrev;
-    float s = v.norm();
-    float a = s-_sPrev;
-    _pPrev = callParams.playerPos;
-    _sPrev = s;
-
-    // count consequent forward presses
-    if (_actionVector[1] > 0.0f && _actionVector[2] <= 0.0f)
-        _forwardHoldTimer++;
+    if (_updateParams.actionVectorOverwrite.empty())
+        updateActionVector(_updateParams);
     else
-        _forwardHoldTimer = 0;
-
-    if (_wallHitTimer == 0) {
-        // detect when forward motion has hit a wall
-        if (_forwardHoldTimer>15 && a<-0.5f) {
-            _wallHitTimer = 60;
-        }
-        else if (updateParams.heatmapDiff > 0.0f) { // randomize action in case we're moving towards areas
-            // which has been visited more (reuse actions otherwise)
-            if (updateParams.heatmapDiff > 0.15f) {
-                // invert action in case heatmap value grows rapidly (we're approaching region
-                // that has been visited often)
-                for (int i=0; i<actionVectorLength; ++i)
-                    _actionVector[i] *= -1.0f;
-            }
-            updateActionVector(updateParams);
-        }
-    }
-    else {
-        // in case wall has been hit, cycle use to open potential door
-        // and keep moving forward for 60 tics
-        if (_wallHitTimer == 60)
-            _actionVector = {0.0f, 1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
-        else if (_wallHitTimer == 59)
-            _actionVector = {0.0f, 1.0f, -1.0f, -1.0f, -1.0f, 1.0f};
-
-        --_wallHitTimer;
-    }
+        _actionVector = _updateParams.actionVectorOverwrite;
 
     return _actionConverter(_actionVector);
+}
+
+const std::vector<float>& ActionManager::getActionVector() const noexcept
+{
+    return _actionVector;
 }
 
 void ActionManager::updateActionVector(const UpdateParams& params)
@@ -116,5 +90,19 @@ void ActionManager::updateActionVector(const UpdateParams& params)
         _actionVector[i] = params.smoothing*_actionVector[i] +
             (1.0f-params.smoothing)*params.sigma*_rndNormal(_rnd);
         _actionVector[i] = std::clamp(_actionVector[i], -1.0f, 1.0f);
+    }
+
+    // prevent forward / back and left / right being pressed at the same time
+    if (_actionVector[1] > 0.0f && _actionVector[2] > 0.0f) {
+        if (_actionVector[1] > _actionVector[2]) // bigger value dominates
+            _actionVector[2] *= -1.0f;
+        else
+            _actionVector[1] *= -1.0f;
+    }
+    if (_actionVector[3] > 0.0f && _actionVector[4] > 0.0f) {
+        if (_actionVector[3] > _actionVector[4]) // bigger value dominates
+            _actionVector[4] *= -1.0f;
+        else
+            _actionVector[3] *= -1.0f;
     }
 }
