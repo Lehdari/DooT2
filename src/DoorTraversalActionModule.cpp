@@ -12,6 +12,17 @@
 #include "HeatmapActionModule.hpp"
 
 
+static std::vector<std::vector<float>> startRoomEscapeSequence = [](){
+    std::vector<std::vector<float>> v;
+    for (int i=0; i<5; ++i)
+        v.push_back({0.0f, 1.0f, -1.0f, -1.0f, -1.0f, -1.0f}); // move forward
+    v.push_back({0.0f, 1.0f, -1.0f, -1.0f, -1.0f, 1.0f}); // press use
+    for (int i=0; i<70; ++i)
+        v.push_back({0.0f, 1.0f, -1.0f, -1.0f, -1.0f, -1.0f}); // move forward
+    return v;
+}();
+
+
 DoorTraversalActionModule::DoorTraversalActionModule()
 {
 }
@@ -29,6 +40,12 @@ void DoorTraversalActionModule::operator()(
     auto& actionVector = actionManager.getActionVector();
     auto& heatmapState = actionManager.getModuleState<HeatmapActionModule>();
     assert(updateParams.actionVectorOverwrite.empty());
+
+    // escape from the start room
+    if (callParams.frameId < startRoomEscapeSequence.size()) {
+        updateParams.actionVectorOverwrite = startRoomEscapeSequence[callParams.frameId];
+        return;
+    }
 
     // count consequent forward presses
     if (actionVector[1] > 0.0f)

@@ -32,6 +32,7 @@ public:
     };
 
     struct CallParams {
+        size_t  frameId     {0};
         Vec2f   playerPos   {0.0f, 0.0f};
     };
 
