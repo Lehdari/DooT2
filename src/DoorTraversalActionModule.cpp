@@ -9,7 +9,6 @@
 //
 
 #include "DoorTraversalActionModule.hpp"
-#include "HeatmapActionModule.hpp"
 
 
 static std::vector<std::vector<float>> startRoomEscapeSequence = [](){
@@ -38,7 +37,6 @@ void DoorTraversalActionModule::operator()(
     ActionManager& actionManager
 ) {
     auto& actionVector = actionManager.getActionVector();
-    auto& heatmapState = actionManager.getModuleState<HeatmapActionModule>();
     assert(updateParams.actionVectorOverwrite.empty());
 
     // escape from the start room
@@ -58,13 +56,6 @@ void DoorTraversalActionModule::operator()(
         // detect when forward motion has hit a wall
         if (state.forwardHoldTimer>10 && dot < -5.0f) {
             state.wallHitTimer = 60;
-        }
-        else if (heatmapState.diff > 0.15f) {
-            // invert action in case heatmap value grows rapidly (we're approaching region
-            // that has been visited often)
-            updateParams.actionVectorOverwrite.resize(actionVector.size());
-            for (int i=0; i<actionVector.size(); ++i)
-                updateParams.actionVectorOverwrite[i] = -1.0f*actionVector[i];
         }
     }
     else {

@@ -102,4 +102,17 @@ void HeatmapActionModule::operator()(
     float heatmapSample = sample(callParams.playerPos, true);
     state.diff = heatmapSample-state.samplePrev;
     state.samplePrev = heatmapSample;
+
+    auto& actionVector = actionManager.getActionVector();
+    if (state.diff > 0.15f) {
+        // invert action in case heatmap value grows rapidly (we're approaching region
+        // that has been visited often)
+        updateParams.actionVectorOverwrite.resize(actionVector.size());
+        for (int i=0; i<actionVector.size(); ++i)
+            updateParams.actionVectorOverwrite[i] = -1.0f*actionVector[i];
+    }
+    else if (state.diff < 0.0f) {
+        // duplicate actions if heatmap value is decreasing
+        updateParams.actionVectorOverwrite = actionVector;
+    }
 }
