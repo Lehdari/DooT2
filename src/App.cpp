@@ -31,6 +31,7 @@ App::App() :
     _doorTraversalActionModule  (),
     _sequenceStorage            (batchSize, 64),
     _positionPlot               (1024, 1024, CV_32FC3, cv::Scalar(0.0f)),
+    _initPlayerPos              (0.0f, 0.0f),
     _frameId                    (0),
     _batchId                    (0),
     _newPatchReady              (false)
@@ -116,6 +117,13 @@ void App::loop()
             continue;
         }
 
+        if (_frameId == 0) {
+            _initPlayerPos = doomGame.getGameState<GameState::PlayerPos>().block<2,1>(0,0);
+            Vec2f exitPos = doomGame.getGameState<GameState::ExitPos>() - _initPlayerPos;
+            exitPos(1) *= -1.0f;
+
+            _heatmapActionModule.applyExitPositionPriori(exitPos);
+        }
         if (_frameId >= recordBeginFrameId) {
             auto recordFrameId = _frameId - recordBeginFrameId;
             _sequenceStorage[recordFrameId][_batchId].bgraFrame =
@@ -135,10 +143,8 @@ void App::loop()
         SDL_RenderCopy(_renderer, _texture, nullptr, nullptr);
         SDL_RenderPresent(_renderer);
 
-        static const float initPlayerX = doomGame.getGameState<GameState::PlayerPos>()(0);
-        static const float initPlayerY = doomGame.getGameState<GameState::PlayerPos>()(1);
-        playerPosRelative(0) = doomGame.getGameState<GameState::PlayerPos>()(0) - initPlayerX;
-        playerPosRelative(1) = initPlayerY - doomGame.getGameState<GameState::PlayerPos>()(1); // invert y
+        playerPosRelative(0) = doomGame.getGameState<GameState::PlayerPos>()(0) - _initPlayerPos(0);
+        playerPosRelative(1) = _initPlayerPos(1) - doomGame.getGameState<GameState::PlayerPos>()(1); // invert y
 
         // Update heatmap
         _heatmapActionModule.addGaussianSample(playerPosRelative, 1.0f, 100.0f);

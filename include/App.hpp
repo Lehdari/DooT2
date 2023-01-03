@@ -47,6 +47,7 @@ private:
     DoorTraversalActionModule   _doorTraversalActionModule;
     SequenceStorage             _sequenceStorage;
     cv::Mat                     _positionPlot;
+    Vec2f                       _initPlayerPos;
 
     size_t                      _frameId;
     size_t                      _batchId;

@@ -10,7 +10,12 @@
 
 #include "HeatmapActionModule.hpp"
 
+#include <gvizdoom/DoomGame.hpp>
+
 #include <opencv2/highgui.hpp>
+
+
+using namespace gvizdoom;
 
 
 HeatmapActionModule::HeatmapActionModule(const HeatmapActionModule::Settings &settings) :
@@ -19,6 +24,22 @@ HeatmapActionModule::HeatmapActionModule(const HeatmapActionModule::Settings &se
     _heatmapMaxValue    (0.0f),
     _heatmapNormalized  (settings.resolution, settings.resolution, CV_32FC1, 0.0f)
 {
+}
+
+void HeatmapActionModule::applyExitPositionPriori(Vec2f exitPos, float scale)
+{
+    // transform world coords to heatmap coords
+    exitPos = exitPos/_settings.cellSize + Vec2f(_settings.resolution/2.0f, _settings.resolution/2.0f);
+    for (int j=0; j<_settings.resolution; ++j) {
+        auto* p = _heatmap.ptr<float>(j);
+        for (int i=0; i<_settings.resolution; ++i) {
+            p[i] = (Vec2f(i+0.5f, j+0.5f) - exitPos).norm() * scale;
+            if (p[i] > _heatmapMaxValue)
+                _heatmapMaxValue = p[i];
+        }
+    }
+
+    refreshNormalization();
 }
 
 void HeatmapActionModule::addSample(const Vec2f& playerPos, float s)
