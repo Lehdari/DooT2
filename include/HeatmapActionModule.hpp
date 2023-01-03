@@ -1,6 +1,6 @@
 //
 // Project: DooT2
-// File: Heatmap.hpp
+// File: HeatmapActionModule.hpp
 //
 // Copyright (c) 2022 Miika 'Lehdari' Lehtimäki
 // You may use, distribute and modify this code under the terms
@@ -16,14 +16,15 @@
 #include <opencv2/core/mat.hpp>
 
 
-class Heatmap {
+// Heatmap is an ActionManager module implementing exploration of less-visited areas
+class HeatmapActionModule {
 public:
     struct Settings {
         int     resolution; // width and height of the exploration heatmap
         float   cellSize;   // exploration heatmap cell size
     };
 
-    Heatmap(const Settings& settings);
+    HeatmapActionModule(const Settings& settings);
 
     void addSample(const Vec2f& playerPos, float s=1.0f);
     void addGaussianSample(const Vec2f& playerPos, float s, float sigma);
@@ -56,7 +57,7 @@ private:
 };
 
 
-float Heatmap::sample(Vec2f p, bool worldCoords) const noexcept
+float HeatmapActionModule::sample(Vec2f p, bool worldCoords) const noexcept
 {
     if (worldCoords)
         p = p/_settings.cellSize + Vec2f(_settings.resolution/2.0f, _settings.resolution/2.0f);
@@ -69,7 +70,7 @@ float Heatmap::sample(Vec2f p, bool worldCoords) const noexcept
            frac(0)*frac(1)*_heatmap.at<float>(py+1, px+1);
 }
 
-float Heatmap::normalizedSample(Vec2f p, bool worldCoords) const noexcept
+float HeatmapActionModule::normalizedSample(Vec2f p, bool worldCoords) const noexcept
 {
     if (worldCoords)
         p = p/_settings.cellSize + Vec2f(_settings.resolution/2.0f, _settings.resolution/2.0f);
@@ -82,7 +83,7 @@ float Heatmap::normalizedSample(Vec2f p, bool worldCoords) const noexcept
            frac(0)*frac(1)*_heatmapNormalized.at<float>(py+1, px+1);
 }
 
-void Heatmap::addSubSample(int x, int y, float s)
+void HeatmapActionModule::addSubSample(int x, int y, float s)
 {
     _heatmap.at<float>(y, x) += s;
 }

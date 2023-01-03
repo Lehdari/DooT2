@@ -9,7 +9,7 @@
 //
 
 #include "ActionManager.hpp"
-#include "Heatmap.hpp"
+#include "HeatmapActionModule.hpp"
 
 
 using namespace gvizdoom;

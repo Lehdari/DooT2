@@ -27,7 +27,7 @@ set(DOOT2_SOURCES
     src/ActionManager.cpp
     src/App.cpp
     src/AutoEncoder.cpp
-    src/Heatmap.cpp
+    src/HeatmapActionModule.cpp
     src/ModelProto.cpp
     src/SequenceStorage.cpp
 )
