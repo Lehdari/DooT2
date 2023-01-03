@@ -84,3 +84,5 @@ gvizdoom::Action ActionConverter<T_Scalar>::operator()(const std::vector<T_Scala
 
     return action;
 }
+
+// TODO: gvizdoom::Action --> std::vector<T_Scalar>
