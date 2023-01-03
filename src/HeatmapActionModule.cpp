@@ -1,6 +1,6 @@
 //
 // Project: DooT2
-// File: Heatmap.cpp
+// File: HeatmapActionModule.cpp
 //
 // Copyright (c) 2022 Miika 'Lehdari' Lehtimäki
 // You may use, distribute and modify this code under the terms
@@ -8,12 +8,12 @@
 // with this source code package.
 //
 
-#include "Heatmap.hpp"
+#include "HeatmapActionModule.hpp"
 
 #include <opencv2/highgui.hpp>
 
 
-Heatmap::Heatmap(const Heatmap::Settings &settings) :
+HeatmapActionModule::HeatmapActionModule(const HeatmapActionModule::Settings &settings) :
     _settings           (settings),
     _heatmap            (settings.resolution, settings.resolution, CV_32FC1, 0.0f),
     _heatmapMaxValue    (0.0f),
@@ -23,7 +23,7 @@ Heatmap::Heatmap(const Heatmap::Settings &settings) :
 {
 }
 
-void Heatmap::addSample(const Vec2f& playerPos, float s)
+void HeatmapActionModule::addSample(const Vec2f& playerPos, float s)
 {
     int heatmapMiddle = _settings.resolution / 2;
     Vec2f playerPosMap = playerPos / _settings.cellSize + Vec2f(heatmapMiddle, heatmapMiddle);
@@ -42,7 +42,7 @@ void Heatmap::addSample(const Vec2f& playerPos, float s)
     }
 }
 
-void Heatmap::addGaussianSample(const Vec2f& playerPos, float s, float sigma)
+void HeatmapActionModule::addGaussianSample(const Vec2f& playerPos, float s, float sigma)
 {
     float nSigma = sigma / _settings.cellSize;
     int r = std::ceil(nSigma*3.0f);
@@ -62,19 +62,19 @@ void Heatmap::addGaussianSample(const Vec2f& playerPos, float s, float sigma)
     }
 }
 
-void Heatmap::refreshNormalization()
+void HeatmapActionModule::refreshNormalization()
 {
     _heatmapNormalized = _heatmap / _heatmapMaxValue;
 }
 
-void Heatmap::reset()
+void HeatmapActionModule::reset()
 {
     _heatmap = cv::Mat(_settings.resolution, _settings.resolution, CV_32FC1, 0.0f);
     _heatmapNormalized = cv::Mat(_settings.resolution, _settings.resolution, CV_32FC1, 0.0f);
     _heatmapMaxValue = 0.0f;
 }
 
-void Heatmap::operator()(
+void HeatmapActionModule::operator()(
     const ActionManager::CallParams& callParams,
     ActionManager::UpdateParams& updateParams
 ) {

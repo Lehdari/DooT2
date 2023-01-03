@@ -27,7 +27,7 @@ App::App() :
     _renderer           (nullptr),
     _texture            (nullptr),
     _quit               (false),
-    _heatmap            (Heatmap::Settings{256, 32.0f}),
+    _heatmap            (HeatmapActionModule::Settings{256, 32.0f}),
     _sequenceStorage    (batchSize, 64),
     _positionPlot       (1024, 1024, CV_32FC3, cv::Scalar(0.0f)),
     _frameId            (0),

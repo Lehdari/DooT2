@@ -18,7 +18,7 @@
 #include <functional>
 
 
-class Heatmap;
+class HeatmapActionModule;
 
 
 class ActionManager {

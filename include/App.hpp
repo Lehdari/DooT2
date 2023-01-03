@@ -12,7 +12,7 @@
 
 
 #include "ActionManager.hpp"
-#include "Heatmap.hpp"
+#include "HeatmapActionModule.hpp"
 #include "SequenceStorage.hpp"
 #include "ModelProto.hpp"
 
@@ -34,23 +34,23 @@ public:
 private:
     using Rnd = std::default_random_engine;
 
-    Rnd             _rnd;
+    Rnd                 _rnd;
 
-    SDL_Window*     _window;
-    SDL_Renderer*   _renderer;
-    SDL_Texture*    _texture;
+    SDL_Window*         _window;
+    SDL_Renderer*       _renderer;
+    SDL_Texture*        _texture;
 
-    bool            _quit;
-    ActionManager   _actionManager;
-    Heatmap         _heatmap;
-    SequenceStorage _sequenceStorage;
-    cv::Mat         _positionPlot;
+    bool                _quit;
+    ActionManager       _actionManager;
+    HeatmapActionModule _heatmap;
+    SequenceStorage     _sequenceStorage;
+    cv::Mat             _positionPlot;
 
-    size_t          _frameId;
-    size_t          _batchId;
-    bool            _newPatchReady;
+    size_t              _frameId;
+    size_t              _batchId;
+    bool                _newPatchReady;
 
-    ModelProto      _model;
+    ModelProto          _model;
 
 
     void nextMap(); // proceed to next map
