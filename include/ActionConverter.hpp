@@ -32,6 +32,10 @@ public:
     // Convert a scalar-valued action vector to a gvizdoom Action
     gvizdoom::Action operator()(const std::vector<T_Scalar>& actionVector) const noexcept;
 
+    // Convert a gvizdoom Action to a scalar-valued action vector
+    std::vector<T_Scalar> operator()(const gvizdoom::Action& action,
+        size_t actionVectorLength) const noexcept;
+
 private:
     T_Scalar    _min;
     T_Scalar    _max;
@@ -85,4 +89,21 @@ gvizdoom::Action ActionConverter<T_Scalar>::operator()(const std::vector<T_Scala
     return action;
 }
 
-// TODO: gvizdoom::Action --> std::vector<T_Scalar>
+template<typename T_Scalar>
+std::vector<T_Scalar> ActionConverter<T_Scalar>::operator()(const gvizdoom::Action& action,
+    size_t actionVectorLength) const noexcept
+{
+    std::vector<T_Scalar> actionVector(actionVectorLength, _min);
+
+    for (size_t i = 0; i < actionVector.size(); ++i) {
+        if (_keyMap.contains(i) && action.isSet(_keyMap.at(i))) {
+            actionVector[i] = _max;
+        } else if (_angleMap == i) {
+
+            auto angle = static_cast<T_Scalar>(action.angle());
+            actionVector[i] = (angle - _minAngle) / (_maxAngle-_minAngle) * (_max - _min) + _min;
+        }
+    }
+
+    return actionVector;
+}
