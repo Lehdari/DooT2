@@ -71,8 +71,8 @@ App::App() :
     }
 
     // Setup ActionManager
-    _actionManager.addModule(&_heatmapActionModule);
     _actionManager.addModule(&_doorTraversalActionModule);
+    _actionManager.addModule(&_heatmapActionModule);
 }
 
 App::~App()
