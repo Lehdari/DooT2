@@ -12,11 +12,14 @@
 
 #include "Image.hpp"
 
+#include <gvizdoom/Action.hpp>
 
 class SequenceStorage {
 public:
     struct Entry {
-        Image<uint8_t>  frame;
+        gvizdoom::Action    action;
+        Image<uint8_t>      frame;          // frame after the action
+        double              reward  {0.0};  // reward after the action
     };
 
     class BatchHandle {
