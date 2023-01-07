@@ -126,7 +126,7 @@ void App::loop()
         }
         if (_frameId >= recordBeginFrameId) {
             auto recordFrameId = _frameId - recordBeginFrameId;
-            _sequenceStorage[recordFrameId][_batchId].bgraFrame =
+            _sequenceStorage[recordFrameId][_batchId].frame =
                 Image<uint8_t>(doomGame.getScreenWidth(), doomGame.getScreenHeight(),
                 ImageFormat::BGRA, doomGame.getPixelsBGRA());
         }

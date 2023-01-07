@@ -58,7 +58,7 @@ void ModelProto::train(const SequenceStorage& storage)
 
         // Transfer data into the input tensor
         for (int b=0; b<batchSize; ++b) {
-            convertImage(storage[trainFrameId][b].bgraFrame, frame); // do inline conversion for now (TODO)
+            convertImage(storage[trainFrameId][b].frame, frame); // do inline conversion for now (TODO)
             // transpose the image and add it to the batch data vector
             for (int c=0; c<4; ++c) {
                 for (int j=0; j<480; ++j) {

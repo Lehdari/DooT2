@@ -16,7 +16,7 @@
 class SequenceStorage {
 public:
     struct Entry {
-        Image<uint8_t>  bgraFrame;
+        Image<uint8_t>  frame;
     };
 
     class BatchHandle {
