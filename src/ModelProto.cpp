@@ -14,16 +14,32 @@
 #include <opencv2/core/mat.hpp> // TODO temp
 #include <opencv2/highgui.hpp> // TODO temp
 
+#include <filesystem>
+
 
 static constexpr int    batchSize           = 16; // TODO move somewhere sensible
 static constexpr double learningRate        = 1.0e-3; // TODO
 static constexpr int    nTrainingEpochs     = 1024;
+static constexpr char   autoEncoderFilename[]   {"autoencoder.pt"};
+
+
+using namespace torch;
+namespace fs = std::filesystem;
 
 
 ModelProto::ModelProto() :
     _optimizer          (_autoEncoder->parameters(), torch::optim::AdamOptions(learningRate).betas({0.9, 0.999})),
     _trainingFinished   (true)
 {
+    if (fs::exists(autoEncoderFilename)) {
+        printf("Loading model from %s\n", autoEncoderFilename); // TODO logging
+        serialize::InputArchive inputArchive;
+        inputArchive.load_from(autoEncoderFilename);
+        _autoEncoder->load(inputArchive);
+    }
+    else {
+        printf("No %s found. Initializing new model.\n", autoEncoderFilename); // TODO logging
+    }
 }
 
 void ModelProto::train(const SequenceStorage& storage)
@@ -104,6 +120,12 @@ void ModelProto::train(const SequenceStorage& storage)
             loss.item<float>());
         fflush(stdout);
     }
+
+    // Save to file
+    printf("Saving model to %s\n", autoEncoderFilename);
+    serialize::OutputArchive outputArchive;
+    _autoEncoder->save(outputArchive);
+    outputArchive.save_to(autoEncoderFilename);
 
     _trainingFinished = true;
 }
