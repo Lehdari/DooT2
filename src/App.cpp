@@ -107,16 +107,24 @@ void App::loop()
             }
         }
 
+        // Player position relative to the starting position (_initPlayerPos)
         static Vec2f playerPosRelative(0.0f, 0.0f);
-        if (_frameId >= recordEndFrameId || doomGame.update(_actionManager(
+
+        // Action for this timestep
+        auto action = _actionManager(
             {_frameId, playerPosRelative}
-            ))) {
+        );
+
+        // Update the game state, restart if required
+        if (_frameId >= recordEndFrameId || doomGame.update(action)) {
             nextMap();
             recordBeginFrameId = 768+_rnd()%512;
             recordEndFrameId = recordBeginFrameId+64;
             continue;
         }
 
+        // Player position is undefined before the first update, so _initPlayerPos has to be
+        // defined here. Also apply the exit position priori to the heatmap action module.
         if (_frameId == 0) {
             _initPlayerPos = doomGame.getGameState<GameState::PlayerPos>().block<2,1>(0,0);
             Vec2f exitPos = doomGame.getGameState<GameState::ExitPos>() - _initPlayerPos;
@@ -124,11 +132,15 @@ void App::loop()
 
             _heatmapActionModule.applyExitPositionPriori(exitPos);
         }
+
+        // Record
         if (_frameId >= recordBeginFrameId) {
             auto recordFrameId = _frameId - recordBeginFrameId;
-            _sequenceStorage[recordFrameId][_batchId].frame =
-                Image<uint8_t>(doomGame.getScreenWidth(), doomGame.getScreenHeight(),
+            auto& entry = _sequenceStorage[recordFrameId][_batchId];
+            entry.action = action;
+            entry.frame = Image<uint8_t>(doomGame.getScreenWidth(), doomGame.getScreenHeight(),
                 ImageFormat::BGRA, doomGame.getPixelsBGRA());
+            entry.reward = 0.0; // TODO no rewards for now
         }
 
         // Render screen
@@ -143,6 +155,7 @@ void App::loop()
         SDL_RenderCopy(_renderer, _texture, nullptr, nullptr);
         SDL_RenderPresent(_renderer);
 
+        // Update relative player position
         playerPosRelative(0) = doomGame.getGameState<GameState::PlayerPos>()(0) - _initPlayerPos(0);
         playerPosRelative(1) = _initPlayerPos(1) - doomGame.getGameState<GameState::PlayerPos>()(1); // invert y
 
