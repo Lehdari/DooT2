@@ -10,7 +10,8 @@
 
 #pragma once
 
-#include "AutoEncoder.hpp"
+#include "FrameEncoder.hpp"
+#include "FrameDecoder.hpp"
 
 #include <vector>
 #include <memory>
@@ -36,7 +37,8 @@ public:
     void waitForTrainingFinish();
 
 private:
-    AutoEncoder         _autoEncoder;
+    FrameEncoder        _frameEncoder;
+    FrameDecoder        _frameDecoder;
     torch::optim::Adam  _optimizer;
     std::mutex          _trainingMutex;
     std::thread         _trainingThread;
