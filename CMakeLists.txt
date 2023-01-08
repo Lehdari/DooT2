@@ -26,8 +26,9 @@ set(DOOT2_SOURCES
     src/main.cpp
     src/ActionManager.cpp
     src/App.cpp
-    src/AutoEncoder.cpp
     src/DoorTraversalActionModule.cpp
+    src/FrameDecoder.cpp
+    src/FrameEncoder.cpp
     src/HeatmapActionModule.cpp
     src/ModelProto.cpp
     src/SequenceStorage.cpp
