@@ -18,4 +18,11 @@
 #endif
 
 
+#if defined(__GNUC__)
+#define INLINE inline __attribute__((always_inline))
+#else
+#define INLINE inline
+#endif
+
+
 const std::filesystem::path assetsDir(ASSETS_DIR);
