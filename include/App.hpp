@@ -50,7 +50,7 @@ private:
     Vec2f                       _initPlayerPos;
 
     size_t                      _frameId;
-    size_t                      _batchId;
+    size_t                      _batchEntryId;
     bool                        _newPatchReady;
 
     ModelProto                  _model;

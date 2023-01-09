@@ -29,11 +29,11 @@ App::App() :
     _quit                       (false),
     _heatmapActionModule        (HeatmapActionModule::Settings{256, 32.0f}),
     _doorTraversalActionModule  (),
-    _sequenceStorage            (batchSize, 64),
+    _sequenceStorage            (SequenceStorage::Settings{batchSize, 64, 640, 480, ImageFormat::BGRA}),
     _positionPlot               (1024, 1024, CV_32FC3, cv::Scalar(0.0f)),
     _initPlayerPos              (0.0f, 0.0f),
     _frameId                    (0),
-    _batchId                    (0),
+    _batchEntryId               (0),
     _newPatchReady              (false)
 {
     auto& doomGame = DoomGame::instance();
@@ -136,12 +136,12 @@ void App::loop()
         // Record
         if (_frameId >= recordBeginFrameId) {
             auto recordFrameId = _frameId - recordBeginFrameId;
-            auto& entry = _sequenceStorage[recordFrameId][_batchId];
-            entry.action = action;
-            entry.frame = Image<uint8_t>(doomGame.getScreenWidth(), doomGame.getScreenHeight(),
-                ImageFormat::BGRA);
-            entry.frame.copyFrom(doomGame.getPixelsBGRA());
-            entry.reward = 0.0; // TODO no rewards for now
+            auto batch = _sequenceStorage[recordFrameId];
+            batch.actions[_batchEntryId] = action;
+            Image<uint8_t> frame(doomGame.getScreenWidth(), doomGame.getScreenHeight(), ImageFormat::BGRA);
+            frame.copyFrom(doomGame.getPixelsBGRA());
+            convertImage(frame, batch.frames[_batchEntryId]);
+            batch.rewards[_batchEntryId] = 0.0; // TODO no rewards for now
         }
 
         // Render screen
@@ -214,13 +214,13 @@ void App::nextMap()
     _positionPlot *= 0.0f;
 
     _frameId = 0;
-    if (++_batchId >= batchSize) {
+    if (++_batchEntryId >= batchSize) {
         _newPatchReady = true;
-        _batchId = 0;
+        _batchEntryId = 0;
     }
 
     gvizdoom::GameConfig newGameConfig = doomGame.getGameConfig();
-    newGameConfig.map = _batchId + 1;
+    newGameConfig.map = _batchEntryId + 1;
 
     doomGame.restart(newGameConfig);
 }

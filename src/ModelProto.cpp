@@ -79,26 +79,18 @@ void ModelProto::train(const SequenceStorage& storage)
     _frameEncoder->to(device);
     _frameDecoder->to(device);
 
-    torch::Tensor batchIn = torch::ones({batchSize, 4, 480, 640}, torch::kCPU);
-    auto* batchDataIn = batchIn.data_ptr<float>();
-    Image<float> frame;
+    torch::Tensor batchIn;
     for (int64_t epoch=0; epoch<nTrainingEpochs; ++epoch) {
         // ID of the frame (in sequence) to be used in the training batch
-        size_t trainFrameId = epoch%storage.size();
+        size_t trainFrameId = epoch % storage.settings().length;
+        batchIn = torch::from_blob(
+            const_cast<float*>(storage[trainFrameId].frames->data()), // TODO very bad, create custom accessor for this
+            {batchSize, 480, 640, 4}, torch::TensorOptions().device(torch::kCPU));
+        auto* batchDataIn = batchIn.data_ptr<float>();
 
-        // Transfer data into the input tensor
-        for (int b=0; b<batchSize; ++b) {
-            convertImage(storage[trainFrameId][b].frame, frame); // do inline conversion for now (TODO)
-            // transpose the image and add it to the batch data vector
-            for (int c=0; c<4; ++c) {
-                for (int j=0; j<480; ++j) {
-                    for (int i=0; i<640; ++i) {
-                        batchDataIn[b*4*480*640 + c*480*640 + j*640 + i] = frame.data()[j*640*4 + i*4 + c];
-                    }
-                }
-            }
-        }
         torch::Tensor batchInGPU = batchIn.to(device);
+        batchInGPU = batchInGPU.transpose(1, 3);
+        batchInGPU = batchInGPU.transpose(2, 3);
 
         // Forward and backward passes
         _frameEncoder->zero_grad();
@@ -112,14 +104,14 @@ void ModelProto::train(const SequenceStorage& storage)
         _optimizer.step();
 
         // Cycle through displayed sequences
-        size_t displayFrameId = (epoch/storage.size())%batchSize;
+        size_t displayFrameId = (epoch/storage.settings().length)%batchSize;
         torch::Tensor outputCPU = batchOut.to(torch::kCPU);
         auto* batchDataOut = outputCPU.data_ptr<float>();
         for (int c=0; c<4; ++c) {
             for (int j=0; j<480; ++j) {
                 for (int i=0; i<640; ++i) {
-                    imageIn.ptr<float>(j)[i*4 + c] = batchDataIn[displayFrameId*4*480*640 + c*480*640 + j*640 + i];
-                    imageOut.ptr<float>(j)[i*4 + c] = batchDataOut[displayFrameId*4*480*640 + c*480*640 + j*640 + i];
+                    imageIn.ptr<float>(j)[i*4 + c] = batchDataIn[displayFrameId*480*640*4 + j*640*4 + i*4 + c];
+                    imageOut.ptr<float>(j)[i*4 + c] = batchDataOut[displayFrameId*480*640*4 + j*640*4 + i*4 + c];
                 }
             }
         }
