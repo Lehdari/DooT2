@@ -139,7 +139,8 @@ void App::loop()
             auto& entry = _sequenceStorage[recordFrameId][_batchId];
             entry.action = action;
             entry.frame = Image<uint8_t>(doomGame.getScreenWidth(), doomGame.getScreenHeight(),
-                ImageFormat::BGRA, doomGame.getPixelsBGRA());
+                ImageFormat::BGRA);
+            entry.frame.copyFrom(doomGame.getPixelsBGRA());
             entry.reward = 0.0; // TODO no rewards for now
         }
 
@@ -197,7 +198,7 @@ void App::loop()
 
             printf("Training...\n");
             _model.waitForTrainingFinish();
-            _model.trainAsync(sequenceStorageCopy);
+            _model.trainAsync(std::move(sequenceStorageCopy));
             _newPatchReady = false;
         }
 
