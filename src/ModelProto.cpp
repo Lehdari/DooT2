@@ -57,6 +57,8 @@ ModelProto::ModelProto() :
 
 void ModelProto::train(SequenceStorage&& storage)
 {
+    using namespace torch::indexing;
+
     // Return immediately in case there's previous training by another thread already running
     if (!_trainingFinished)
         return;
@@ -79,16 +81,17 @@ void ModelProto::train(SequenceStorage&& storage)
     _frameEncoder->to(device);
     _frameDecoder->to(device);
 
+    // Load the whole storage's pixel data to the GPU
+    auto pixelDataIn = storage.mapPixelData();
+    torch::Tensor pixelDataInGPU = pixelDataIn.to(device);
+    pixelDataInGPU = pixelDataInGPU.transpose(2, 4);
+    pixelDataInGPU = pixelDataInGPU.transpose(3, 4);
+
     torch::Tensor batchIn;
     for (int64_t epoch=0; epoch<nTrainingEpochs; ++epoch) {
         // ID of the frame (in sequence) to be used in the training batch
         size_t trainFrameId = epoch % storage.settings().length;
-        batchIn = storage[trainFrameId].mapPixelData();
-        auto* batchDataIn = batchIn.data_ptr<float>();
-
-        torch::Tensor batchInGPU = batchIn.to(device);
-        batchInGPU = batchInGPU.transpose(1, 3);
-        batchInGPU = batchInGPU.transpose(2, 3);
+        torch::Tensor batchInGPU = pixelDataInGPU.index({(int)trainFrameId});
 
         // Forward and backward passes
         _frameEncoder->zero_grad();
@@ -103,7 +106,9 @@ void ModelProto::train(SequenceStorage&& storage)
 
         // Cycle through displayed sequences
         size_t displayFrameId = (epoch/storage.settings().length)%batchSize;
+        torch::Tensor inputCPU = batchInGPU.to(torch::kCPU);
         torch::Tensor outputCPU = batchOut.to(torch::kCPU);
+        auto* batchDataIn = inputCPU.data_ptr<float>();
         auto* batchDataOut = outputCPU.data_ptr<float>();
         for (int c=0; c<4; ++c) {
             for (int j=0; j<480; ++j) {
