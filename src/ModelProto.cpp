@@ -55,7 +55,7 @@ ModelProto::ModelProto() :
     }
 }
 
-void ModelProto::train(const SequenceStorage& storage)
+void ModelProto::train(SequenceStorage&& storage)
 {
     // Return immediately in case there's previous training by another thread already running
     if (!_trainingFinished)
@@ -83,9 +83,7 @@ void ModelProto::train(const SequenceStorage& storage)
     for (int64_t epoch=0; epoch<nTrainingEpochs; ++epoch) {
         // ID of the frame (in sequence) to be used in the training batch
         size_t trainFrameId = epoch % storage.settings().length;
-        batchIn = torch::from_blob(
-            const_cast<float*>(storage[trainFrameId].frames->data()), // TODO very bad, create custom accessor for this
-            {batchSize, 480, 640, 4}, torch::TensorOptions().device(torch::kCPU));
+        batchIn = storage[trainFrameId].mapPixelData();
         auto* batchDataIn = batchIn.data_ptr<float>();
 
         torch::Tensor batchInGPU = batchIn.to(device);

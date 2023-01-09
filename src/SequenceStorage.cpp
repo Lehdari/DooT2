@@ -16,12 +16,26 @@
 SequenceStorage::BatchHandle::BatchHandle(
     gvizdoom::Action* actions,
     Image<float>* frames,
-    double* rewards
+    double* rewards,
+    float* frameData,
+    const SequenceStorage::Settings& settings
 ) :
-    actions (actions),
-    frames  (frames),
-    rewards (rewards)
+    actions     (actions),
+    frames      (frames),
+    rewards     (rewards),
+    _frameData  (frameData),
+    _settings   (settings)
 {
+}
+
+const torch::Tensor SequenceStorage::BatchHandle::mapPixelData()
+{
+    return torch::from_blob(
+        _frameData,
+        { _settings.batchSize, _settings.frameHeight, _settings.frameWidth,
+        getImageFormatNChannels(_settings.frameFormat) },
+        torch::TensorOptions().device(torch::kCPU)
+    );
 }
 
 SequenceStorage::ConstBatchHandle::ConstBatchHandle(
@@ -37,9 +51,9 @@ SequenceStorage::ConstBatchHandle::ConstBatchHandle(
 
 SequenceStorage::SequenceStorage(const Settings& settings) :
     _settings   (settings),
+    _frameSize  (_settings.frameWidth*_settings.frameHeight*getImageFormatNChannels(_settings.frameFormat)),
     _actions    (_settings.length*_settings.batchSize),
-    _frameData  (_settings.length*_settings.batchSize*_settings.frameWidth*_settings.frameHeight
-                 *getImageFormatNChannels(_settings.frameFormat)),
+    _frameData  (_settings.length*_settings.batchSize*_frameSize),
     _rewards    (_settings.length*_settings.batchSize)
 {
     std::size_t size = _settings.length*_settings.batchSize;
@@ -48,6 +62,7 @@ SequenceStorage::SequenceStorage(const Settings& settings) :
 
 SequenceStorage::SequenceStorage(const SequenceStorage& other) :
     _settings   (other._settings),
+    _frameSize  (other._frameSize),
     _actions    (other._actions),
     _frameData  (other._frameData),
     _rewards    (other._rewards)
@@ -57,6 +72,7 @@ SequenceStorage::SequenceStorage(const SequenceStorage& other) :
 
 SequenceStorage::SequenceStorage(SequenceStorage&& other) noexcept :
     _settings   (std::move(other._settings)),
+    _frameSize  (std::move(other._frameSize)),
     _actions    (std::move(other._actions)),
     _frameData  (std::move(other._frameData)),
     _rewards    (std::move(other._rewards))
@@ -67,6 +83,7 @@ SequenceStorage::SequenceStorage(SequenceStorage&& other) noexcept :
 SequenceStorage& SequenceStorage::operator=(const SequenceStorage& other)
 {
     _settings = other._settings;
+    _frameSize = other._frameSize;
     _actions = other._actions;
     _frameData = other._frameData;
     _rewards = other._rewards;
@@ -79,6 +96,7 @@ SequenceStorage& SequenceStorage::operator=(const SequenceStorage& other)
 SequenceStorage& SequenceStorage::operator=(SequenceStorage&& other) noexcept
 {
     _settings = std::move(other._settings);
+    _frameSize = std::move(other._frameSize);
     _actions = std::move(other._actions);
     _frameData = std::move(other._frameData);
     _rewards = std::move(other._rewards);
@@ -95,7 +113,9 @@ SequenceStorage::BatchHandle SequenceStorage::operator[](std::size_t id)
     return {
         &_actions[id*_settings.batchSize],
         &_frames[id*_settings.batchSize],
-        &_rewards[id*_settings.batchSize]
+        &_rewards[id*_settings.batchSize],
+        &_frameData[id*_settings.batchSize*_frameSize],
+        _settings
     };
 }
 
@@ -108,6 +128,17 @@ SequenceStorage::ConstBatchHandle SequenceStorage::operator[](std::size_t id) co
         &_frames[id*_settings.batchSize],
         &_rewards[id*_settings.batchSize]
     };
+}
+
+const torch::Tensor SequenceStorage::mapPixelData()
+{
+    return torch::from_blob(
+        _frameData.data(),
+        { (long)_settings.length, _settings.batchSize,
+            _settings.frameHeight, _settings.frameWidth,
+            getImageFormatNChannels(_settings.frameFormat) },
+        torch::TensorOptions().device(torch::kCPU)
+    );
 }
 
 const SequenceStorage::Settings& SequenceStorage::settings() const noexcept
