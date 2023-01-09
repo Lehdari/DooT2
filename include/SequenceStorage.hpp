@@ -11,8 +11,10 @@
 #pragma once
 
 #include "Image.hpp"
+#include "TensorUtils.hpp"
 
 #include <gvizdoom/Action.hpp>
+
 
 class SequenceStorage {
 public:
@@ -30,13 +32,21 @@ public:
         Image<float>* const     frames;
         double* const           rewards;
 
+        // Map pixel data to a torch tensor (BHWC)
+        const torch::Tensor mapPixelData();
+
         friend class SequenceStorage;
 
     private:
         BatchHandle(
             gvizdoom::Action* actions,
             Image<float>* frames,
-            double* rewards);
+            double* rewards,
+            float* frameData,
+            const SequenceStorage::Settings& settings);
+
+        float* const                        _frameData;
+        const SequenceStorage::Settings&    _settings;
     };
 
     class ConstBatchHandle {
@@ -65,10 +75,14 @@ public:
     BatchHandle operator[](std::size_t id);
     ConstBatchHandle operator[](std::size_t id) const noexcept;
 
+    // Map pixel data to a torch tensor (LBHWC)
+    const torch::Tensor mapPixelData();
+
     const Settings& settings() const noexcept;
 
 private:
     Settings                        _settings;
+    uint64_t                        _frameSize; // size of a frame in elements
 
     // Sequence data vectors
     std::vector<gvizdoom::Action>   _actions;
@@ -82,13 +96,10 @@ private:
 
 void SequenceStorage::initializeFrames(std::size_t size)
 {
-    std::size_t frameSize = _settings.frameWidth*_settings.frameHeight
-        *getImageFormatNChannels(_settings.frameFormat);
-
     _frames.reserve(size);
     for (std::size_t i=0; i<size; ++i) {
         // Initialize images with pixel data stored in _frameData
         _frames.emplace_back(_settings.frameWidth, _settings.frameHeight, _settings.frameFormat,
-            &_frameData[i*frameSize]);
+            &_frameData[i*_frameSize]);
     }
 }
