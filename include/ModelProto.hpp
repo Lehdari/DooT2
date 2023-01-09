@@ -32,7 +32,7 @@ public:
     ModelProto& operator=(ModelProto&&) = delete;
 
     void train(const SequenceStorage& storage);
-    void trainAsync(const SequenceStorage& storage);
+    void trainAsync(SequenceStorage&& storage);
     bool trainingFinished() const noexcept;
     void waitForTrainingFinish();
 

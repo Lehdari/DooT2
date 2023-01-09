@@ -154,11 +154,11 @@ void ModelProto::train(const SequenceStorage& storage)
     _trainingFinished = true;
 }
 
-void ModelProto::trainAsync(const SequenceStorage& storage)
+void ModelProto::trainAsync(SequenceStorage&& storage)
 {
     if (_trainingThread.joinable())
         _trainingThread.join();
-    _trainingThread = std::thread{&ModelProto::train, this, storage};
+    _trainingThread = std::thread{&ModelProto::train, this, std::move(storage)};
 }
 
 bool ModelProto::trainingFinished() const noexcept

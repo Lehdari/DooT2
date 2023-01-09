@@ -8,7 +8,7 @@
 // with this source code package.
 //
 
-inline int getImageFormatNChannels(ImageFormat imageFormat)
+INLINE int getImageFormatNChannels(ImageFormat imageFormat)
 {
     if (imageFormat == ImageFormat::BGRA)
         return 4;
@@ -18,15 +18,41 @@ inline int getImageFormatNChannels(ImageFormat imageFormat)
 
 
 template<typename T_Data>
-Image<T_Data>::Image(int width, int height, ImageFormat format, const T_Data* data) :
-    _width  (width),
-    _height (height),
-    _format (format),
-    _data   (width*height*getImageFormatNChannels(ImageFormat::BGRA))
+Image<T_Data>::Image(int width, int height, ImageFormat format, T_Data* data) :
+    _width      (width),
+    _height     (height),
+    _format     (format),
+    _data       (data),
+    _nElements  (_width*_height*getImageFormatNChannels(format))
 {
-    for (size_t i=0; i<_data.size(); ++i) {
-        _data[i] = data[i];
+    if (_data == nullptr) {
+        _buffer.resize(_nElements);
+        _data = _buffer.data();
     }
+}
+
+template<typename T_Data>
+Image<T_Data>::Image(const Image<T_Data>& other) :
+    _width      (other._width),
+    _height     (other._height),
+    _format     (other._format),
+    _data       (nullptr),
+    _nElements  (other._nElements), // allocate a new, internal buffer
+    _buffer     (_nElements)
+{
+    _data = _buffer.data();
+    memcpy(_data, other._data, _nElements*sizeof(T_Data)); // make a copy of the pixel data
+}
+
+template<typename T_Data>
+Image<T_Data>& Image<T_Data>::operator=(const Image<T_Data>& other)
+{
+    if (this == &other)
+        return *this;
+
+    copyParamsFrom(other);
+
+    return *this;
 }
 
 template<typename T_Data>
@@ -50,35 +76,70 @@ const ImageFormat& Image<T_Data>::format() const noexcept
 template<typename T_Data>
 const T_Data* Image<T_Data>::data() const noexcept
 {
-    return _data.data();
+    return _data;
 }
 
+template<typename T_Data>
+void Image<T_Data>::copyFrom(const T_Data* data)
+{
+    memcpy(_buffer.data(), data, _nElements * sizeof(T_Data));
+}
+
+template<typename T_Data>
+template<typename T_DataOther>
+void Image<T_Data>::copyParamsFrom(const Image<T_DataOther>& other)
+{
+    _width = other._width;
+    _height = other._height;
+    _format = other._format;
+    _nElements = other._nElements;
+    _buffer.resize(_nElements);
+    _data = _buffer.data();
+}
 
 template <typename T_DataSrc, typename T_DataDest>
-inline void convertImage(const Image<T_DataSrc>& srcImage, Image<T_DataDest>& destImage)
+INLINE void convertImage(const Image<T_DataSrc>& srcImage, Image<T_DataDest>& destImage)
 {
-    destImage._data.resize(srcImage._data.size());
-    for (int i=0; i<srcImage._data.size(); ++i) {
+    if (destImage._data == destImage._buffer.data()) {
+        destImage.copyParamsFrom(srcImage);
+    }
+    else if (srcImage._nElements != destImage._nElements) {
+        throw std::runtime_error("N. of buffer elements is required to match when using external pixel buffer");
+    }
+
+    for (int i=0; i<srcImage._nElements; ++i) {
         destImage._data[i] = static_cast<T_DataDest>(srcImage._data[i]);
     }
 }
 
 template <>
-inline void convertImage<uint8_t, float>(const Image<uint8_t>& srcImage, Image<float>& destImage)
+INLINE void convertImage<uint8_t, float>(const Image<uint8_t>& srcImage, Image<float>& destImage)
 {
+    if (destImage._data == destImage._buffer.data()) {
+        destImage.copyParamsFrom(srcImage);
+    }
+    else if (srcImage._nElements != destImage._nElements) {
+        throw std::runtime_error("N. of buffer elements is required to match when using external pixel buffer");
+    }
+
     constexpr float convertRatio = 1.0f / 255.0f;
-    destImage._data.resize(srcImage._data.size());
-    for (int i=0; i<srcImage._data.size(); ++i) {
+    for (int i=0; i<srcImage._nElements; ++i) {
         destImage._data[i] = static_cast<float>(srcImage._data[i]) * convertRatio;
     }
 }
 
 template <>
-inline void convertImage<float, uint8_t>(const Image<float>& srcImage, Image<uint8_t>& destImage)
+INLINE void convertImage<float, uint8_t>(const Image<float>& srcImage, Image<uint8_t>& destImage)
 {
+    if (destImage._data == destImage._buffer.data()) {
+        destImage.copyParamsFrom(srcImage);
+    }
+    else if (srcImage._nElements != destImage._nElements) {
+        throw std::runtime_error("N. of buffer elements is required to match when using external pixel buffer");
+    }
+
     constexpr float convertRatio = 255.0f;
-    destImage._data.resize(srcImage._data.size());
-    for (int i=0; i<srcImage._data.size(); ++i) {
+    for (int i=0; i<srcImage._nElements; ++i) {
         destImage._data[i] = static_cast<uint8_t>(srcImage._data[i] * convertRatio);
     }
 }
