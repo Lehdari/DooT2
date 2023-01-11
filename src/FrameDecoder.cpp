@@ -51,6 +51,7 @@ torch::Tensor FrameDecoderImpl::forward(torch::Tensor x)
     using namespace torch::indexing;
 
     // Decoder
+    x = torch::reshape(x, {-1, 128, 4, 4});
     x = torch::tanh(_bnDec8(_convTranspose8(x))); // 4x4x512
     x = torch::tanh(_bnDec7(_convTranspose7(x))); // 5x5x512
     x = torch::tanh(_bnDec6(_convTranspose6(x))); // 10x10x256
