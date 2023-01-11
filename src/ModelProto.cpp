@@ -114,7 +114,7 @@ void ModelProto::train(SequenceStorage&& storage)
             for (int j=0; j<480; ++j) {
                 for (int i=0; i<640; ++i) {
                     imageIn.ptr<float>(j)[i*4 + c] = batchDataIn[displayFrameId*480*640*4 + j*640*4 + i*4 + c];
-                    imageOut.ptr<float>(j)[i*4 + c] = batchDataOut[displayFrameId*480*640*4 + j*640*4 + i*4 + c];
+                    imageOut.ptr<float>(j)[i*4 + c] = batchDataOut[displayFrameId*4*480*640 + c*480*640 + j*640 + i];
                 }
             }
         }
