@@ -63,6 +63,7 @@ torch::Tensor FrameEncoderImpl::forward(torch::Tensor x)
     x = torch::tanh(_bnEnc6(_conv6(x))); // 5x5x512
     x = torch::tanh(_bnEnc7(_conv7(x))); // 4x4x512
     x = torch::tanh(_bnEnc8(_conv8(x))); // 4x4x128
+    x = torch::flatten(x);
 
     return x;
 }
