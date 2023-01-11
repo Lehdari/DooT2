@@ -25,7 +25,7 @@ public:
         int wallHitTimer        {0};
     };
 
-    DoorTraversalActionModule();
+    DoorTraversalActionModule(bool useWallHitDoorTraversal = true);
 
     // Reset is called in game restarts. Should reset the state
     void reset();
@@ -42,4 +42,7 @@ public:
         ActionManager& actionManager);
 
     State   state; // public state member
+
+private:
+    bool    _useWallHitDoorTraversal;
 };

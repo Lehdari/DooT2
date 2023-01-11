@@ -103,6 +103,10 @@ void HeatmapActionModule::operator()(
     state.diff = heatmapSample-state.samplePrev;
     state.samplePrev = heatmapSample;
 
+    // action vector already overwritten, skip further modifications
+    if (!updateParams.actionVectorOverwrite.empty())
+        return;
+
     auto& actionVector = actionManager.getActionVector();
     if (state.diff > 0.15f) {
         // invert action in case heatmap value grows rapidly (we're approaching region

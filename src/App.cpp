@@ -28,7 +28,7 @@ App::App() :
     _texture                    (nullptr),
     _quit                       (false),
     _heatmapActionModule        (HeatmapActionModule::Settings{256, 32.0f}),
-    _doorTraversalActionModule  (),
+    _doorTraversalActionModule  (false),
     _sequenceStorage            (SequenceStorage::Settings{batchSize, 64, true, false, 640, 480, ImageFormat::BGRA}),
     _positionPlot               (1024, 1024, CV_32FC3, cv::Scalar(0.0f)),
     _initPlayerPos              (0.0f, 0.0f),

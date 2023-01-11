@@ -13,16 +13,17 @@
 
 static std::vector<std::vector<float>> startRoomEscapeSequence = [](){
     std::vector<std::vector<float>> v;
-    for (int i=0; i<5; ++i)
+    for (int i=0; i<12; ++i)
         v.push_back({0.0f, 1.0f, -1.0f, -1.0f, -1.0f, -1.0f}); // move forward
     v.push_back({0.0f, 1.0f, -1.0f, -1.0f, -1.0f, 1.0f}); // press use
-    for (int i=0; i<70; ++i)
+    for (int i=0; i<50; ++i)
         v.push_back({0.0f, 1.0f, -1.0f, -1.0f, -1.0f, -1.0f}); // move forward
     return v;
 }();
 
 
-DoorTraversalActionModule::DoorTraversalActionModule()
+DoorTraversalActionModule::DoorTraversalActionModule(bool useWallHitDoorTraversal) :
+    _useWallHitDoorTraversal    (useWallHitDoorTraversal)
 {
 }
 
@@ -45,27 +46,29 @@ void DoorTraversalActionModule::operator()(
         return;
     }
 
-    // count consequent forward presses
-    if (actionVector[1] > 0.0f)
-        state.forwardHoldTimer++;
-    else
-        state.forwardHoldTimer = 0;
-
-    float dot = updateParams.v.dot(updateParams.a);
-    if (state.wallHitTimer <= 0) {
-        // detect when forward motion has hit a wall
-        if (state.forwardHoldTimer>10 && dot < -5.0f) {
-            state.wallHitTimer = 60;
-        }
-    }
-    else {
-        // in case wall has been hit, cycle use to open potential door
-        // and keep moving forward for 60 tics
-        if (state.wallHitTimer == 60)
-            updateParams.actionVectorOverwrite = {0.0f, 1.0f, -1.0f, -1.0f, -1.0f, -1.0f}; // TODO generalize
+    if (_useWallHitDoorTraversal) {
+        // count consequent forward presses
+        if (actionVector[1] > 0.0f)
+            state.forwardHoldTimer++;
         else
-            updateParams.actionVectorOverwrite = {0.0f, 1.0f, -1.0f, -1.0f, -1.0f, 1.0f};
+            state.forwardHoldTimer = 0;
 
-        --state.wallHitTimer;
+        float dot = updateParams.v.dot(updateParams.a);
+        if (state.wallHitTimer <= 0) {
+            // detect when forward motion has hit a wall
+            if (state.forwardHoldTimer>10 && dot < -5.0f) {
+                state.wallHitTimer = 60;
+            }
+        }
+        else {
+            // in case wall has been hit, cycle use to open potential door
+            // and keep moving forward for 60 tics
+            if (state.wallHitTimer == 60)
+                updateParams.actionVectorOverwrite = {0.0f, 1.0f, -1.0f, -1.0f, -1.0f, -1.0f}; // TODO generalize
+            else
+                updateParams.actionVectorOverwrite = {0.0f, 1.0f, -1.0f, -1.0f, -1.0f, 1.0f};
+
+            --state.wallHitTimer;
+        }
     }
 }
