@@ -17,6 +17,9 @@
 #include <filesystem>
 
 
+#define AUTOENCODE 0 // train full autoencoder when 1, only decoder otherwise
+
+
 static constexpr int    batchSize           = 16; // TODO move somewhere sensible
 static constexpr double learningRate        = 1.0e-3; // TODO
 static constexpr int    nTrainingEpochs     = 1024;
@@ -29,7 +32,8 @@ namespace fs = std::filesystem;
 
 
 ModelProto::ModelProto() :
-    _optimizer          ({_frameEncoder->parameters(), _frameDecoder->parameters()}, torch::optim::AdamOptions(learningRate).betas({0.9, 0.999})),
+    _optimizer          ({_frameEncoder->parameters(), _frameDecoder->parameters()},
+        torch::optim::AdamOptions(learningRate).betas({0.95, 0.999})),
     _trainingFinished   (true)
 {
     // Load frame encoder
@@ -87,6 +91,11 @@ void ModelProto::train(SequenceStorage&& storage)
     pixelDataInGPU = pixelDataInGPU.transpose(2, 4);
     pixelDataInGPU = pixelDataInGPU.transpose(3, 4);
 
+#if !AUTOENCODE
+    auto encodingDataIn = storage.mapEncodingData();
+    torch::Tensor encodingDataInGPU = encodingDataIn.to(device);
+#endif
+
     torch::Tensor batchIn;
     for (int64_t epoch=0; epoch<nTrainingEpochs; ++epoch) {
         // ID of the frame (in sequence) to be used in the training batch
@@ -94,9 +103,17 @@ void ModelProto::train(SequenceStorage&& storage)
         torch::Tensor batchInGPU = pixelDataInGPU.index({(int)trainFrameId});
 
         // Forward and backward passes
+#if AUTOENCODE
         _frameEncoder->zero_grad();
+#endif
         _frameDecoder->zero_grad();
+
+#if AUTOENCODE
         torch::Tensor encoding = _frameEncoder->forward(batchInGPU); // image encode
+#else
+        torch::Tensor encoding = encodingDataInGPU.index({(int)trainFrameId});
+#endif
+
         torch::Tensor batchOut = _frameDecoder->forward(encoding); // image decode
         torch::Tensor loss = torch::l1_loss(batchInGPU, batchOut) + torch::mse_loss(batchInGPU, batchOut);
         loss.backward();

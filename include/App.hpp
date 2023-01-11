@@ -53,6 +53,8 @@ private:
     size_t                      _batchEntryId;
     bool                        _newPatchReady;
 
+    torch::Device               _torchDevice;
+    FrameEncoder                _frameEncoder;
     ModelProto                  _model;
 
 

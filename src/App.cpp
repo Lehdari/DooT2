@@ -13,12 +13,18 @@
 #include "gvizdoom/DoomGame.hpp"
 
 #include <opencv2/highgui.hpp>
+#include <filesystem>
 
 
 using namespace gvizdoom;
+using namespace torch;
+using namespace torch::indexing;
+namespace fs = std::filesystem;
 
 
 constexpr std::size_t batchSize = 16;
+static constexpr char   frameEncoderFilename[]  {"frame_encoder.pt"};
+constexpr uint32_t encodingLength = 2048;
 
 
 App::App() :
@@ -29,12 +35,15 @@ App::App() :
     _quit                       (false),
     _heatmapActionModule        (HeatmapActionModule::Settings{256, 32.0f}),
     _doorTraversalActionModule  (),
-    _sequenceStorage            (SequenceStorage::Settings{batchSize, 64, true, false, 640, 480, ImageFormat::BGRA}),
+    _sequenceStorage            (SequenceStorage::Settings{batchSize, 64,
+                                    true, true,
+                                    640, 480, ImageFormat::BGRA, encodingLength}),
     _positionPlot               (1024, 1024, CV_32FC3, cv::Scalar(0.0f)),
     _initPlayerPos              (0.0f, 0.0f),
     _frameId                    (0),
     _batchEntryId               (0),
-    _newPatchReady              (false)
+    _newPatchReady              (false),
+    _torchDevice                (kCUDA)
 {
     auto& doomGame = DoomGame::instance();
 
@@ -73,6 +82,19 @@ App::App() :
     // Setup ActionManager
     _actionManager.addModule(&_doorTraversalActionModule);
     _actionManager.addModule(&_heatmapActionModule);
+
+    // Load frame encoder
+    if (fs::exists(frameEncoderFilename)) {
+        printf("Loading frame encoder model from %s\n", frameEncoderFilename); // TODO logging
+        serialize::InputArchive inputArchive;
+        inputArchive.load_from(frameEncoderFilename);
+        _frameEncoder->load(inputArchive);
+    }
+    else {
+        printf("No %s found. Initializing new frame encoder model.\n", frameEncoderFilename); // TODO logging
+    }
+
+    _frameEncoder->to(_torchDevice);
 }
 
 App::~App()
@@ -137,10 +159,25 @@ void App::loop()
         if (_frameId >= recordBeginFrameId) {
             auto recordFrameId = _frameId - recordBeginFrameId;
             auto batch = _sequenceStorage[recordFrameId];
+
             batch.actions[_batchEntryId] = action;
+
+            // Fetch frame from GViZDoom
             Image<uint8_t> frame(doomGame.getScreenWidth(), doomGame.getScreenHeight(), ImageFormat::BGRA);
             frame.copyFrom(doomGame.getPixelsBGRA());
+            // convert the frame to F32
             convertImage(frame, batch.frames[_batchEntryId]);
+            // map the frame data while still preserving the 4D structure (batch size 1)
+            torch::Tensor imageTensor = batch.mapPixelData().index({Slice(_batchEntryId, _batchEntryId+1), "..."});
+            // upload to GPU and permute to BCWH
+            imageTensor = imageTensor.to(_torchDevice);
+            imageTensor = imageTensor.transpose(1,3);
+            imageTensor = imageTensor.transpose(2,3);
+            // encode
+            torch::Tensor encoding = _frameEncoder(imageTensor);
+            // store encoding to the sequence storage
+            copyFromTensor(encoding.to(torch::kCPU), batch.encodings[_batchEntryId], encodingLength);
+
             batch.rewards[_batchEntryId] = 0.0; // TODO no rewards for now
         }
 
@@ -193,12 +230,16 @@ void App::loop()
 
         // Train
         if (_newPatchReady) {
+#if 0 // threading not allowed when using the encodings
             // Create copy of the sequence storage
             auto sequenceStorageCopy(_sequenceStorage);
 
             printf("Training...\n");
             _model.waitForTrainingFinish();
             _model.trainAsync(std::move(sequenceStorageCopy));
+#else
+            _model.train(std::move(_sequenceStorage));
+#endif
             _newPatchReady = false;
         }
 
