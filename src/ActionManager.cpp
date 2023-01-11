@@ -65,10 +65,6 @@ gvizdoom::Action ActionManager::operator()(const CallParams& callParams)
     // process modules
     for (auto& moduleCall : _moduleCalls) {
         moduleCall(callParams, _updateParams, *this);
-
-        // skip rest of the modules in case overwrite was forced
-        if (!_updateParams.actionVectorOverwrite.empty())
-            break;
     }
 
     if (_updateParams.actionVectorOverwrite.empty())
