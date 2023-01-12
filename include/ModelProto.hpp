@@ -12,6 +12,7 @@
 
 #include "FrameEncoder.hpp"
 #include "FrameDecoder.hpp"
+#include "FlowDecoder.hpp"
 
 #include <vector>
 #include <memory>
@@ -39,6 +40,7 @@ public:
 private:
     FrameEncoder        _frameEncoder;
     FrameDecoder        _frameDecoder;
+    FlowDecoder         _flowDecoder;
     torch::optim::Adam  _optimizer;
     std::mutex          _trainingMutex;
     std::thread         _trainingThread;
