@@ -145,13 +145,18 @@ void ModelProto::train(SequenceStorage&& storage)
                     .padding_mode(torch::kBorder)
                     .align_corners(true));
 
-            //torch::Tensor batchOut = _frameDecoder->forward(encoding); // image decode
-            //torch::Tensor loss = torch::l1_loss(batchIn1, batchOut) + torch::mse_loss(batchIn1, batchOut);
+            // Frame decode and loss
+            torch::Tensor batchOut = _frameDecoder->forward(encoding1);
+            torch::Tensor frameLoss = torch::l1_loss(batchIn1, batchOut) + torch::mse_loss(batchIn1, batchOut);
+
+            // Flow loss
             torch::Tensor flowForwardDiff = torch::abs(batchIn2-flowFrameForward);
             torch::Tensor flowBackwardDiff = torch::abs(batchIn1-flowFrameBackward);
             torch::Tensor flowForwardLoss = torch::mean(flowForwardDiff);
             torch::Tensor flowBackwardLoss = torch::mean(flowBackwardDiff);
-            torch::Tensor loss = flowForwardLoss + flowBackwardLoss;
+
+            // Total loss
+            torch::Tensor loss = frameLoss + flowForwardLoss + flowBackwardLoss;
             loss.backward();
 
             // Apply gradients
@@ -167,9 +172,7 @@ void ModelProto::train(SequenceStorage&& storage)
             torch::Tensor flowBackwardCPU = flowBackward.to(torch::kCPU)*2.0f + 0.5f;
             torch::Tensor flowFrameBackwardCPU = flowFrameBackward.to(torch::kCPU);
             torch::Tensor flowBackwardDiffCPU = flowBackwardDiff.to(torch::kCPU);
-            //torch::Tensor outputCPU = batchOut.to(torch::kCPU);
-            //auto* batchDataIn = inputCPU.data_ptr<float>();
-            //auto* batchDataOut = outputCPU.data_ptr<float>();
+            torch::Tensor outputCPU = batchOut.to(torch::kCPU);
             for (int j=0; j<480; ++j) {
                 for (int i=0; i<640; ++i) {
                     for (int c=0; c<4; ++c) {
@@ -185,7 +188,8 @@ void ModelProto::train(SequenceStorage&& storage)
                             [displayFrameId*4*480*640 + c*480*640 + j*640 + i];
                         imageFlowBackwardDiff.ptr<float>(j)[i*4 + c] = flowBackwardDiffCPU.data_ptr<float>()
                             [displayFrameId*480*640*4 + j*640*4 + i*4 + c];
-                        //imageOut.ptr<float>(j)[i*4 + c] = batchDataOut[displayFrameId*4*480*640 + c*480*640 + j*640 + i];
+                        imageOut.ptr<float>(j)[i*4 + c] = outputCPU.data_ptr<float>()
+                            [displayFrameId*4*480*640 + c*480*640 + j*640 + i];
                     }
                     for (int c=0; c<2; ++c) {
                         imageFlowForward.ptr<float>(j)[i*3 + c] = flowForwardCPU.data_ptr<float>()
@@ -203,13 +207,14 @@ void ModelProto::train(SequenceStorage&& storage)
             cv::imshow("Backward Flow", imageFlowBackward);
             cv::imshow("Backward Flow Mapped", imageFlowBackwardMapped);
             cv::imshow("Backward Flow Diff", imageFlowBackwardDiff);
-            //cv::imshow("Prediction", imageOut);
+            cv::imshow("Prediction 1", imageOut);
             cv::waitKey(1);
 
             printf(
-                "\r[%2ld/%2ld][%3ld/%3ld] loss: %9.6f flowForwardLoss: %9.6f flowBackwardLoss: %9.6f",
+                "\r[%2ld/%2ld][%3ld/%3ld] loss: %9.6f frameLoss: %9.6f flowForwardLoss: %9.6f flowBackwardLoss: %9.6f",
                 epoch, nTrainingEpochs, t, sequenceLength,
-                loss.item<float>(), flowForwardLoss.item<float>(), flowBackwardLoss.item<float>());
+                loss.item<float>(), frameLoss.item<float>(),
+                flowForwardLoss.item<float>(), flowBackwardLoss.item<float>());
             fflush(stdout);
         }
     }
