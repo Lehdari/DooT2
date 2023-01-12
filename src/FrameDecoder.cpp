@@ -52,8 +52,11 @@ torch::Tensor FrameDecoderImpl::forward(torch::Tensor x)
 
     // Decoder
     x = torch::reshape(x, {-1, 128, 4, 4});
+    x = x + 0.2f*torch::randn(x.sizes(), TensorOptions().device(x.device()));
     x = torch::tanh(_bnDec8(_convTranspose8(x))); // 4x4x512
+    x = x + 0.1f*torch::randn(x.sizes(), TensorOptions().device(x.device()));
     x = torch::tanh(_bnDec7(_convTranspose7(x))); // 5x5x512
+    x = x + 0.05f*torch::randn(x.sizes(), TensorOptions().device(x.device()));
     x = torch::tanh(_bnDec6(_convTranspose6(x))); // 10x10x256
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)});
     x = torch::tanh(_bnDec5(_convTranspose5(x))); // 20x20x128
