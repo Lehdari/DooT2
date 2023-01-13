@@ -19,7 +19,7 @@
 
 static constexpr int        batchSize               = 16; // TODO move somewhere sensible
 static constexpr double     learningRate            = 1.0e-4; // TODO
-static constexpr int64_t    nTrainingEpochs         = 16;
+static constexpr int64_t    nTrainingEpochs         = 8;
 static constexpr char       frameEncoderFilename[]  {"frame_encoder.pt"};
 static constexpr char       frameDecoderFilename[]  {"frame_decoder.pt"};
 static constexpr char       flowDecoderFilename[]   {"flow_decoder.pt"};
@@ -35,7 +35,7 @@ ModelProto::ModelProto() :
         _frameEncoder->parameters(),
         _frameDecoder->parameters(),
         _flowDecoder->parameters()},
-        torch::optim::AdamOptions(learningRate).betas({0.99, 0.999})),
+        torch::optim::AdamOptions(learningRate).betas({0.9, 0.999})),
     _trainingFinished   (true)
 {
     // Load frame encoder
@@ -117,15 +117,17 @@ void ModelProto::train(SequenceStorage&& storage)
 
     const auto sequenceLength = storage.settings().length;
     for (int64_t epoch=0; epoch<nTrainingEpochs; ++epoch) {
+        // Accumulate gradients over a sequence
+        _frameEncoder->zero_grad();
+        _frameDecoder->zero_grad();
+        _flowDecoder->zero_grad();
+
         for (int64_t t=0; t<sequenceLength-1; ++t) {
             // ID of the frame (in sequence) to be used in the training batch
             torch::Tensor batchIn1 = pixelDataIn.index({(int)t});
             torch::Tensor batchIn2 = pixelDataIn.index({(int)t+1});
 
             // Forward and backward passes
-            _frameEncoder->zero_grad();
-            _frameDecoder->zero_grad();
-            _flowDecoder->zero_grad();
             torch::Tensor encoding1 = _frameEncoder->forward(batchIn1); // image t encode
             torch::Tensor encoding2 = _frameEncoder->forward(batchIn2); // image t+1 encode
 
@@ -158,9 +160,6 @@ void ModelProto::train(SequenceStorage&& storage)
             // Total loss
             torch::Tensor loss = frameLoss + flowForwardLoss + flowBackwardLoss;
             loss.backward();
-
-            // Apply gradients
-            _optimizer.step();
 
             // Cycle through displayed sequences
             size_t displayFrameId = epoch;
@@ -217,6 +216,9 @@ void ModelProto::train(SequenceStorage&& storage)
                 flowForwardLoss.item<float>(), flowBackwardLoss.item<float>());
             fflush(stdout);
         }
+
+        // Apply accumulated gradients
+        _optimizer.step();
     }
 
     // Save models
