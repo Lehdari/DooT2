@@ -209,11 +209,16 @@ void ModelProto::train(SequenceStorage&& storage)
             cv::imshow("Prediction 1", imageOut);
             cv::waitKey(1);
 
+            // TEMP encoding mean and variance
+            torch::Tensor encodingMean = encoding1.mean();
+            torch::Tensor encodingVar = encoding1.var();
+
             printf(
-                "\r[%2ld/%2ld][%3ld/%3ld] loss: %9.6f frameLoss: %9.6f flowForwardLoss: %9.6f flowBackwardLoss: %9.6f",
+                "\r[%2ld/%2ld][%3ld/%3ld] loss: %9.6f frameLoss: %9.6f flowForwardLoss: %9.6f flowBackwardLoss: %9.6f encodingMean: %9.6f encodingVar: %9.6f",
                 epoch, nTrainingEpochs, t, sequenceLength,
                 loss.item<float>(), frameLoss.item<float>(),
-                flowForwardLoss.item<float>(), flowBackwardLoss.item<float>());
+                flowForwardLoss.item<float>(), flowBackwardLoss.item<float>(),
+                encodingMean.item<float>(), encodingVar.item<float>());
             fflush(stdout);
         }
 
