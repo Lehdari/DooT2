@@ -29,8 +29,7 @@ FrameEncoderImpl::FrameEncoderImpl() :
     _bnEnc6         (nn::BatchNorm2dOptions(512)),
     _conv7          (nn::Conv2dOptions(512, 512, {2, 2}).bias(false)),
     _bnEnc7         (nn::BatchNorm2dOptions(512)),
-    _conv8          (nn::Conv2dOptions(512, 128, {1, 1}).bias(false)),
-    _bnEnc8         (nn::BatchNorm2dOptions(128))
+    _conv8          (nn::Conv2dOptions(512, 128, {1, 1}))
 {
     register_module("conv1", _conv1);
     register_module("bnEnc1", _bnEnc1);
@@ -47,7 +46,6 @@ FrameEncoderImpl::FrameEncoderImpl() :
     register_module("conv7", _conv7);
     register_module("bnEnc7", _bnEnc7);
     register_module("conv8", _conv8);
-    register_module("bnEnc8", _bnEnc8);
 }
 
 torch::Tensor FrameEncoderImpl::forward(torch::Tensor x)
@@ -62,8 +60,8 @@ torch::Tensor FrameEncoderImpl::forward(torch::Tensor x)
     x = torch::tanh(_bnEnc5(_conv5(x))); // 10x10x256
     x = torch::tanh(_bnEnc6(_conv6(x))); // 5x5x512
     x = torch::tanh(_bnEnc7(_conv7(x))); // 4x4x512
-    x = torch::tanh(_bnEnc8(_conv8(x))); // 4x4x128
-    x = torch::flatten(x);
+    x = _conv8(x); // 4x4x128
+    x = torch::reshape(x, {-1, 2048});
 
     return x;
 }

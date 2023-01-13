@@ -35,6 +35,5 @@ private:
     torch::nn::Conv2d           _conv7;
     torch::nn::BatchNorm2d      _bnEnc7;
     torch::nn::Conv2d           _conv8;
-    torch::nn::BatchNorm2d      _bnEnc8;
 };
 TORCH_MODULE(FrameEncoder);
