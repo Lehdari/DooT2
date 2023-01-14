@@ -15,11 +15,12 @@
 #include <opencv2/highgui.hpp> // TODO temp
 
 #include <filesystem>
+#include <random>
 
 
 static constexpr int        batchSize               = 16; // TODO move somewhere sensible
-static constexpr double     learningRate            = 1.0e-4; // TODO
-static constexpr int64_t    nTrainingEpochs         = 8;
+static constexpr double     learningRate            = 1.0e-3; // TODO
+static constexpr int64_t    nTrainingEpochs         = 10;
 static constexpr char       frameEncoderFilename[]  {"frame_encoder.pt"};
 static constexpr char       frameDecoderFilename[]  {"frame_decoder.pt"};
 static constexpr char       flowDecoderFilename[]   {"flow_decoder.pt"};
@@ -75,6 +76,7 @@ ModelProto::ModelProto() :
 void ModelProto::train(SequenceStorage&& storage)
 {
     using namespace torch::indexing;
+    static std::default_random_engine rnd(1507715517);
 
     // Return immediately in case there's previous training by another thread already running
     if (!_trainingFinished)
@@ -100,6 +102,8 @@ void ModelProto::train(SequenceStorage&& storage)
     cv::Mat imageFlowBackward(480, 640, CV_32FC3, cv::Scalar(0.5f, 0.5f, 0.5f)); // TODO temp
     cv::Mat imageFlowBackwardMapped(480, 640, CV_32FC4); // TODO temp
     cv::Mat imageFlowBackwardDiff(480, 640, CV_32FC4); // TODO temp
+    cv::Mat imageInGradX(480, 639, CV_32FC4); // TODO temp
+    cv::Mat imageInGradY(479, 640, CV_32FC4); // TODO temp
 
     // Move model parameters to GPU
     _frameEncoder->to(device);
@@ -117,6 +121,9 @@ void ModelProto::train(SequenceStorage&& storage)
 
     const auto sequenceLength = storage.settings().length;
     for (int64_t epoch=0; epoch<nTrainingEpochs; ++epoch) {
+        // Pick random sequence to display
+        size_t displaySeqId = rnd() % batchSize;
+
         // Accumulate gradients over a sequence
         _frameEncoder->zero_grad();
         _frameDecoder->zero_grad();
@@ -147,9 +154,28 @@ void ModelProto::train(SequenceStorage&& storage)
                     .padding_mode(torch::kBorder)
                     .align_corners(true));
 
-            // Frame decode and loss
+            // Frame decode
             torch::Tensor batchOut = _frameDecoder->forward(encoding1);
+
+            // Pixel-space gradients
+            torch::Tensor frameInGradX =
+                batchIn1.index({Slice(), Slice(), Slice(), Slice(1, None)}) -
+                batchIn1.index({Slice(), Slice(), Slice(), Slice(None, -1)});
+            torch::Tensor frameInGradY =
+                batchIn1.index({Slice(), Slice(), Slice(1, None), Slice()}) -
+                batchIn1.index({Slice(), Slice(), Slice(None, -1), Slice()});
+            torch::Tensor frameOutGradX =
+                batchOut.index({Slice(), Slice(), Slice(), Slice(1, None)}) -
+                batchOut.index({Slice(), Slice(), Slice(), Slice(None, -1)});
+            torch::Tensor frameOutGradY =
+                batchOut.index({Slice(), Slice(), Slice(1, None), Slice()}) -
+                batchOut.index({Slice(), Slice(), Slice(None, -1), Slice()});
+
+            // Frame losses (direct and gradients)
             torch::Tensor frameLoss = torch::l1_loss(batchIn1, batchOut) + torch::mse_loss(batchIn1, batchOut);
+            torch::Tensor gradLoss = 2.0f *
+                torch::l1_loss(frameInGradX, frameOutGradX) + torch::mse_loss(frameInGradX, frameOutGradX) +
+                torch::l1_loss(frameInGradY, frameOutGradY) + torch::mse_loss(frameInGradY, frameOutGradY);
 
             // Flow loss
             torch::Tensor flowForwardDiff = torch::abs(batchIn2-flowFrameForward);
@@ -157,67 +183,93 @@ void ModelProto::train(SequenceStorage&& storage)
             torch::Tensor flowForwardLoss = torch::mean(flowForwardDiff);
             torch::Tensor flowBackwardLoss = torch::mean(flowBackwardDiff);
 
+            // Encoding variance loss
+            torch::Tensor encodingVarLoss = torch::square(encoding1.var() - 1.0f);
+
             // Total loss
-            torch::Tensor loss = frameLoss + flowForwardLoss + flowBackwardLoss;
+            torch::Tensor loss = frameLoss + gradLoss + flowForwardLoss + flowBackwardLoss + encodingVarLoss;
             loss.backward();
 
-            // Cycle through displayed sequences
-            size_t displayFrameId = epoch;
-            torch::Tensor batchIn1CPU = batchIn1.to(torch::kCPU);
-            torch::Tensor batchIn2CPU = batchIn2.to(torch::kCPU);
-            torch::Tensor flowForwardCPU = flowForward.to(torch::kCPU)*2.0f + 0.5f;
-            torch::Tensor flowFrameForwardCPU = flowFrameForward.to(torch::kCPU);
-            torch::Tensor flowForwardDiffCPU = flowForwardDiff.to(torch::kCPU);
-            torch::Tensor flowBackwardCPU = flowBackward.to(torch::kCPU)*2.0f + 0.5f;
-            torch::Tensor flowFrameBackwardCPU = flowFrameBackward.to(torch::kCPU);
-            torch::Tensor flowBackwardDiffCPU = flowBackwardDiff.to(torch::kCPU);
-            torch::Tensor outputCPU = batchOut.to(torch::kCPU);
-            for (int j=0; j<480; ++j) {
-                for (int i=0; i<640; ++i) {
-                    for (int c=0; c<4; ++c) {
-                        imageIn1.ptr<float>(j)[i*4 + c] = batchIn1CPU.data_ptr<float>()
-                            [displayFrameId*480*640*4 + j*640*4 + i*4 + c];
-                        imageIn2.ptr<float>(j)[i*4 + c] = batchIn2CPU.data_ptr<float>()
-                            [displayFrameId*480*640*4 + j*640*4 + i*4 + c];
-                        imageFlowForwardMapped.ptr<float>(j)[i*4 + c] = flowFrameForwardCPU.data_ptr<float>()
-                            [displayFrameId*4*480*640 + c*480*640 + j*640 + i];
-                        imageFlowForwardDiff.ptr<float>(j)[i*4 + c] = flowForwardDiffCPU.data_ptr<float>()
-                            [displayFrameId*480*640*4 + j*640*4 + i*4 + c];
-                        imageFlowBackwardMapped.ptr<float>(j)[i*4 + c] = flowFrameBackwardCPU.data_ptr<float>()
-                            [displayFrameId*4*480*640 + c*480*640 + j*640 + i];
-                        imageFlowBackwardDiff.ptr<float>(j)[i*4 + c] = flowBackwardDiffCPU.data_ptr<float>()
-                            [displayFrameId*480*640*4 + j*640*4 + i*4 + c];
-                        imageOut.ptr<float>(j)[i*4 + c] = outputCPU.data_ptr<float>()
-                            [displayFrameId*4*480*640 + c*480*640 + j*640 + i];
-                    }
-                    for (int c=0; c<2; ++c) {
-                        imageFlowForward.ptr<float>(j)[i*3 + c] = flowForwardCPU.data_ptr<float>()
-                            [displayFrameId*2*480*640 + c*480*640 + j*640 + i];
-                        imageFlowBackward.ptr<float>(j)[i*3 + c] = flowBackwardCPU.data_ptr<float>()
-                            [displayFrameId*2*480*640 + c*480*640 + j*640 + i];
+            if (t % 8 == 0) { // only show every 8th frame
+                // Display selected sequence
+                torch::Tensor batchIn1CPU = batchIn1.to(torch::kCPU);
+                torch::Tensor batchIn2CPU = batchIn2.to(torch::kCPU);
+                torch::Tensor flowForwardCPU = flowForward.to(torch::kCPU)*2.0f + 0.5f;
+                torch::Tensor flowFrameForwardCPU = flowFrameForward.to(torch::kCPU);
+                torch::Tensor flowForwardDiffCPU = flowForwardDiff.to(torch::kCPU);
+                torch::Tensor flowBackwardCPU = flowBackward.to(torch::kCPU)*2.0f + 0.5f;
+                torch::Tensor flowFrameBackwardCPU = flowFrameBackward.to(torch::kCPU);
+                torch::Tensor flowBackwardDiffCPU = flowBackwardDiff.to(torch::kCPU);
+                torch::Tensor outputCPU = batchOut.to(torch::kCPU);
+                torch::Tensor frameInGradXCPU = frameInGradX.to(torch::kCPU);
+                torch::Tensor frameInGradYCPU = frameInGradY.to(torch::kCPU);
+                torch::Tensor frameOutGradXCPU = frameInGradX.to(torch::kCPU);
+                torch::Tensor frameOutGradYCPU = frameInGradY.to(torch::kCPU);
+                for (int j=0; j<480; ++j) {
+                    for (int i=0; i<640; ++i) {
+                        for (int c=0; c<4; ++c) {
+                            imageIn1.ptr<float>(j)[i*4 + c] = batchIn1CPU.data_ptr<float>()
+                                [displaySeqId*480*640*4 + j*640*4 + i*4 + c];
+                            imageIn2.ptr<float>(j)[i*4 + c] = batchIn2CPU.data_ptr<float>()
+                                [displaySeqId*480*640*4 + j*640*4 + i*4 + c];
+                            imageFlowForwardMapped.ptr<float>(j)[i*4 + c] = flowFrameForwardCPU.data_ptr<float>()
+                                [displaySeqId*4*480*640 + c*480*640 + j*640 + i];
+                            imageFlowForwardDiff.ptr<float>(j)[i*4 + c] = flowForwardDiffCPU.data_ptr<float>()
+                                [displaySeqId*480*640*4 + j*640*4 + i*4 + c];
+                            imageFlowBackwardMapped.ptr<float>(j)[i*4 + c] = flowFrameBackwardCPU.data_ptr<float>()
+                                [displaySeqId*4*480*640 + c*480*640 + j*640 + i];
+                            imageFlowBackwardDiff.ptr<float>(j)[i*4 + c] = flowBackwardDiffCPU.data_ptr<float>()
+                                [displaySeqId*480*640*4 + j*640*4 + i*4 + c];
+                            imageOut.ptr<float>(j)[i*4 + c] = outputCPU.data_ptr<float>()
+                                [displaySeqId*4*480*640 + c*480*640 + j*640 + i];
+                        }
+                        for (int c=0; c<2; ++c) {
+                            imageFlowForward.ptr<float>(j)[i*3 + c] = flowForwardCPU.data_ptr<float>()
+                                [displaySeqId*2*480*640 + c*480*640 + j*640 + i];
+                            imageFlowBackward.ptr<float>(j)[i*3 + c] = flowBackwardCPU.data_ptr<float>()
+                                [displaySeqId*2*480*640 + c*480*640 + j*640 + i];
+                        }
                     }
                 }
+                for (int j=0; j<480; ++j) {
+                    for (int i=0; i<639; ++i) {
+                        for (int c=0; c<4; ++c) {
+                            imageInGradX.ptr<float>(j)[i*4 + c] = frameInGradXCPU.data_ptr<float>()
+                                [displaySeqId*480*639*4 + j*639*4 + i*4 + c]*0.5f + 0.5f;
+                        }
+                    }
+                }
+                for (int j=0; j<479; ++j) {
+                    for (int i=0; i<640; ++i) {
+                        for (int c=0; c<4; ++c) {
+                            imageInGradY.ptr<float>(j)[i*4 + c] = frameInGradYCPU.data_ptr<float>()
+                                [displaySeqId*479*640*4 + j*640*4 + i*4 + c]*0.5f + 0.5f;
+                        }
+                    }
+                }
+                cv::imshow("Input 1", imageIn1);
+                cv::imshow("Input 2", imageIn2);
+                cv::imshow("Forward Flow", imageFlowForward);
+                cv::imshow("Forward Flow Mapped", imageFlowForwardMapped);
+                cv::imshow("Forward Flow Diff", imageFlowForwardDiff);
+                cv::imshow("Backward Flow", imageFlowBackward);
+                cv::imshow("Backward Flow Mapped", imageFlowBackwardMapped);
+                cv::imshow("Backward Flow Diff", imageFlowBackwardDiff);
+                cv::imshow("Prediction 1", imageOut);
+                cv::imshow("Input X Gradient", imageInGradX);
+                cv::imshow("Input Y Gradient", imageInGradY);
+                cv::waitKey(1);
             }
-            cv::imshow("Input 1", imageIn1);
-            cv::imshow("Input 2", imageIn2);
-            cv::imshow("Forward Flow", imageFlowForward);
-            cv::imshow("Forward Flow Mapped", imageFlowForwardMapped);
-            cv::imshow("Forward Flow Diff", imageFlowForwardDiff);
-            cv::imshow("Backward Flow", imageFlowBackward);
-            cv::imshow("Backward Flow Mapped", imageFlowBackwardMapped);
-            cv::imshow("Backward Flow Diff", imageFlowBackwardDiff);
-            cv::imshow("Prediction 1", imageOut);
-            cv::waitKey(1);
 
             // TEMP encoding mean and variance
             torch::Tensor encodingMean = encoding1.mean();
             torch::Tensor encodingVar = encoding1.var();
 
             printf(
-                "\r[%2ld/%2ld][%3ld/%3ld] loss: %9.6f frameLoss: %9.6f flowForwardLoss: %9.6f flowBackwardLoss: %9.6f encodingMean: %9.6f encodingVar: %9.6f",
+                "\r[%2ld/%2ld][%3ld/%3ld] loss: %9.6f frameLoss: %9.6f gradLoss: %9.6f flowForwardLoss: %9.6f flowBackwardLoss: %9.6f encodingVarLoss %9.6f encodingMean: %9.6f encodingVar: %9.6f",
                 epoch, nTrainingEpochs, t, sequenceLength,
-                loss.item<float>(), frameLoss.item<float>(),
-                flowForwardLoss.item<float>(), flowBackwardLoss.item<float>(),
+                loss.item<float>(), frameLoss.item<float>(), gradLoss.item<float>(),
+                flowForwardLoss.item<float>(), flowBackwardLoss.item<float>(), encodingVarLoss.item<float>(),
                 encodingMean.item<float>(), encodingVar.item<float>());
             fflush(stdout);
         }
