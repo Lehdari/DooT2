@@ -15,12 +15,13 @@
 
 class ResNeXtModuleImpl : public torch::nn::Module {
 public:
-    // only nInputChannels == nOutputChannels supported for now
     ResNeXtModuleImpl(int nInputChannels, int nGroupChannels, int nGroups, int nOutputChannels);
 
     torch::Tensor forward(torch::Tensor x);
 
 private:
+    int                                 _nInputChannels;
+    int                                 _nOutputChannels;
     int                                 _nGroups;
 
     std::vector<torch::nn::Sequential>  _groups;

@@ -13,7 +13,10 @@
 
 using namespace torch;
 
+
 ResNeXtModuleImpl::ResNeXtModuleImpl(int nInputChannels, int nGroupChannels, int nGroups, int nOutputChannels) :
+    _nInputChannels     (nInputChannels),
+    _nOutputChannels    (nOutputChannels),
     _nGroups    (nGroups),
     _convFinal  (nn::Conv2dOptions(nGroupChannels*_nGroups, nOutputChannels, {1,1}).bias(false)),
     _bnFinal    (nn::BatchNorm2dOptions(nOutputChannels))
@@ -42,9 +45,23 @@ ResNeXtModuleImpl::ResNeXtModuleImpl(int nInputChannels, int nGroupChannels, int
 
 torch::Tensor ResNeXtModuleImpl::forward(torch::Tensor x)
 {
+    using namespace torch::indexing;
+
     for (int i=0; i<_nGroups; ++i) {
         _groupOutputs[i] = _groups[i]->forward(x);
     }
 
-    return x + torch::tanh(_bnFinal(_convFinal(cat(_groupOutputs, 1))));
+    torch::Tensor skip = x;
+    if (_nOutputChannels < _nInputChannels) {
+        skip = x.index({Slice(), Slice(None, _nOutputChannels), Slice(), Slice()});
+    }
+    else if (_nOutputChannels > _nInputChannels) {
+        int nRepeats = _nOutputChannels / _nInputChannels;
+        if (_nOutputChannels % _nInputChannels > 0)
+            ++nRepeats;
+        skip = skip.repeat({1, nRepeats, 1, 1});
+        skip = skip.index({Slice(), Slice(None, _nOutputChannels), Slice(), Slice()});
+    }
+
+    return skip + torch::tanh(_bnFinal(_convFinal(cat(_groupOutputs, 1))));
 }
