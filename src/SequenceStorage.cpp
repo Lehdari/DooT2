@@ -77,7 +77,7 @@ SequenceStorage::ConstBatchHandle::ConstBatchHandle(
 SequenceStorage::SequenceStorage(const Settings& settings) :
     _settings       (settings),
     _frameSize      (_settings.frameWidth*_settings.frameHeight*getImageFormatNChannels(_settings.frameFormat)),
-    _actions        (_settings.hasFrames ? _settings.length*_settings.batchSize : 0),
+    _actions        (_settings.length*_settings.batchSize),
     _frameData      (_settings.hasFrames ? _settings.length*_settings.batchSize*_frameSize : 0),
     _encodings      (_settings.hasEncodings ? _settings.length*_settings.batchSize : 0),
     _encodingData   (_settings.hasEncodings ? _settings.length*_settings.batchSize*_settings.encodingLength : 0),
