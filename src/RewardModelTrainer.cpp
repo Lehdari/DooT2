@@ -28,8 +28,12 @@ RewardModelTrainer::RewardModelTrainer() :
 
 void RewardModelTrainer::train(SequenceStorage& storage)
 {
+    using namespace torch::indexing;
     torch::Tensor encodings = storage.mapEncodingData(); // LBW
-    
+    torch::Tensor encodingsShifted{torch::zeros({storage.settings().length, storage.settings().batchSize, encodingLength})};
+    encodingsShifted.index({Slice(1, None), Slice(), Slice()}) = encodings.index({Slice(None, -1), Slice(), Slice()});
+
+
     torch::Tensor actions(torch::zeros(
         {static_cast<uint32_t>(storage.settings().length),
         storage.settings().batchSize,
@@ -51,15 +55,13 @@ void RewardModelTrainer::train(SequenceStorage& storage)
         }
     }
     
-#if 0
     // Temp: perform one training step
     {
         _rewardModel->zero_grad();
         
-        torch::Tensor y = _rewardModel->forward();
-        torch::Tensor loss = torch::l2_loss(y,target);
-        loss.backward();
-        _optimizer.step();
+        torch::Tensor y = _rewardModel->forward(encodings, actions, rewards);
+        // torch::Tensor loss = torch::l2_loss(y,target);
+        // loss.backward();
+        // _optimizer.step();
     }
-#endif
 }

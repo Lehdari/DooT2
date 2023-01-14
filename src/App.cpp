@@ -135,7 +135,7 @@ void App::loop()
 
     Vec2f playerPosScreen(0.0f, 0.0f);
 
-    size_t recordBeginFrameId = 768+_rnd()%512;
+    size_t recordBeginFrameId = 16+_rnd()%16;
     size_t recordEndFrameId = recordBeginFrameId+64;
 
     // BHWC
@@ -163,7 +163,7 @@ void App::loop()
         // Update the game state, restart if required
         if (_frameId >= recordEndFrameId || doomGame.update(action)) {
             nextMap();
-            recordBeginFrameId = 768+_rnd()%512;
+            recordBeginFrameId = 16+_rnd()%16;
             recordEndFrameId = recordBeginFrameId+64;
             continue;
         }
