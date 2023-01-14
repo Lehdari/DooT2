@@ -9,15 +9,25 @@
 //
 
 #include "App.hpp"
-
+#include "Constants.hpp"
+#include <filesystem>
 #include "gvizdoom/DoomGame.hpp"
-
 #include <opencv2/highgui.hpp>
 
 #include "Constants.hpp"
 
+<<<<<<< HEAD
 using namespace doot2;
 using namespace gvizdoom;
+=======
+
+using namespace doot2;
+using namespace gvizdoom;
+using namespace torch;
+using namespace torch::indexing;
+namespace fs = std::filesystem;
+
+>>>>>>> add encodings and heatmap-based rewards to sequence storage
 
 App::App() :
     _rnd                        (1507715517),
@@ -27,12 +37,13 @@ App::App() :
     _quit                       (false),
     _heatmapActionModule        (HeatmapActionModule::Settings{256, 32.0f}),
     _doorTraversalActionModule  (false),
-    _sequenceStorage            (SequenceStorage::Settings{batchSize, sequenceLength, true, false, frameWidth, frameHeight, ImageFormat::BGRA}),
+    _sequenceStorage            (SequenceStorage::Settings{batchSize, sequenceLength, false, true, 0, 0, ImageFormat::BGRA, encodingLength}),
     _positionPlot               (1024, 1024, CV_32FC3, cv::Scalar(0.0f)),
     _initPlayerPos              (0.0f, 0.0f),
     _frameId                    (0),
     _batchEntryId               (0),
-    _newPatchReady              (false)
+    _newPatchReady              (false),
+    _torchDevice                (torch::cuda::is_available() ? kCUDA : kCPU)
 {
     auto& doomGame = DoomGame::instance();
 
@@ -71,6 +82,21 @@ App::App() :
     // Setup ActionManager
     _actionManager.addModule(&_doorTraversalActionModule);
     _actionManager.addModule(&_heatmapActionModule);
+
+    // Load frame encoder
+    if (fs::exists(frameEncoderFilename)) {
+        printf("Loading frame encoder model from %s\n", frameEncoderFilename); // TODO logging
+        serialize::InputArchive inputArchive;
+        inputArchive.load_from(frameEncoderFilename);
+        _frameEncoder->load(inputArchive);
+        // Use the inference mode
+        _frameEncoder->eval();
+    }
+    else {
+        printf("No %s found. Initializing a new frame encoder model.\n", frameEncoderFilename); // TODO logging
+    }
+
+    _frameEncoder->to(_torchDevice);
 }
 
 App::~App()
@@ -93,6 +119,9 @@ void App::loop()
 
     size_t recordBeginFrameId = 768+_rnd()%512;
     size_t recordEndFrameId = recordBeginFrameId+64;
+
+    // BHWC
+    torch::Tensor pixelBuffer{torch::zeros({1, 480, 640, 4})};
 
     while (!_quit) {
         while(SDL_PollEvent(&event)) {
@@ -136,10 +165,39 @@ void App::loop()
             auto recordFrameId = _frameId - recordBeginFrameId;
             auto batch = _sequenceStorage[recordFrameId];
             batch.actions[_batchEntryId] = action;
-            Image<uint8_t> frame(doomGame.getScreenWidth(), doomGame.getScreenHeight(), ImageFormat::BGRA);
-            frame.copyFrom(doomGame.getPixelsBGRA());
-            convertImage(frame, batch.frames[_batchEntryId]);
-            batch.rewards[_batchEntryId] = 0.0; // TODO no rewards for now
+
+            // Convert the game frame from uint8 to float
+            const auto imageFormat{ImageFormat::BGRA};
+            Image<uint8_t> frameUint8(doomGame.getScreenWidth(), doomGame.getScreenHeight(), imageFormat);
+            Image<float> frameFloat(doomGame.getScreenWidth(), doomGame.getScreenHeight(), imageFormat);
+            frameUint8.copyFrom(doomGame.getPixelsBGRA());
+            convertImage(frameUint8, frameFloat);
+
+            // Copy the float frame to a torch::Tensor
+            const auto nPixels = doomGame.getScreenWidth() * doomGame.getScreenHeight() * getImageFormatNChannels(imageFormat);
+            copyToTensor(frameFloat.data(), nPixels, pixelBuffer);
+
+            // upload to GPU and permute to BCWH
+            torch::Tensor pixelBufferGpu = pixelBuffer.to(_torchDevice);            
+            pixelBufferGpu = pixelBufferGpu.permute({0,3,1,2});
+
+            const auto tempsz = pixelBufferGpu.sizes();
+            printf("Tensor: %d %d %d %d\n", tempsz[0], tempsz[1], tempsz[2], tempsz[3]);
+            
+            // encode
+            torch::Tensor encoding = _frameEncoder(pixelBufferGpu);
+            
+            // TODO: check encoding sanity with decoder
+
+            // store encoding to the sequence storage
+            copyFromTensor(encoding.to(torch::kCPU), batch.encodings[_batchEntryId], encodingLength);
+
+            // Update relative player position
+            playerPosRelative(0) = doomGame.getGameState<GameState::PlayerPos>()(0) - _initPlayerPos(0);
+            playerPosRelative(1) = _initPlayerPos(1) - doomGame.getGameState<GameState::PlayerPos>()(1); // invert y
+
+            batch.rewards[_batchEntryId] = _heatmapActionModule.sample(playerPosRelative, true);
+            printf("reward: %.5f\n", batch.rewards[_batchEntryId]);
         }
 
         // Render screen

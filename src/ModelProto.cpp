@@ -9,6 +9,8 @@
 //
 
 #include "ModelProto.hpp"
+
+#include "Constants.hpp"
 #include "SequenceStorage.hpp"
 
 #include <opencv2/core/mat.hpp> // TODO temp
@@ -23,7 +25,6 @@ static constexpr double     learningRate            = 1.0e-3; // TODO
 static constexpr int64_t    nTrainingEpochs         = 10;
 
 using namespace doot2;
-
 using namespace torch;
 namespace tf = torch::nn::functional;
 namespace fs = std::filesystem;

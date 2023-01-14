@@ -55,6 +55,8 @@ private:
 
     ModelProto                  _model;
 
-
+    torch::Device               _torchDevice;
+    FrameEncoder                _frameEncoder;
+    
     void nextMap(); // proceed to next map
 };
