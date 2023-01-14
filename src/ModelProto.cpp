@@ -226,11 +226,12 @@ void ModelProto::train(SequenceStorage&& storage)
             torch::Tensor flowForwardLoss = torch::mean(flowForwardDiff);
             torch::Tensor flowBackwardLoss = torch::mean(flowBackwardDiff);
 
-            // Encoding variance loss
+            // Encoding mean/variance loss
+            torch::Tensor encodingMeanLoss = torch::square(encoding1.mean());
             torch::Tensor encodingVarLoss = torch::square(encoding1.var() - 1.0f);
 
             // Total loss
-            torch::Tensor loss = frameLoss + gradLoss + flowForwardLoss + flowBackwardLoss + encodingVarLoss;
+            torch::Tensor loss = frameLoss + gradLoss + flowForwardLoss + flowBackwardLoss + 0.01f*encodingMeanLoss + 0.01f*encodingVarLoss;
             loss.backward();
 
             if (t % 8 == 0) { // only show every 8th frame
@@ -337,10 +338,10 @@ void ModelProto::train(SequenceStorage&& storage)
             torch::Tensor encodingVar = encoding1.var();
 
             printf(
-                "\r[%2ld/%2ld][%3ld/%3ld] loss: %9.6f frameLoss: %9.6f gradLoss: %9.6f flowForwardLoss: %9.6f flowBackwardLoss: %9.6f encodingVarLoss %9.6f encodingMean: %9.6f encodingVar: %9.6f",
+                "\r[%2ld/%2ld][%3ld/%3ld] loss: %9.6f frameLoss: %9.6f gradLoss: %9.6f flowForwardLoss: %9.6f flowBackwardLoss: %9.6f encodingMean: %9.6f encodingVar: %9.6f",
                 epoch, nTrainingEpochs, t, sequenceLength,
                 loss.item<float>(), frameLoss.item<float>(), gradLoss.item<float>(),
-                flowForwardLoss.item<float>(), flowBackwardLoss.item<float>(), encodingVarLoss.item<float>(),
+                flowForwardLoss.item<float>(), flowBackwardLoss.item<float>(),
                 encodingMean.item<float>(), encodingVar.item<float>());
             fflush(stdout);
         }
