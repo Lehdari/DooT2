@@ -203,6 +203,7 @@ void App::loop()
             torch::Tensor encoding = _frameEncoder(pixelBufferGpu);
 
             // Check sanity with decoder
+#if CHECK_SANITY_DECODER
             torch::Tensor decoding = _frameDecoder(encoding);
             decoding = decoding.permute({0,2,3,1}).contiguous();
 
@@ -210,7 +211,7 @@ void App::loop()
             copyFromTensor(decoding.to(torch::kCPU), (float*)decodingOpencv.ptr<float>(0), 640*480*4);
 
             cv::imshow("app-decoding", decodingOpencv);
-
+#endif
             // store encoding to the sequence storage
             copyFromTensor(encoding.to(torch::kCPU), batch.encodings[_batchEntryId], encodingLength);
 

@@ -40,6 +40,8 @@ void RewardModelTrainer::train(SequenceStorage& storage)
         actionVectorLength})); // LBW where W=6
     
     torch::Tensor rewards = storage.mapRewards().toType(torch::kF32); // LB
+    rewards = torch::unsqueeze(rewards, 2);
+
 
     auto* actionsPtr = actions.data_ptr<float>();
 
@@ -59,9 +61,37 @@ void RewardModelTrainer::train(SequenceStorage& storage)
     {
         _rewardModel->zero_grad();
         
+        // Size: seqLen x batchSize x (encodingLen + 1)
         torch::Tensor y = _rewardModel->forward(encodings, actions, rewards);
-        // torch::Tensor loss = torch::l2_loss(y,target);
-        // loss.backward();
-        // _optimizer.step();
+        
+        torch::Tensor yEncodings = y.index({Slice(), Slice(), Slice(None, -1)});
+        torch::Tensor yRewards = y.index({Slice(), Slice(), Slice(-1)});
+
+        printTensor(yEncodings, "yenc");
+        printTensor(encodings, "enc");
+
+        printTensor(yRewards, "yrew");
+        printTensor(rewards, "rew");
+
+        // yenc: 64 16 2048 0
+        // enc: 64 16 2048 0
+
+        // yrew: 64 16 1 0
+        // rew: 64 16 0 0
+
+        auto lossEnc = torch::mse_loss(yEncodings, encodings);
+        printTensor(lossEnc, "lossEnc");
+        auto lossReward = torch::mse_loss(yRewards, rewards);
+        printTensor(lossReward, "lossReward");
+
+        auto loss = lossEnc + lossReward;
+        
+        printf("Loss: %.5f + %.5f = %.5f\n",
+            lossEnc.item<float>(),
+            lossReward.item<float>(),
+            loss.item<float>());
+
+        loss.backward();
+        _optimizer.step();
     }
 }

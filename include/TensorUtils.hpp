@@ -183,3 +183,9 @@ INLINE void copyToTensor(const std::vector<T_Data>& vector, torch::Tensor& tenso
         memcpy(tensor.data_ptr<T_Data>(), vector.data(), vector.size()*sizeof(T_Data));
     }
 }
+
+INLINE void printTensor(const torch::Tensor& t, const std::string& msg = std::string()) {
+    printf("%s: %ld %ld %ld %ld\n",
+        msg.c_str(),
+        t.sizes()[0], t.sizes()[1], t.sizes()[2], t.sizes()[3]);
+}
