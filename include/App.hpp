@@ -27,7 +27,11 @@
 class App {
 public:
     App();
-    // TODO RO5
+    App(const App&) = delete;
+    App(App&&) = delete;
+    App& operator=(const App&) = delete;
+    App& operator=(App&&) = delete;
+
     ~App();
 
     void loop();
