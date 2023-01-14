@@ -57,6 +57,8 @@ private:
 
     torch::Device               _torchDevice;
     FrameEncoder                _frameEncoder;
+    FrameDecoder                _frameDecoder;
+
     
     void nextMap(); // proceed to next map
 };

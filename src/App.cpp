@@ -85,7 +85,7 @@ App::App() :
 
     // Load frame encoder
     if (fs::exists(frameEncoderFilename)) {
-        printf("Loading frame encoder model from %s\n", frameEncoderFilename); // TODO logging
+        printf("App: Loading frame encoder model from %s\n", frameEncoderFilename); // TODO logging
         serialize::InputArchive inputArchive;
         inputArchive.load_from(frameEncoderFilename);
         _frameEncoder->load(inputArchive);
@@ -97,6 +97,23 @@ App::App() :
     }
 
     _frameEncoder->to(_torchDevice);
+
+    // Load frame decoder
+    if (fs::exists(frameDecoderFilename)) {
+        printf("App: Loading frame encoder model from %s\n", frameDecoderFilename); // TODO logging
+        serialize::InputArchive inputArchive;
+        inputArchive.load_from(frameDecoderFilename);
+        _frameDecoder->load(inputArchive);
+        // Use the inference mode
+        _frameDecoder->eval();
+    }
+    else {
+        printf("No %s found. Initializing a new frame encoder model.\n", frameDecoderFilename); // TODO logging
+    }
+
+    _frameDecoder->to(_torchDevice);
+
+
 }
 
 App::~App()
@@ -180,13 +197,18 @@ void App::loop()
             // upload to GPU and permute to BCHW
             torch::Tensor pixelBufferGpu = pixelBuffer.to(_torchDevice);            
             pixelBufferGpu = pixelBufferGpu.permute({0,3,1,2});
-
-            const auto tempsz = pixelBufferGpu.sizes();
             
             // encode
             torch::Tensor encoding = _frameEncoder(pixelBufferGpu);
-            
-            // TODO: check encoding sanity with decoder
+
+            // Check sanity with decoder
+            torch::Tensor decoding = _frameDecoder(encoding);
+            decoding = decoding.permute({0,2,3,1}).contiguous();
+
+            cv::Mat decodingOpencv(480, 640, CV_32FC4);
+            copyFromTensor(decoding.to(torch::kCPU), (float*)decodingOpencv.ptr<float>(0), 640*480*4);
+
+            cv::imshow("app-decoding", decodingOpencv);
 
             // store encoding to the sequence storage
             copyFromTensor(encoding.to(torch::kCPU), batch.encodings[_batchEntryId], encodingLength);
@@ -247,6 +269,7 @@ void App::loop()
         }
 
         // Train
+#if 0
         if (_newPatchReady) {
             // Create copy of the sequence storage
             auto sequenceStorageCopy(_sequenceStorage);
@@ -256,7 +279,7 @@ void App::loop()
             _model.trainAsync(std::move(sequenceStorageCopy));
             _newPatchReady = false;
         }
-
+#endif
         ++_frameId;
     }
 }
