@@ -32,6 +32,7 @@ set(DOOT2_SOURCES
     src/FrameEncoder.cpp
     src/HeatmapActionModule.cpp
     src/ModelProto.cpp
+    src/ResNeXtModule.cpp
     src/SequenceStorage.cpp
 )
 
