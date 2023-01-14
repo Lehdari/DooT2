@@ -14,11 +14,13 @@
 #include "FrameDecoder.hpp"
 #include "FlowDecoder.hpp"
 
+
 #include <vector>
 #include <memory>
 #include <atomic>
 #include <mutex>
 #include <thread>
+#include <torch/torch.h>
 
 
 class SequenceStorage;

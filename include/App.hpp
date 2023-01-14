@@ -12,10 +12,11 @@
 
 
 #include "ActionManager.hpp"
-#include "HeatmapActionModule.hpp"
 #include "DoorTraversalActionModule.hpp"
-#include "SequenceStorage.hpp"
+#include "HeatmapActionModule.hpp"
 #include "ModelProto.hpp"
+#include "RewardModelTrainer.hpp"
+#include "SequenceStorage.hpp"
 
 #include <SDL.h>
 #include <opencv2/core/mat.hpp>
@@ -57,12 +58,13 @@ private:
     size_t                      _batchEntryId;
     bool                        _newPatchReady;
 
-    ModelProto                  _model;
+    ModelProto                  _modelEdec;
+    RewardModelTrainer          _modelReward;
 
     torch::Device               _torchDevice;
     FrameEncoder                _frameEncoder;
     FrameDecoder                _frameDecoder;
-
+    bool                        _trainRewardModel;
     
     void nextMap(); // proceed to next map
 };

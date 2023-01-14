@@ -3,3 +3,6 @@ cmake-build-*/
 *.code-workspace
 *.pk3
 src/gitinfo.h
+*.pt
+models/
+build/

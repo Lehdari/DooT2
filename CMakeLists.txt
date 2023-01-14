@@ -33,6 +33,7 @@ set(DOOT2_SOURCES
     src/HeatmapActionModule.cpp
     src/ModelProto.cpp
     src/ResNeXtModule.cpp
+    src/RewardModelTrainer.cpp
     src/SequenceStorage.cpp
 )
 

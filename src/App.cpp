@@ -43,7 +43,8 @@ App::App() :
     _frameId                    (0),
     _batchEntryId               (0),
     _newPatchReady              (false),
-    _torchDevice                (torch::cuda::is_available() ? kCUDA : kCPU)
+    _torchDevice                (torch::cuda::is_available() ? kCUDA : kCPU),
+    _trainRewardModel           (true)
 {
     auto& doomGame = DoomGame::instance();
 
@@ -269,17 +270,21 @@ void App::loop()
         }
 
         // Train
-#if 0
         if (_newPatchReady) {
-            // Create copy of the sequence storage
-            auto sequenceStorageCopy(_sequenceStorage);
+            if (_trainRewardModel) {
+                // asd
+                //
+            } else {
+                // Create copy of the sequence storage
+                auto sequenceStorageCopy(_sequenceStorage);
 
-            printf("Training...\n");
-            _model.waitForTrainingFinish();
-            _model.trainAsync(std::move(sequenceStorageCopy));
+                printf("Training...\n");
+                _modelEdec.waitForTrainingFinish();
+                _modelEdec.trainAsync(std::move(sequenceStorageCopy));
+            }
             _newPatchReady = false;
         }
-#endif
+
         ++_frameId;
     }
 }
