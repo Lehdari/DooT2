@@ -177,12 +177,11 @@ void App::loop()
             const auto nPixels = doomGame.getScreenWidth() * doomGame.getScreenHeight() * getImageFormatNChannels(imageFormat);
             copyToTensor(frameFloat.data(), nPixels, pixelBuffer);
 
-            // upload to GPU and permute to BCWH
+            // upload to GPU and permute to BCHW
             torch::Tensor pixelBufferGpu = pixelBuffer.to(_torchDevice);            
             pixelBufferGpu = pixelBufferGpu.permute({0,3,1,2});
 
             const auto tempsz = pixelBufferGpu.sizes();
-            printf("Tensor: %d %d %d %d\n", tempsz[0], tempsz[1], tempsz[2], tempsz[3]);
             
             // encode
             torch::Tensor encoding = _frameEncoder(pixelBufferGpu);
@@ -196,8 +195,8 @@ void App::loop()
             playerPosRelative(0) = doomGame.getGameState<GameState::PlayerPos>()(0) - _initPlayerPos(0);
             playerPosRelative(1) = _initPlayerPos(1) - doomGame.getGameState<GameState::PlayerPos>()(1); // invert y
 
-            batch.rewards[_batchEntryId] = _heatmapActionModule.sample(playerPosRelative, true);
-            printf("reward: %.5f\n", batch.rewards[_batchEntryId]);
+            // Reward is negative heatmap value
+            batch.rewards[_batchEntryId] = -_heatmapActionModule.sample(playerPosRelative, true);
         }
 
         // Render screen
