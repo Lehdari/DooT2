@@ -29,6 +29,34 @@ namespace tf = torch::nn::functional;
 namespace fs = std::filesystem;
 
 
+namespace {
+
+    torch::Tensor pixelGradientLoss(torch::Tensor target, torch::Tensor pred)
+    {
+        using namespace torch::indexing;
+
+        // Pixel-space gradients
+        torch::Tensor targetGradX =
+            target.index({Slice(), Slice(), Slice(), Slice(1, None)}) -
+            target.index({Slice(), Slice(), Slice(), Slice(None, -1)});
+        torch::Tensor targetGradY =
+            target.index({Slice(), Slice(), Slice(1, None), Slice()}) -
+            target.index({Slice(), Slice(), Slice(None, -1), Slice()});
+        torch::Tensor predGradX =
+            pred.index({Slice(), Slice(), Slice(), Slice(1, None)}) -
+            pred.index({Slice(), Slice(), Slice(), Slice(None, -1)});
+        torch::Tensor predGradY =
+            pred.index({Slice(), Slice(), Slice(1, None), Slice()}) -
+            pred.index({Slice(), Slice(), Slice(None, -1), Slice()});
+
+        return
+            torch::l1_loss(targetGradX, predGradX) + torch::mse_loss(targetGradX, predGradX) +
+            torch::l1_loss(targetGradY, predGradY) + torch::mse_loss(targetGradY, predGradY);
+    }
+
+}
+
+
 ModelProto::ModelProto() :
     _optimizer          ({
         _frameEncoder->parameters(),
@@ -92,8 +120,12 @@ void ModelProto::train(SequenceStorage&& storage)
     //torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU); // shorthand for above
 
     cv::Mat imageIn1(480, 640, CV_32FC4); // TODO temp
+    cv::Mat imageIn1Scaled1(240, 320, CV_32FC4); // TODO temp
+    cv::Mat imageIn1Scaled2(120, 160, CV_32FC4); // TODO temp
     cv::Mat imageIn2(480, 640, CV_32FC4); // TODO temp
     cv::Mat imageOut(480, 640, CV_32FC4); // TODO temp
+    cv::Mat imageOutScaled1(240, 320, CV_32FC4); // TODO temp
+    cv::Mat imageOutScaled2(120, 160, CV_32FC4); // TODO temp
     cv::Mat imageFlowForward(480, 640, CV_32FC3, cv::Scalar(0.5f, 0.5f, 0.5f)); // TODO temp
     cv::Mat imageFlowForwardMapped(480, 640, CV_32FC4); // TODO temp
     cv::Mat imageFlowForwardDiff(480, 640, CV_32FC4); // TODO temp
@@ -131,6 +163,10 @@ void ModelProto::train(SequenceStorage&& storage)
             // ID of the frame (in sequence) to be used in the training batch
             torch::Tensor batchIn1 = pixelDataIn.index({(int)t});
             torch::Tensor batchIn2 = pixelDataIn.index({(int)t+1});
+            torch::Tensor batchIn1Scaled1 = tf::interpolate(batchIn1,
+                tf::InterpolateFuncOptions().size(std::vector<long>{240, 320}).mode(kArea));
+            torch::Tensor batchIn1Scaled2 = tf::interpolate(batchIn1,
+                tf::InterpolateFuncOptions().size(std::vector<long>{120, 160}).mode(kArea));
 
             // Forward and backward passes
             torch::Tensor encoding1 = _frameEncoder->forward(batchIn1); // image t encode
@@ -153,7 +189,10 @@ void ModelProto::train(SequenceStorage&& storage)
                     .align_corners(true));
 
             // Frame decode
-            torch::Tensor batchOut = _frameDecoder->forward(encoding1);
+            auto tupleOut = _frameDecoder->forward(encoding1);
+            auto& batchOut = std::get<0>(tupleOut);
+            auto& batchOutScaled1 = std::get<1>(tupleOut);
+            auto& batchOutScaled2 = std::get<2>(tupleOut);
 
             // Pixel-space gradients
             torch::Tensor frameInGradX =
@@ -170,10 +209,16 @@ void ModelProto::train(SequenceStorage&& storage)
                 batchOut.index({Slice(), Slice(), Slice(None, -1), Slice()});
 
             // Frame losses (direct and gradients)
-            torch::Tensor frameLoss = torch::l1_loss(batchIn1, batchOut) + torch::mse_loss(batchIn1, batchOut);
+            torch::Tensor frameLoss =
+                torch::l1_loss(batchIn1, batchOut) + torch::mse_loss(batchIn1, batchOut) +
+                torch::l1_loss(batchIn1Scaled1, batchOutScaled1) + torch::mse_loss(batchIn1Scaled1, batchOutScaled1) +
+                torch::l1_loss(batchIn1Scaled2, batchOutScaled2) + torch::mse_loss(batchIn1Scaled2, batchOutScaled2);
+
             torch::Tensor gradLoss = 2.0f *
                 torch::l1_loss(frameInGradX, frameOutGradX) + torch::mse_loss(frameInGradX, frameOutGradX) +
-                torch::l1_loss(frameInGradY, frameOutGradY) + torch::mse_loss(frameInGradY, frameOutGradY);
+                torch::l1_loss(frameInGradY, frameOutGradY) + torch::mse_loss(frameInGradY, frameOutGradY) +
+                pixelGradientLoss(batchIn1Scaled1, batchOutScaled1) +
+                pixelGradientLoss(batchIn1Scaled2, batchOutScaled2);
 
             // Flow loss
             torch::Tensor flowForwardDiff = torch::abs(batchIn2-flowFrameForward);
@@ -191,6 +236,8 @@ void ModelProto::train(SequenceStorage&& storage)
             if (t % 8 == 0) { // only show every 8th frame
                 // Display selected sequence
                 torch::Tensor batchIn1CPU = batchIn1.to(torch::kCPU);
+                torch::Tensor batchIn1Scaled1CPU = batchIn1Scaled1.to(torch::kCPU);
+                torch::Tensor batchIn1Scaled2CPU = batchIn1Scaled2.to(torch::kCPU);
                 torch::Tensor batchIn2CPU = batchIn2.to(torch::kCPU);
                 torch::Tensor flowForwardCPU = flowForward.to(torch::kCPU)*2.0f + 0.5f;
                 torch::Tensor flowFrameForwardCPU = flowFrameForward.to(torch::kCPU);
@@ -199,6 +246,8 @@ void ModelProto::train(SequenceStorage&& storage)
                 torch::Tensor flowFrameBackwardCPU = flowFrameBackward.to(torch::kCPU);
                 torch::Tensor flowBackwardDiffCPU = flowBackwardDiff.to(torch::kCPU);
                 torch::Tensor outputCPU = batchOut.to(torch::kCPU);
+                torch::Tensor batchOutScaled1CPU = batchOutScaled1.to(torch::kCPU);
+                torch::Tensor batchOutScaled2CPU = batchOutScaled2.to(torch::kCPU);
                 torch::Tensor frameInGradXCPU = frameInGradX.to(torch::kCPU);
                 torch::Tensor frameInGradYCPU = frameInGradY.to(torch::kCPU);
                 torch::Tensor frameOutGradXCPU = frameInGradX.to(torch::kCPU);
@@ -245,7 +294,29 @@ void ModelProto::train(SequenceStorage&& storage)
                         }
                     }
                 }
+                for (int j=0; j<240; ++j) {
+                    for (int i=0; i<320; ++i) {
+                        for (int c=0; c<4; ++c) {
+                            imageIn1Scaled1.ptr<float>(j)[i*4 + c] = batchIn1Scaled1CPU.data_ptr<float>()
+                                [displaySeqId*240*320*4 + j*320*4 + i*4 + c];
+                            imageOutScaled1.ptr<float>(j)[i*4 + c] = batchOutScaled1CPU.data_ptr<float>()
+                                [displaySeqId*4*240*320 + c*240*320 + j*320 + i];
+                        }
+                    }
+                }
+                for (int j=0; j<120; ++j) {
+                    for (int i=0; i<160; ++i) {
+                        for (int c=0; c<4; ++c) {
+                            imageIn1Scaled2.ptr<float>(j)[i*4 + c] = batchIn1Scaled2CPU.data_ptr<float>()
+                                [displaySeqId*120*160*4 + j*160*4 + i*4 + c];
+                            imageOutScaled2.ptr<float>(j)[i*4 + c] = batchOutScaled2CPU.data_ptr<float>()
+                                [displaySeqId*4*120*160 + c*120*160 + j*160 + i];
+                        }
+                    }
+                }
                 cv::imshow("Input 1", imageIn1);
+                cv::imshow("Input 1 Scaled 1", imageIn1Scaled1);
+                cv::imshow("Input 1 Scaled 2", imageIn1Scaled2);
                 cv::imshow("Input 2", imageIn2);
                 cv::imshow("Forward Flow", imageFlowForward);
                 cv::imshow("Forward Flow Mapped", imageFlowForwardMapped);
@@ -254,6 +325,8 @@ void ModelProto::train(SequenceStorage&& storage)
                 cv::imshow("Backward Flow Mapped", imageFlowBackwardMapped);
                 cv::imshow("Backward Flow Diff", imageFlowBackwardDiff);
                 cv::imshow("Prediction 1", imageOut);
+                cv::imshow("Prediction 1 Scaled 1", imageOutScaled1);
+                cv::imshow("Prediction 1 Scaled 2", imageOutScaled2);
                 cv::imshow("Input X Gradient", imageInGradX);
                 cv::imshow("Input Y Gradient", imageInGradY);
                 cv::waitKey(1);

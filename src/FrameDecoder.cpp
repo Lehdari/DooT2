@@ -29,9 +29,11 @@ FrameDecoderImpl::FrameDecoderImpl() :
     _bnDec4         (nn::BatchNorm2dOptions(256)),
     _resNext5       (256, 16, 8, 128),
     _convTranspose5 (nn::ConvTranspose2dOptions(128, 128, {4, 4}).stride({2, 2}).bias(false)),
+    _convTranspose5b(nn::ConvTranspose2dOptions(128, 4, {1, 1})),
     _bnDec5         (nn::BatchNorm2dOptions(128)),
     _resNext6       (128, 8, 8, 64),
     _convTranspose6 (nn::ConvTranspose2dOptions(64, 64, {4, 4}).stride({2, 2}).bias(false)),
+    _convTranspose6b(nn::ConvTranspose2dOptions(64, 4, {1, 1})),
     _bnDec6         (nn::BatchNorm2dOptions(64)),
     _resNext7       (64, 8, 4, 32),
     _convTranspose7 (nn::ConvTranspose2dOptions(32, 4, {4, 4}).stride({2, 2}))
@@ -50,15 +52,17 @@ FrameDecoderImpl::FrameDecoderImpl() :
     register_module("bnDec4", _bnDec4);
     register_module("resNext5", _resNext5);
     register_module("convTranspose5", _convTranspose5);
+    register_module("convTranspose5b", _convTranspose5b);
     register_module("bnDec5", _bnDec5);
     register_module("resNext6", _resNext6);
     register_module("convTranspose6", _convTranspose6);
+    register_module("convTranspose6b", _convTranspose6b);
     register_module("bnDec6", _bnDec6);
     register_module("resNext7", _resNext7);
     register_module("convTranspose7", _convTranspose7);
 }
 
-torch::Tensor FrameDecoderImpl::forward(torch::Tensor x)
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> FrameDecoderImpl::forward(torch::Tensor x)
 {
     using namespace torch::indexing;
 
@@ -73,10 +77,12 @@ torch::Tensor FrameDecoderImpl::forward(torch::Tensor x)
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 80x60x256
     x = torch::tanh(_bnDec5(_convTranspose5(_resNext5(x))));
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 160x120x128
+    torch::Tensor z = torch::tanh(_convTranspose5b(x)); // 160x120x128
     x = torch::tanh(_bnDec6(_convTranspose6(_resNext6(x))));
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 320x240x64
+    torch::Tensor y = torch::tanh(_convTranspose6b(x)); // 320x240x4
     x = torch::tanh(_convTranspose7(_resNext7(x)));
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 640x480x4
 
-    return x;
+    return std::make_tuple(x, y, z);
 }

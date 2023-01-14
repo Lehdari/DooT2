@@ -19,7 +19,7 @@ class FrameDecoderImpl : public torch::nn::Module {
 public:
     FrameDecoderImpl();
 
-    torch::Tensor forward(torch::Tensor x);
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> forward(torch::Tensor x);
 
 private:
     ResNeXtModule               _resNext1;
@@ -36,9 +36,11 @@ private:
     torch::nn::BatchNorm2d      _bnDec4;
     ResNeXtModule               _resNext5;
     torch::nn::ConvTranspose2d  _convTranspose5;
+    torch::nn::ConvTranspose2d  _convTranspose5b;
     torch::nn::BatchNorm2d      _bnDec5;
     ResNeXtModule               _resNext6;
     torch::nn::ConvTranspose2d  _convTranspose6;
+    torch::nn::ConvTranspose2d  _convTranspose6b;
     torch::nn::BatchNorm2d      _bnDec6;
     ResNeXtModule               _resNext7;
     torch::nn::ConvTranspose2d  _convTranspose7;
