@@ -213,3 +213,14 @@ const SequenceStorage::Settings& SequenceStorage::settings() const noexcept
 {
     return _settings;
 }
+
+void SequenceStorage::reset()
+{
+    for (auto& action : _actions) {
+        action = gvizdoom::Action();
+    }
+
+    std::fill(_frameData.begin(), _frameData.end(), 0.0f);
+    std::fill(_encodingData.begin(), _encodingData.end(), 0.0f);
+    std::fill(_rewards.begin(), _rewards.end(), 0.0);
+}

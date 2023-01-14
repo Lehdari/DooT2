@@ -97,6 +97,9 @@ public:
 
     const Settings& settings() const noexcept;
 
+    // Reinitialize all data to default values (0 and such)
+    void reset();
+
 private:
     Settings                        _settings;
     uint64_t                        _frameSize;     // size of a frame in elements
