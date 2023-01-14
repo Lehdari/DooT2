@@ -61,6 +61,15 @@ const torch::Tensor SequenceStorage::BatchHandle::mapEncodingData()
     }
 }
 
+const torch::Tensor SequenceStorage::BatchHandle::mapRewards()
+{
+    return torch::from_blob(
+        rewards,
+        { _settings.batchSize },
+        torch::TensorOptions().device(torch::kCPU).dtype(torch::kF64)
+    );
+}
+
 SequenceStorage::ConstBatchHandle::ConstBatchHandle(
     const gvizdoom::Action* actions,
     const Image<float>* frames,
@@ -207,6 +216,15 @@ const torch::Tensor SequenceStorage::mapEncodingData()
     else {
         return torch::empty({}, torch::TensorOptions().device(torch::kCPU));
     }
+}
+
+const torch::Tensor SequenceStorage::mapRewards()
+{
+    return torch::from_blob(
+        _rewards.data(),
+        { _settings.length, _settings.batchSize },
+        torch::TensorOptions().device(torch::kCPU).dtype(torch::kF64)
+    );
 }
 
 const SequenceStorage::Settings& SequenceStorage::settings() const noexcept

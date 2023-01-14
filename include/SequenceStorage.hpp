@@ -44,6 +44,9 @@ public:
         // Map encoding data to a torch tensor (BW)
         const torch::Tensor mapEncodingData();
 
+        // Map rewards to a torch tensor (B)
+        const torch::Tensor mapRewards();
+
         friend class SequenceStorage;
 
     private:
@@ -58,6 +61,7 @@ public:
 
         float* const                        _frameData;
         float* const                        _encodingData;
+
         const SequenceStorage::Settings&    _settings;
     };
 
@@ -94,6 +98,9 @@ public:
 
     // Map encoding data to a torch tensor (LBW)
     const torch::Tensor mapEncodingData();
+
+    // Map rewards to a torch tensor (LB)
+    const torch::Tensor mapRewards();
 
     const Settings& settings() const noexcept;
 

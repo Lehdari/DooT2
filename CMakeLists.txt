@@ -3,9 +3,9 @@ project(DooT2)
 
 
 # required for env with a RTX 4090
-set(CMAKE_CUDA_ARCHITECTURES 89)
-set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
-set(CUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda-11.8)
+# set(CMAKE_CUDA_ARCHITECTURES 89)
+# set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
+# set(CUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda-11.8)
 
 
 # Add external dependencies
@@ -33,6 +33,7 @@ set(DOOT2_SOURCES
     src/HeatmapActionModule.cpp
     src/ModelProto.cpp
     src/ResNeXtModule.cpp
+    src/RewardModel.cpp
     src/RewardModelTrainer.cpp
     src/SequenceStorage.cpp
 )

@@ -272,8 +272,7 @@ void App::loop()
         // Train
         if (_newPatchReady) {
             if (_trainRewardModel) {
-                // asd
-                //
+                _modelReward.train(_sequenceStorage);
             } else {
                 // Create copy of the sequence storage
                 auto sequenceStorageCopy(_sequenceStorage);
