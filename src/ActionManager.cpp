@@ -9,13 +9,11 @@
 //
 
 #include "ActionManager.hpp"
+#include "Constants.hpp"
 #include "HeatmapActionModule.hpp"
 
-
+using namespace doot2;
 using namespace gvizdoom;
-
-
-static constexpr size_t actionVectorLength = 6;
 
 
 std::default_random_engine      ActionManager::_rnd       (1507715517);

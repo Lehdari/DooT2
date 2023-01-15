@@ -17,14 +17,12 @@
 #include <filesystem>
 #include <random>
 
+#include "Constants.hpp"
 
-static constexpr int        batchSize               = 16; // TODO move somewhere sensible
 static constexpr double     learningRate            = 1.0e-3; // TODO
 static constexpr int64_t    nTrainingEpochs         = 10;
-static constexpr char       frameEncoderFilename[]  {"frame_encoder.pt"};
-static constexpr char       frameDecoderFilename[]  {"frame_decoder.pt"};
-static constexpr char       flowDecoderFilename[]   {"flow_decoder.pt"};
 
+using namespace doot2;
 
 using namespace torch;
 namespace tf = torch::nn::functional;

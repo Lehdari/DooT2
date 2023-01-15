@@ -14,12 +14,10 @@
 
 #include <opencv2/highgui.hpp>
 
+#include "Constants.hpp"
 
+using namespace doot2;
 using namespace gvizdoom;
-
-
-constexpr std::size_t batchSize = 16;
-
 
 App::App() :
     _rnd                        (1507715517),
@@ -29,7 +27,7 @@ App::App() :
     _quit                       (false),
     _heatmapActionModule        (HeatmapActionModule::Settings{256, 32.0f}),
     _doorTraversalActionModule  (false),
-    _sequenceStorage            (SequenceStorage::Settings{batchSize, 64, true, false, 640, 480, ImageFormat::BGRA}),
+    _sequenceStorage            (SequenceStorage::Settings{batchSize, sequenceLength, true, false, frameWidth, frameHeight, ImageFormat::BGRA}),
     _positionPlot               (1024, 1024, CV_32FC3, cv::Scalar(0.0f)),
     _initPlayerPos              (0.0f, 0.0f),
     _frameId                    (0),
