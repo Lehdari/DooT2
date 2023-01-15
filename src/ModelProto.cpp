@@ -152,11 +152,6 @@ void ModelProto::train(SequenceStorage&& storage)
         // Pick random sequence to display
         size_t displaySeqId = rnd() % batchSize;
 
-        // Accumulate gradients over a sequence
-        _frameEncoder->zero_grad();
-        _frameDecoder->zero_grad();
-        _flowDecoder->zero_grad();
-
         for (int64_t t=0; t<sequenceLength-1; ++t) {
             // ID of the frame (in sequence) to be used in the training batch
             torch::Tensor batchIn1 = pixelDataIn.index({(int)t});
@@ -165,6 +160,10 @@ void ModelProto::train(SequenceStorage&& storage)
                 tf::InterpolateFuncOptions().size(std::vector<long>{240, 320}).mode(kArea));
             torch::Tensor batchIn1Scaled2 = tf::interpolate(batchIn1,
                 tf::InterpolateFuncOptions().size(std::vector<long>{120, 160}).mode(kArea));
+
+            _frameEncoder->zero_grad();
+            _frameDecoder->zero_grad();
+            _flowDecoder->zero_grad();
 
             // Forward and backward passes
             torch::Tensor encoding1 = _frameEncoder->forward(batchIn1); // image t encode
@@ -231,6 +230,9 @@ void ModelProto::train(SequenceStorage&& storage)
             // Total loss
             torch::Tensor loss = frameLoss + gradLoss + flowForwardLoss + flowBackwardLoss + 0.01f*encodingMeanLoss + 0.01f*encodingVarLoss;
             loss.backward();
+
+            // Apply gradients
+            _optimizer.step();
 
             if (t % 8 == 0) { // only show every 8th frame
                 // Display selected sequence
@@ -343,9 +345,6 @@ void ModelProto::train(SequenceStorage&& storage)
                 encodingMean.item<float>(), encodingVar.item<float>());
             fflush(stdout);
         }
-
-        // Apply accumulated gradients
-        _optimizer.step();
     }
 
     // Save models
