@@ -52,14 +52,16 @@ torch::Tensor FrameEncoderImpl::forward(torch::Tensor x)
 {
     using namespace torch::indexing;
 
+    constexpr double leakyReluNegativeSlope = 0.01;
+
     // Encoder
-    x = torch::tanh(_bnEnc1(_conv1(x))); // 320x240x16
-    x = torch::tanh(_bnEnc2(_conv2(x))); // 80x80x32
-    x = torch::tanh(_bnEnc3(_conv3(x))); // 40x40x64
-    x = torch::tanh(_bnEnc4(_conv4(x))); // 20x20x128
-    x = torch::tanh(_bnEnc5(_conv5(x))); // 10x10x256
-    x = torch::tanh(_bnEnc6(_conv6(x))); // 5x5x512
-    x = torch::tanh(_bnEnc7(_conv7(x))); // 4x4x512
+    x = torch::leaky_relu(_bnEnc1(_conv1(x)), leakyReluNegativeSlope); // 320x240x16
+    x = torch::leaky_relu(_bnEnc2(_conv2(x)), leakyReluNegativeSlope); // 80x80x32
+    x = torch::leaky_relu(_bnEnc3(_conv3(x)), leakyReluNegativeSlope); // 40x40x64
+    x = torch::leaky_relu(_bnEnc4(_conv4(x)), leakyReluNegativeSlope); // 20x20x128
+    x = torch::leaky_relu(_bnEnc5(_conv5(x)), leakyReluNegativeSlope); // 10x10x256
+    x = torch::leaky_relu(_bnEnc6(_conv6(x)), leakyReluNegativeSlope); // 5x5x512
+    x = torch::leaky_relu(_bnEnc7(_conv7(x)), leakyReluNegativeSlope); // 4x4x512
     x = _conv8(x); // 4x4x128
     x = torch::reshape(x, {-1, 2048});
 
