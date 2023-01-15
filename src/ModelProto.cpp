@@ -49,9 +49,7 @@ namespace {
             pred.index({Slice(), Slice(), Slice(1, None), Slice()}) -
             pred.index({Slice(), Slice(), Slice(None, -1), Slice()});
 
-        return
-            torch::l1_loss(targetGradX, predGradX) + torch::mse_loss(targetGradX, predGradX) +
-            torch::l1_loss(targetGradY, predGradY) + torch::mse_loss(targetGradY, predGradY);
+        return torch::l1_loss(targetGradX, predGradX) + torch::l1_loss(targetGradY, predGradY);
     }
 
 }
@@ -210,13 +208,13 @@ void ModelProto::train(SequenceStorage&& storage)
 
             // Frame losses (direct and gradients)
             torch::Tensor frameLoss =
-                torch::l1_loss(batchIn1, batchOut) + torch::mse_loss(batchIn1, batchOut) +
-                torch::l1_loss(batchIn1Scaled1, batchOutScaled1) + torch::mse_loss(batchIn1Scaled1, batchOutScaled1) +
-                torch::l1_loss(batchIn1Scaled2, batchOutScaled2) + torch::mse_loss(batchIn1Scaled2, batchOutScaled2);
+                torch::l1_loss(batchIn1, batchOut) +
+                torch::l1_loss(batchIn1Scaled1, batchOutScaled1) +
+                torch::l1_loss(batchIn1Scaled2, batchOutScaled2);
 
             torch::Tensor gradLoss = 2.0f *
-                torch::l1_loss(frameInGradX, frameOutGradX) + torch::mse_loss(frameInGradX, frameOutGradX) +
-                torch::l1_loss(frameInGradY, frameOutGradY) + torch::mse_loss(frameInGradY, frameOutGradY) +
+                torch::l1_loss(frameInGradX, frameOutGradX) +
+                torch::l1_loss(frameInGradY, frameOutGradY) +
                 pixelGradientLoss(batchIn1Scaled1, batchOutScaled1) +
                 pixelGradientLoss(batchIn1Scaled2, batchOutScaled2);
 
