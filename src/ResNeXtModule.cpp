@@ -27,10 +27,10 @@ ResNeXtModuleImpl::ResNeXtModuleImpl(int nInputChannels, int nGroupChannels, int
         _groups.emplace_back(
             nn::Conv2d(nn::Conv2dOptions(nInputChannels, nGroupChannels, {1,1}).bias(false)),
             nn::BatchNorm2d(nn::BatchNorm2dOptions(nGroupChannels)),
-            nn::Tanh(),
+            nn::LeakyReLU(nn::LeakyReLUOptions().negative_slope(0.01)),
             nn::Conv2d(nn::Conv2dOptions(nGroupChannels, nGroupChannels, {3,3}).bias(false).padding(1)),
             nn::BatchNorm2d(nn::BatchNorm2dOptions(nGroupChannels)),
-            nn::Tanh()
+            nn::LeakyReLU(nn::LeakyReLUOptions().negative_slope(0.01))
         );
 
         register_module("group" + std::to_string(i), _groups.back());
@@ -63,5 +63,5 @@ torch::Tensor ResNeXtModuleImpl::forward(torch::Tensor x)
         skip = skip.index({Slice(), Slice(None, _nOutputChannels), Slice(), Slice()});
     }
 
-    return skip + torch::tanh(_bnFinal(_convFinal(cat(_groupOutputs, 1))));
+    return skip + torch::leaky_relu(_bnFinal(_convFinal(cat(_groupOutputs, 1))), 0.01);
 }

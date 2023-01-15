@@ -53,15 +53,17 @@ torch::Tensor FlowDecoderImpl::forward(torch::Tensor x)
 {
     using namespace torch::indexing;
 
+    constexpr double leakyReluNegativeSlope = 0.01;
+
     // Decoder
     x = torch::reshape(x, {-1, 2048});
-    x = x + torch::tanh(_linear1(x)); // residual dense layer
+    x = x + torch::leaky_relu(_linear1(x), leakyReluNegativeSlope); // residual dense layer
     x = torch::reshape(x, {-1, 128, 4, 4});
-    x = torch::tanh(_bnDec1(_convTranspose1(x))); // 4x4x512
-    x = torch::tanh(_bnDec2(_convTranspose2(x))); // 5x5x512
-    x = torch::tanh(_bnDec3(_convTranspose3(x)));
+    x = torch::leaky_relu(_bnDec1(_convTranspose1(x)), leakyReluNegativeSlope); // 4x4x512
+    x = torch::leaky_relu(_bnDec2(_convTranspose2(x)), leakyReluNegativeSlope); // 5x5x512
+    x = torch::leaky_relu(_bnDec3(_convTranspose3(x)), leakyReluNegativeSlope);
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)});  // 10x10x256
-    x = torch::tanh(_bnDec4(_convTranspose4(x)));
+    x = torch::leaky_relu(_bnDec4(_convTranspose4(x)), leakyReluNegativeSlope);
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 20x20x128
     x = torch::tanh(_bnDec5(_convTranspose5(x)));
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 40x40x64

@@ -66,22 +66,26 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> FrameDecoderImpl::forwar
 {
     using namespace torch::indexing;
 
+    constexpr double leakyReluNegativeSlope = 0.01;
+
     // Decoder
     x = torch::reshape(x, {-1, 128, 4, 4});
-    x = torch::tanh(_bnDec1(_convTranspose1(_resNext1(x)))); // 5x5x256
-    x = torch::tanh(_bnDec2(_convTranspose2(_resNext2(x))));
+    x = torch::leaky_relu(_bnDec1(_convTranspose1(_resNext1(x))), leakyReluNegativeSlope); // 5x5x256
+    x = torch::leaky_relu(_bnDec2(_convTranspose2(_resNext2(x))), leakyReluNegativeSlope);
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 20x15x256
-    x = torch::tanh(_bnDec3(_convTranspose3(_resNext3(x))));
+    x = torch::leaky_relu(_bnDec3(_convTranspose3(_resNext3(x))), leakyReluNegativeSlope);
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 40x30x512
-    x = torch::tanh(_bnDec4(_convTranspose4(_resNext4(x))));
+    x = torch::leaky_relu(_bnDec4(_convTranspose4(_resNext4(x))), leakyReluNegativeSlope);
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 80x60x256
-    x = torch::tanh(_bnDec5(_convTranspose5(_resNext5(x))));
+    x = torch::leaky_relu(_bnDec5(_convTranspose5(_resNext5(x))), leakyReluNegativeSlope);
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 160x120x128
-    torch::Tensor z = torch::tanh(_convTranspose5b(x)); // 160x120x128
-    x = torch::tanh(_bnDec6(_convTranspose6(_resNext6(x))));
+    // 4x downscaled input
+    torch::Tensor z = torch::tanh(_convTranspose5b(x)) * 0.5f + 0.5f; // 160x120x128
+    x = torch::leaky_relu(_bnDec6(_convTranspose6(_resNext6(x))), leakyReluNegativeSlope);
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 320x240x64
-    torch::Tensor y = torch::tanh(_convTranspose6b(x)); // 320x240x4
-    x = torch::tanh(_convTranspose7(_resNext7(x)));
+    // 2x downscaled input
+    torch::Tensor y = torch::tanh(_convTranspose6b(x)) * 0.5f + 0.5f; // 320x240x4
+    x = torch::tanh(_convTranspose7(_resNext7(x))) * 0.5f + 0.5f;
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 640x480x4
 
     return std::make_tuple(x, y, z);
