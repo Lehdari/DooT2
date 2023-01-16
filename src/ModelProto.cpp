@@ -31,7 +31,14 @@ namespace fs = std::filesystem;
 
 namespace {
 
-    torch::Tensor pixelGradientLoss(torch::Tensor target, torch::Tensor pred)
+    INLINE torch::Tensor yuvLoss(const torch::Tensor& target, const torch::Tensor& pred) {
+        return torch::mean(torch::abs(target-pred), {0, 2, 3}) // reduce only batch and spatial dimensions, preserve channels
+            .dot(torch::tensor({2.0f, 1.0f, 1.0f}, // higher weight on Y channel
+            TensorOptions().device(target.device())));
+    }
+
+    // Loss function for YUV images
+    inline torch::Tensor imageLoss(const torch::Tensor& target, const torch::Tensor& pred)
     {
         using namespace torch::indexing;
 
@@ -49,7 +56,10 @@ namespace {
             pred.index({Slice(), Slice(), Slice(1, None), Slice()}) -
             pred.index({Slice(), Slice(), Slice(None, -1), Slice()});
 
-        return torch::l1_loss(targetGradX, predGradX) + torch::l1_loss(targetGradY, predGradY);
+        return
+            yuvLoss(target, pred) +
+            yuvLoss(targetGradX, predGradX) +
+            yuvLoss(targetGradY, predGradY);
     }
 
     void imShowYUV(const std::string& windowName, cv::Mat& image) {
@@ -174,7 +184,7 @@ void ModelProto::train(SequenceStorage&& storage)
             _frameDecoder->zero_grad();
             _flowDecoder->zero_grad();
 
-            // Forward and backward passes
+            // Forward passes
             torch::Tensor encoding1 = _frameEncoder->forward(batchIn1); // image t encode
             torch::Tensor encoding2 = _frameEncoder->forward(batchIn2); // image t+1 encode
 
@@ -200,44 +210,24 @@ void ModelProto::train(SequenceStorage&& storage)
             auto& batchOutScaled1 = std::get<1>(tupleOut);
             auto& batchOutScaled2 = std::get<2>(tupleOut);
 
-            // Pixel-space gradients
-            torch::Tensor frameInGradX =
-                batchIn1.index({Slice(), Slice(), Slice(), Slice(1, None)}) -
-                batchIn1.index({Slice(), Slice(), Slice(), Slice(None, -1)});
-            torch::Tensor frameInGradY =
-                batchIn1.index({Slice(), Slice(), Slice(1, None), Slice()}) -
-                batchIn1.index({Slice(), Slice(), Slice(None, -1), Slice()});
-            torch::Tensor frameOutGradX =
-                batchOut.index({Slice(), Slice(), Slice(), Slice(1, None)}) -
-                batchOut.index({Slice(), Slice(), Slice(), Slice(None, -1)});
-            torch::Tensor frameOutGradY =
-                batchOut.index({Slice(), Slice(), Slice(1, None), Slice()}) -
-                batchOut.index({Slice(), Slice(), Slice(None, -1), Slice()});
-
             // Frame losses (direct and gradients)
             torch::Tensor frameLoss =
-                torch::l1_loss(batchIn1, batchOut) +
-                torch::l1_loss(batchIn1Scaled1, batchOutScaled1) +
-                torch::l1_loss(batchIn1Scaled2, batchOutScaled2);
-
-            torch::Tensor gradLoss = 2.0f *
-                torch::l1_loss(frameInGradX, frameOutGradX) +
-                torch::l1_loss(frameInGradY, frameOutGradY) +
-                pixelGradientLoss(batchIn1Scaled1, batchOutScaled1) +
-                pixelGradientLoss(batchIn1Scaled2, batchOutScaled2);
+                imageLoss(batchIn1, batchOut) +
+                imageLoss(batchIn1Scaled1, batchOutScaled1) +
+                imageLoss(batchIn1Scaled2, batchOutScaled2);
 
             // Flow loss
             torch::Tensor flowForwardDiff = torch::abs(batchIn2-flowFrameForward);
             torch::Tensor flowBackwardDiff = torch::abs(batchIn1-flowFrameBackward);
-            torch::Tensor flowForwardLoss = torch::mean(flowForwardDiff);
-            torch::Tensor flowBackwardLoss = torch::mean(flowBackwardDiff);
+            torch::Tensor flowForwardLoss = imageLoss(batchIn2, flowFrameForward);
+            torch::Tensor flowBackwardLoss = imageLoss(batchIn1, flowFrameBackward);
 
             // Encoding mean/variance loss
             torch::Tensor encodingMeanLoss = torch::square(encoding1.mean());
             torch::Tensor encodingVarLoss = torch::square(encoding1.var() - 1.0f);
 
             // Total loss
-            torch::Tensor loss = frameLoss + gradLoss + flowForwardLoss + flowBackwardLoss + 0.01f*encodingMeanLoss + 0.01f*encodingVarLoss;
+            torch::Tensor loss = frameLoss + flowForwardLoss + flowBackwardLoss + 0.01f*encodingMeanLoss + 0.01f*encodingVarLoss;
             loss.backward();
 
             // Apply gradients
@@ -258,10 +248,6 @@ void ModelProto::train(SequenceStorage&& storage)
                 torch::Tensor outputCPU = batchOut.to(torch::kCPU);
                 torch::Tensor batchOutScaled1CPU = batchOutScaled1.to(torch::kCPU);
                 torch::Tensor batchOutScaled2CPU = batchOutScaled2.to(torch::kCPU);
-                torch::Tensor frameInGradXCPU = frameInGradX.to(torch::kCPU);
-                torch::Tensor frameInGradYCPU = frameInGradY.to(torch::kCPU);
-                torch::Tensor frameOutGradXCPU = frameInGradX.to(torch::kCPU);
-                torch::Tensor frameOutGradYCPU = frameInGradY.to(torch::kCPU);
                 for (int j=0; j<480; ++j) {
                     for (int i=0; i<640; ++i) {
                         for (int c=0; c<3; ++c) {
@@ -285,22 +271,6 @@ void ModelProto::train(SequenceStorage&& storage)
                                 [displaySeqId*2*480*640 + c*480*640 + j*640 + i];
                             imageFlowBackward.ptr<float>(j)[i*3 + c] = flowBackwardCPU.data_ptr<float>()
                                 [displaySeqId*2*480*640 + c*480*640 + j*640 + i];
-                        }
-                    }
-                }
-                for (int j=0; j<480; ++j) {
-                    for (int i=0; i<639; ++i) {
-                        for (int c=0; c<3; ++c) {
-                            imageInGradX.ptr<float>(j)[i*3 + c] = frameInGradXCPU.data_ptr<float>()
-                                [displaySeqId*480*639*3 + j*639*3 + i*3 + c]*0.5f + 0.5f;
-                        }
-                    }
-                }
-                for (int j=0; j<479; ++j) {
-                    for (int i=0; i<640; ++i) {
-                        for (int c=0; c<3; ++c) {
-                            imageInGradY.ptr<float>(j)[i*3 + c] = frameInGradYCPU.data_ptr<float>()
-                                [displaySeqId*479*640*3 + j*640*3 + i*3 + c]*0.5f + 0.5f;
                         }
                     }
                 }
@@ -337,8 +307,6 @@ void ModelProto::train(SequenceStorage&& storage)
                 imShowYUV("Prediction 1", imageOut);
                 imShowYUV("Prediction 1 Scaled 1", imageOutScaled1);
                 imShowYUV("Prediction 1 Scaled 2", imageOutScaled2);
-                //imShowYUV("Input X Gradient", imageInGradX);
-                //imShowYUV("Input Y Gradient", imageInGradY);
                 cv::waitKey(1);
             }
 
@@ -347,9 +315,9 @@ void ModelProto::train(SequenceStorage&& storage)
             torch::Tensor encodingVar = encoding1.var();
 
             printf(
-                "\r[%2ld/%2ld][%3ld/%3ld] loss: %9.6f frameLoss: %9.6f gradLoss: %9.6f flowForwardLoss: %9.6f flowBackwardLoss: %9.6f encodingMean: %9.6f encodingVar: %9.6f",
+                "\r[%2ld/%2ld][%3ld/%3ld] loss: %9.6f frameLoss: %9.6f flowForwardLoss: %9.6f flowBackwardLoss: %9.6f encodingMean: %9.6f encodingVar: %9.6f",
                 epoch, nTrainingEpochs, t, sequenceLength,
-                loss.item<float>(), frameLoss.item<float>(), gradLoss.item<float>(),
+                loss.item<float>(), frameLoss.item<float>(),
                 flowForwardLoss.item<float>(), flowBackwardLoss.item<float>(),
                 encodingMean.item<float>(), encodingVar.item<float>());
             fflush(stdout);
