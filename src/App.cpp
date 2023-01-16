@@ -27,7 +27,9 @@ App::App() :
     _quit                       (false),
     _heatmapActionModule        (HeatmapActionModule::Settings{256, 32.0f}),
     _doorTraversalActionModule  (false),
-    _sequenceStorage            (SequenceStorage::Settings{batchSize, sequenceLength, true, false, frameWidth, frameHeight, ImageFormat::BGRA}),
+    _sequenceStorage            (SequenceStorage::Settings{batchSize, sequenceLength,
+                                    true, false,
+                                    frameWidth, frameHeight, ImageFormat::YUV}),
     _positionPlot               (1024, 1024, CV_32FC3, cv::Scalar(0.0f)),
     _initPlayerPos              (0.0f, 0.0f),
     _frameId                    (0),
@@ -138,7 +140,7 @@ void App::loop()
             batch.actions[_batchEntryId] = action;
             Image<uint8_t> frame(doomGame.getScreenWidth(), doomGame.getScreenHeight(), ImageFormat::BGRA);
             frame.copyFrom(doomGame.getPixelsBGRA());
-            convertImage(frame, batch.frames[_batchEntryId]);
+            convertImage(frame, batch.frames[_batchEntryId], ImageFormat::YUV);
             batch.rewards[_batchEntryId] = 0.0; // TODO no rewards for now
         }
 

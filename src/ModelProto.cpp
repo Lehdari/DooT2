@@ -52,6 +52,15 @@ namespace {
         return torch::l1_loss(targetGradX, predGradX) + torch::l1_loss(targetGradY, predGradY);
     }
 
+    void imShowYUV(const std::string& windowName, cv::Mat& image) {
+        Image<float> imageYUV(image.cols, image.rows, ImageFormat::YUV, reinterpret_cast<float*>(image.data));
+        Image<float> imageBGRA;
+        convertImage(imageYUV, imageBGRA, ImageFormat::BGRA);
+        cv::Mat matBGRA(image.rows, image.cols, CV_32FC4, const_cast<float*>(imageBGRA.data()));
+
+        cv::imshow(windowName, matBGRA);
+    }
+
 }
 
 
@@ -117,21 +126,21 @@ void ModelProto::train(SequenceStorage&& storage)
     }
     //torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU); // shorthand for above
 
-    cv::Mat imageIn1(480, 640, CV_32FC4); // TODO temp
-    cv::Mat imageIn1Scaled1(240, 320, CV_32FC4); // TODO temp
-    cv::Mat imageIn1Scaled2(120, 160, CV_32FC4); // TODO temp
-    cv::Mat imageIn2(480, 640, CV_32FC4); // TODO temp
-    cv::Mat imageOut(480, 640, CV_32FC4); // TODO temp
-    cv::Mat imageOutScaled1(240, 320, CV_32FC4); // TODO temp
-    cv::Mat imageOutScaled2(120, 160, CV_32FC4); // TODO temp
+    cv::Mat imageIn1(480, 640, CV_32FC3); // TODO temp
+    cv::Mat imageIn1Scaled1(240, 320, CV_32FC3); // TODO temp
+    cv::Mat imageIn1Scaled2(120, 160, CV_32FC3); // TODO temp
+    cv::Mat imageIn2(480, 640, CV_32FC3); // TODO temp
+    cv::Mat imageOut(480, 640, CV_32FC3); // TODO temp
+    cv::Mat imageOutScaled1(240, 320, CV_32FC3); // TODO temp
+    cv::Mat imageOutScaled2(120, 160, CV_32FC3); // TODO temp
     cv::Mat imageFlowForward(480, 640, CV_32FC3, cv::Scalar(0.5f, 0.5f, 0.5f)); // TODO temp
-    cv::Mat imageFlowForwardMapped(480, 640, CV_32FC4); // TODO temp
-    cv::Mat imageFlowForwardDiff(480, 640, CV_32FC4); // TODO temp
+    cv::Mat imageFlowForwardMapped(480, 640, CV_32FC3); // TODO temp
+    cv::Mat imageFlowForwardDiff(480, 640, CV_32FC3); // TODO temp
     cv::Mat imageFlowBackward(480, 640, CV_32FC3, cv::Scalar(0.5f, 0.5f, 0.5f)); // TODO temp
-    cv::Mat imageFlowBackwardMapped(480, 640, CV_32FC4); // TODO temp
-    cv::Mat imageFlowBackwardDiff(480, 640, CV_32FC4); // TODO temp
-    cv::Mat imageInGradX(480, 639, CV_32FC4); // TODO temp
-    cv::Mat imageInGradY(479, 640, CV_32FC4); // TODO temp
+    cv::Mat imageFlowBackwardMapped(480, 640, CV_32FC3); // TODO temp
+    cv::Mat imageFlowBackwardDiff(480, 640, CV_32FC3); // TODO temp
+    cv::Mat imageInGradX(480, 639, CV_32FC3); // TODO temp
+    cv::Mat imageInGradY(479, 640, CV_32FC3); // TODO temp
 
     // Move model parameters to GPU
     _frameEncoder->to(device);
@@ -255,21 +264,21 @@ void ModelProto::train(SequenceStorage&& storage)
                 torch::Tensor frameOutGradYCPU = frameInGradY.to(torch::kCPU);
                 for (int j=0; j<480; ++j) {
                     for (int i=0; i<640; ++i) {
-                        for (int c=0; c<4; ++c) {
-                            imageIn1.ptr<float>(j)[i*4 + c] = batchIn1CPU.data_ptr<float>()
-                                [displaySeqId*480*640*4 + j*640*4 + i*4 + c];
-                            imageIn2.ptr<float>(j)[i*4 + c] = batchIn2CPU.data_ptr<float>()
-                                [displaySeqId*480*640*4 + j*640*4 + i*4 + c];
-                            imageFlowForwardMapped.ptr<float>(j)[i*4 + c] = flowFrameForwardCPU.data_ptr<float>()
-                                [displaySeqId*4*480*640 + c*480*640 + j*640 + i];
-                            imageFlowForwardDiff.ptr<float>(j)[i*4 + c] = flowForwardDiffCPU.data_ptr<float>()
-                                [displaySeqId*480*640*4 + j*640*4 + i*4 + c];
-                            imageFlowBackwardMapped.ptr<float>(j)[i*4 + c] = flowFrameBackwardCPU.data_ptr<float>()
-                                [displaySeqId*4*480*640 + c*480*640 + j*640 + i];
-                            imageFlowBackwardDiff.ptr<float>(j)[i*4 + c] = flowBackwardDiffCPU.data_ptr<float>()
-                                [displaySeqId*480*640*4 + j*640*4 + i*4 + c];
-                            imageOut.ptr<float>(j)[i*4 + c] = outputCPU.data_ptr<float>()
-                                [displaySeqId*4*480*640 + c*480*640 + j*640 + i];
+                        for (int c=0; c<3; ++c) {
+                            imageIn1.ptr<float>(j)[i*3 + c] = batchIn1CPU.data_ptr<float>()
+                                [displaySeqId*480*640*3 + j*640*3 + i*3 + c];
+                            imageIn2.ptr<float>(j)[i*3 + c] = batchIn2CPU.data_ptr<float>()
+                                [displaySeqId*480*640*3 + j*640*3 + i*3 + c];
+                            imageFlowForwardMapped.ptr<float>(j)[i*3 + c] = flowFrameForwardCPU.data_ptr<float>()
+                                [displaySeqId*3*480*640 + c*480*640 + j*640 + i];
+                            imageFlowForwardDiff.ptr<float>(j)[i*3 + c] = flowForwardDiffCPU.data_ptr<float>()
+                                [displaySeqId*480*640*3 + j*640*3+ i*3 + c];
+                            imageFlowBackwardMapped.ptr<float>(j)[i*3 + c] = flowFrameBackwardCPU.data_ptr<float>()
+                                [displaySeqId*3*480*640 + c*480*640 + j*640 + i];
+                            imageFlowBackwardDiff.ptr<float>(j)[i*3 + c] = flowBackwardDiffCPU.data_ptr<float>()
+                                [displaySeqId*480*640*3 + j*640*3 + i*3 + c];
+                            imageOut.ptr<float>(j)[i*3 + c] = outputCPU.data_ptr<float>()
+                                [displaySeqId*3*480*640 + c*480*640 + j*640 + i];
                         }
                         for (int c=0; c<2; ++c) {
                             imageFlowForward.ptr<float>(j)[i*3 + c] = flowForwardCPU.data_ptr<float>()
@@ -281,55 +290,55 @@ void ModelProto::train(SequenceStorage&& storage)
                 }
                 for (int j=0; j<480; ++j) {
                     for (int i=0; i<639; ++i) {
-                        for (int c=0; c<4; ++c) {
-                            imageInGradX.ptr<float>(j)[i*4 + c] = frameInGradXCPU.data_ptr<float>()
-                                [displaySeqId*480*639*4 + j*639*4 + i*4 + c]*0.5f + 0.5f;
+                        for (int c=0; c<3; ++c) {
+                            imageInGradX.ptr<float>(j)[i*3 + c] = frameInGradXCPU.data_ptr<float>()
+                                [displaySeqId*480*639*3 + j*639*3 + i*3 + c]*0.5f + 0.5f;
                         }
                     }
                 }
                 for (int j=0; j<479; ++j) {
                     for (int i=0; i<640; ++i) {
-                        for (int c=0; c<4; ++c) {
-                            imageInGradY.ptr<float>(j)[i*4 + c] = frameInGradYCPU.data_ptr<float>()
-                                [displaySeqId*479*640*4 + j*640*4 + i*4 + c]*0.5f + 0.5f;
+                        for (int c=0; c<3; ++c) {
+                            imageInGradY.ptr<float>(j)[i*3 + c] = frameInGradYCPU.data_ptr<float>()
+                                [displaySeqId*479*640*3 + j*640*3 + i*3 + c]*0.5f + 0.5f;
                         }
                     }
                 }
                 for (int j=0; j<240; ++j) {
                     for (int i=0; i<320; ++i) {
-                        for (int c=0; c<4; ++c) {
-                            imageIn1Scaled1.ptr<float>(j)[i*4 + c] = batchIn1Scaled1CPU.data_ptr<float>()
-                                [displaySeqId*240*320*4 + j*320*4 + i*4 + c];
-                            imageOutScaled1.ptr<float>(j)[i*4 + c] = batchOutScaled1CPU.data_ptr<float>()
-                                [displaySeqId*4*240*320 + c*240*320 + j*320 + i];
+                        for (int c=0; c<3; ++c) {
+                            imageIn1Scaled1.ptr<float>(j)[i*3 + c] = batchIn1Scaled1CPU.data_ptr<float>()
+                                [displaySeqId*240*320*3 + j*320*3 + i*3 + c];
+                            imageOutScaled1.ptr<float>(j)[i*3 + c] = batchOutScaled1CPU.data_ptr<float>()
+                                [displaySeqId*3*240*320 + c*240*320 + j*320 + i];
                         }
                     }
                 }
                 for (int j=0; j<120; ++j) {
                     for (int i=0; i<160; ++i) {
-                        for (int c=0; c<4; ++c) {
-                            imageIn1Scaled2.ptr<float>(j)[i*4 + c] = batchIn1Scaled2CPU.data_ptr<float>()
-                                [displaySeqId*120*160*4 + j*160*4 + i*4 + c];
-                            imageOutScaled2.ptr<float>(j)[i*4 + c] = batchOutScaled2CPU.data_ptr<float>()
-                                [displaySeqId*4*120*160 + c*120*160 + j*160 + i];
+                        for (int c=0; c<3; ++c) {
+                            imageIn1Scaled2.ptr<float>(j)[i*3 + c] = batchIn1Scaled2CPU.data_ptr<float>()
+                                [displaySeqId*120*160*3 + j*160*3 + i*3 + c];
+                            imageOutScaled2.ptr<float>(j)[i*3 + c] = batchOutScaled2CPU.data_ptr<float>()
+                                [displaySeqId*3*120*160 + c*120*160 + j*160 + i];
                         }
                     }
                 }
-                cv::imshow("Input 1", imageIn1);
-                cv::imshow("Input 1 Scaled 1", imageIn1Scaled1);
-                cv::imshow("Input 1 Scaled 2", imageIn1Scaled2);
-                cv::imshow("Input 2", imageIn2);
+                imShowYUV("Input 1", imageIn1);
+                imShowYUV("Input 1 Scaled 1", imageIn1Scaled1);
+                imShowYUV("Input 1 Scaled 2", imageIn1Scaled2);
+                imShowYUV("Input 2", imageIn2);
                 cv::imshow("Forward Flow", imageFlowForward);
-                cv::imshow("Forward Flow Mapped", imageFlowForwardMapped);
-                cv::imshow("Forward Flow Diff", imageFlowForwardDiff);
+                imShowYUV("Forward Flow Mapped", imageFlowForwardMapped);
+                imShowYUV("Forward Flow Diff", imageFlowForwardDiff);
                 cv::imshow("Backward Flow", imageFlowBackward);
-                cv::imshow("Backward Flow Mapped", imageFlowBackwardMapped);
-                cv::imshow("Backward Flow Diff", imageFlowBackwardDiff);
-                cv::imshow("Prediction 1", imageOut);
-                cv::imshow("Prediction 1 Scaled 1", imageOutScaled1);
-                cv::imshow("Prediction 1 Scaled 2", imageOutScaled2);
-                cv::imshow("Input X Gradient", imageInGradX);
-                cv::imshow("Input Y Gradient", imageInGradY);
+                imShowYUV("Backward Flow Mapped", imageFlowBackwardMapped);
+                imShowYUV("Backward Flow Diff", imageFlowBackwardDiff);
+                imShowYUV("Prediction 1", imageOut);
+                imShowYUV("Prediction 1 Scaled 1", imageOutScaled1);
+                imShowYUV("Prediction 1 Scaled 2", imageOutScaled2);
+                //imShowYUV("Input X Gradient", imageInGradX);
+                //imShowYUV("Input Y Gradient", imageInGradY);
                 cv::waitKey(1);
             }
 

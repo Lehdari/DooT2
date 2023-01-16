@@ -15,7 +15,7 @@ using namespace torch;
 
 
 FrameEncoderImpl::FrameEncoderImpl() :
-    _conv1          (nn::Conv2dOptions(4, 16, {4, 4}).stride({2, 2}).bias(false).padding(1)),
+    _conv1          (nn::Conv2dOptions(3, 16, {4, 4}).stride({2, 2}).bias(false).padding(1)),
     _bnEnc1         (nn::BatchNorm2dOptions(16)),
     _conv2          (nn::Conv2dOptions(16, 32, {5, 6}).stride({3, 4}).bias(false).padding(1)),
     _bnEnc2         (nn::BatchNorm2dOptions(32)),
