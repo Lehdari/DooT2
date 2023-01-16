@@ -146,10 +146,10 @@ void ModelProto::train(SequenceStorage&& storage)
     cv::Mat imageOutScaled2(120, 160, CV_32FC3); // TODO temp
     cv::Mat imageFlowForward(480, 640, CV_32FC3, cv::Scalar(0.5f, 0.5f, 0.5f)); // TODO temp
     cv::Mat imageFlowForwardMapped(480, 640, CV_32FC3); // TODO temp
-    cv::Mat imageFlowForwardDiff(480, 640, CV_32FC3); // TODO temp
+    cv::Mat imageFlowForwardDiff(480, 640, CV_32FC1); // TODO temp
     cv::Mat imageFlowBackward(480, 640, CV_32FC3, cv::Scalar(0.5f, 0.5f, 0.5f)); // TODO temp
     cv::Mat imageFlowBackwardMapped(480, 640, CV_32FC3); // TODO temp
-    cv::Mat imageFlowBackwardDiff(480, 640, CV_32FC3); // TODO temp
+    cv::Mat imageFlowBackwardDiff(480, 640, CV_32FC1); // TODO temp
     cv::Mat imageInGradX(480, 639, CV_32FC3); // TODO temp
     cv::Mat imageInGradY(479, 640, CV_32FC3); // TODO temp
 
@@ -233,10 +233,14 @@ void ModelProto::train(SequenceStorage&& storage)
                 imageLoss(batchIn1Scaled2, batchOut2Scaled2);
 
             // Flow loss
-            torch::Tensor flowForwardDiff = torch::abs(batchIn2-flowFrameForward);
-            torch::Tensor flowBackwardDiff = torch::abs(batchIn1-flowFrameBackward);
-            torch::Tensor flowForwardLoss = imageLoss(batchIn2, flowFrameForward);
-            torch::Tensor flowBackwardLoss = imageLoss(batchIn1, flowFrameBackward);
+            torch::Tensor flowForwardDiff = torch::abs(
+                batchIn2.index({Slice(), 0, "..."}) -
+                flowFrameForward.index({Slice(), 0, "..."}));
+            torch::Tensor flowBackwardDiff = torch::abs(
+                batchIn1.index({Slice(), 0, "..."}) -
+                flowFrameBackward.index({Slice(), 0, "..."}));
+            torch::Tensor flowForwardLoss = 10.0f * torch::mean(flowForwardDiff);
+            torch::Tensor flowBackwardLoss = 10.0f * torch::mean(flowBackwardDiff);
 
             // Encoding mean/variance loss
             torch::Tensor encodingMean = torch::mean(encoding1, {0}); // mean across the batch dimension
@@ -261,10 +265,10 @@ void ModelProto::train(SequenceStorage&& storage)
                 torch::Tensor batchIn2CPU = batchIn2.to(torch::kCPU);
                 torch::Tensor flowForwardCPU = flowForward.to(torch::kCPU)*2.0f + 0.5f;
                 torch::Tensor flowFrameForwardCPU = flowFrameForward.to(torch::kCPU);
-                torch::Tensor flowForwardDiffCPU = flowForwardDiff.to(torch::kCPU);
+                torch::Tensor flowForwardDiffCPU = flowForwardDiff.contiguous().to(torch::kCPU);
                 torch::Tensor flowBackwardCPU = flowBackward.to(torch::kCPU)*2.0f + 0.5f;
                 torch::Tensor flowFrameBackwardCPU = flowFrameBackward.to(torch::kCPU);
-                torch::Tensor flowBackwardDiffCPU = flowBackwardDiff.to(torch::kCPU);
+                torch::Tensor flowBackwardDiffCPU = flowBackwardDiff.contiguous().to(torch::kCPU);
                 torch::Tensor outputCPU = batchOut.to(torch::kCPU);
                 torch::Tensor output2CPU = batchOut2.to(torch::kCPU);
                 torch::Tensor batchOutScaled1CPU = batchOutScaled1.to(torch::kCPU);
@@ -278,12 +282,8 @@ void ModelProto::train(SequenceStorage&& storage)
                                 [displaySeqId*480*640*3 + j*640*3 + i*3 + c];
                             imageFlowForwardMapped.ptr<float>(j)[i*3 + c] = flowFrameForwardCPU.data_ptr<float>()
                                 [displaySeqId*3*480*640 + c*480*640 + j*640 + i];
-                            imageFlowForwardDiff.ptr<float>(j)[i*3 + c] = flowForwardDiffCPU.data_ptr<float>()
-                                [displaySeqId*480*640*3 + j*640*3+ i*3 + c];
                             imageFlowBackwardMapped.ptr<float>(j)[i*3 + c] = flowFrameBackwardCPU.data_ptr<float>()
                                 [displaySeqId*3*480*640 + c*480*640 + j*640 + i];
-                            imageFlowBackwardDiff.ptr<float>(j)[i*3 + c] = flowBackwardDiffCPU.data_ptr<float>()
-                                [displaySeqId*480*640*3 + j*640*3 + i*3 + c];
                             imageOut.ptr<float>(j)[i*3 + c] = outputCPU.data_ptr<float>()
                                 [displaySeqId*3*480*640 + c*480*640 + j*640 + i];
                             imageOut2.ptr<float>(j)[i*3 + c] = output2CPU.data_ptr<float>()
@@ -295,6 +295,10 @@ void ModelProto::train(SequenceStorage&& storage)
                             imageFlowBackward.ptr<float>(j)[i*3 + c] = flowBackwardCPU.data_ptr<float>()
                                 [displaySeqId*2*480*640 + c*480*640 + j*640 + i];
                         }
+                        imageFlowForwardDiff.ptr<float>(j)[i] = flowForwardDiffCPU.data_ptr<float>()
+                            [displaySeqId*480*640 + j*640 + i];
+                        imageFlowBackwardDiff.ptr<float>(j)[i] = flowBackwardDiffCPU.data_ptr<float>()
+                            [displaySeqId*480*640 + j*640 + i];
                     }
                 }
                 for (int j=0; j<240; ++j) {
@@ -323,10 +327,10 @@ void ModelProto::train(SequenceStorage&& storage)
                 imShowYUV("Input 2", imageIn2);
                 cv::imshow("Forward Flow", imageFlowForward);
                 imShowYUV("Forward Flow Mapped", imageFlowForwardMapped);
-                imShowYUV("Forward Flow Diff", imageFlowForwardDiff);
+                cv::imshow("Forward Flow Diff", imageFlowForwardDiff);
                 cv::imshow("Backward Flow", imageFlowBackward);
                 imShowYUV("Backward Flow Mapped", imageFlowBackwardMapped);
-                imShowYUV("Backward Flow Diff", imageFlowBackwardDiff);
+                cv::imshow("Backward Flow Diff", imageFlowBackwardDiff);
                 imShowYUV("Prediction 1", imageOut);
                 imShowYUV("Prediction 1, Double EDEC", imageOut2);
                 imShowYUV("Prediction 1 Scaled 1", imageOutScaled1);
