@@ -167,6 +167,10 @@ void ModelProto::train(SequenceStorage&& storage)
         TensorOptions().device(device)).broadcast_to({batchSize, 2, 3}),
         {batchSize, 2, 480, 640});
 
+    // Required for latent space normalization
+    torch::Tensor encodingZeros = torch::zeros({encodingLength}, TensorOptions().device(device));
+    torch::Tensor encodingOnes = torch::ones({encodingLength}, TensorOptions().device(device));
+
     const auto sequenceLength = storage.settings().length;
     for (int64_t epoch=0; epoch<nTrainingEpochs; ++epoch) {
         // Pick random sequence to display
@@ -235,10 +239,10 @@ void ModelProto::train(SequenceStorage&& storage)
             torch::Tensor flowBackwardLoss = imageLoss(batchIn1, flowFrameBackward);
 
             // Encoding mean/variance loss
-            torch::Tensor encodingZeros = torch::zeros({encodingLength}, TensorOptions().device(device));
-            torch::Tensor encodingOnes = torch::ones({encodingLength}, TensorOptions().device(device));
-            torch::Tensor encodingMeanLoss = 0.01f * torch::sum(torch::square(torch::mean(encoding1, {0}) - encodingZeros));
-            torch::Tensor encodingVarLoss = 0.01f * torch::sum(torch::square(torch::var(encoding1, 0) - encodingOnes));
+            torch::Tensor encodingMean = torch::mean(encoding1, {0}); // mean across the batch dimension
+            torch::Tensor encodingVar = torch::var(encoding1, 0); // variance across the batch dimension
+            torch::Tensor encodingMeanLoss = 0.01f * torch::sum(torch::square(encodingMean - encodingZeros));
+            torch::Tensor encodingVarLoss = 0.01f * torch::sum(torch::square(encodingVar - encodingOnes));
             // Double encoding loss
             torch::Tensor doubleEncodingLoss = 0.01f * torch::mse_loss(encoding1, encoding1b);
 
@@ -330,16 +334,13 @@ void ModelProto::train(SequenceStorage&& storage)
                 cv::waitKey(1);
             }
 
-            // TEMP encoding mean and variance
-            torch::Tensor encodingMean = encoding1.mean();
-            torch::Tensor encodingVar = encoding1.var();
-
             printf(
-                "\r[%2ld/%2ld][%3ld/%3ld] loss: %9.6f frameLoss: %9.6f frameLossDoubleEdec: %9.6f flowForwardLoss: %9.6f flowBackwardLoss: %9.6f encodingMean: %9.6f encodingVar: %9.6f doubleEncodingLoss: %9.6f",
+                "\r[%2ld/%2ld][%3ld/%3ld] loss: %9.6f frameLoss: %9.6f frameLossDoubleEdec: %9.6f flowForwardLoss: %9.6f flowBackwardLoss: %9.6f doubleEdecLoss: %9.6f encMean: [%9.6f %9.6f] encVar: [%9.6f %9.6f]",
                 epoch, nTrainingEpochs, t, sequenceLength,
                 loss.item<float>(), frameLoss.item<float>(), frameLossDoubleEdec.item<float>(),
-                flowForwardLoss.item<float>(), flowBackwardLoss.item<float>(),
-                encodingMean.item<float>(), encodingVar.item<float>(), doubleEncodingLoss.item<float>());
+                flowForwardLoss.item<float>(), flowBackwardLoss.item<float>(), doubleEncodingLoss.item<float>(),
+                encodingMean.min().item<float>(), encodingMean.max().item<float>(),
+                encodingVar.min().item<float>(), encodingVar.max().item<float>());
             fflush(stdout);
         }
     }
