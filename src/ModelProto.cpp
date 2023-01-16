@@ -141,6 +141,7 @@ void ModelProto::train(SequenceStorage&& storage)
     cv::Mat imageIn1Scaled2(120, 160, CV_32FC3); // TODO temp
     cv::Mat imageIn2(480, 640, CV_32FC3); // TODO temp
     cv::Mat imageOut(480, 640, CV_32FC3); // TODO temp
+    cv::Mat imageOut2(480, 640, CV_32FC3); // TODO temp
     cv::Mat imageOutScaled1(240, 320, CV_32FC3); // TODO temp
     cv::Mat imageOutScaled2(120, 160, CV_32FC3); // TODO temp
     cv::Mat imageFlowForward(480, 640, CV_32FC3, cv::Scalar(0.5f, 0.5f, 0.5f)); // TODO temp
@@ -210,11 +211,22 @@ void ModelProto::train(SequenceStorage&& storage)
             auto& batchOutScaled1 = std::get<1>(tupleOut);
             auto& batchOutScaled2 = std::get<2>(tupleOut);
 
-            // Frame losses (direct and gradients)
+            // Double encode-decode
+            torch::Tensor encoding1b = _frameEncoder->forward(batchOut);
+            auto tupleOut2 = _frameDecoder->forward(encoding1b);
+            auto& batchOut2 = std::get<0>(tupleOut2);
+            auto& batchOut2Scaled1 = std::get<1>(tupleOut2);
+            auto& batchOut2Scaled2 = std::get<2>(tupleOut2);
+
+            // Frame losses
             torch::Tensor frameLoss =
                 imageLoss(batchIn1, batchOut) +
                 imageLoss(batchIn1Scaled1, batchOutScaled1) +
                 imageLoss(batchIn1Scaled2, batchOutScaled2);
+            torch::Tensor frameLossDoubleEdec =
+                imageLoss(batchIn1, batchOut2) +
+                imageLoss(batchIn1Scaled1, batchOut2Scaled1) +
+                imageLoss(batchIn1Scaled2, batchOut2Scaled2);
 
             // Flow loss
             torch::Tensor flowForwardDiff = torch::abs(batchIn2-flowFrameForward);
@@ -223,11 +235,15 @@ void ModelProto::train(SequenceStorage&& storage)
             torch::Tensor flowBackwardLoss = imageLoss(batchIn1, flowFrameBackward);
 
             // Encoding mean/variance loss
-            torch::Tensor encodingMeanLoss = torch::square(encoding1.mean());
-            torch::Tensor encodingVarLoss = torch::square(encoding1.var() - 1.0f);
+            torch::Tensor encodingZeros = torch::zeros({encodingLength}, TensorOptions().device(device));
+            torch::Tensor encodingOnes = torch::ones({encodingLength}, TensorOptions().device(device));
+            torch::Tensor encodingMeanLoss = 0.01f * torch::sum(torch::square(torch::mean(encoding1, {0}) - encodingZeros));
+            torch::Tensor encodingVarLoss = 0.01f * torch::sum(torch::square(torch::var(encoding1, 0) - encodingOnes));
+            // Double encoding loss
+            torch::Tensor doubleEncodingLoss = 0.01f * torch::mse_loss(encoding1, encoding1b);
 
             // Total loss
-            torch::Tensor loss = frameLoss + flowForwardLoss + flowBackwardLoss + 0.01f*encodingMeanLoss + 0.01f*encodingVarLoss;
+            torch::Tensor loss = frameLoss + frameLossDoubleEdec + flowForwardLoss + flowBackwardLoss + encodingMeanLoss + encodingVarLoss + doubleEncodingLoss;
             loss.backward();
 
             // Apply gradients
@@ -246,6 +262,7 @@ void ModelProto::train(SequenceStorage&& storage)
                 torch::Tensor flowFrameBackwardCPU = flowFrameBackward.to(torch::kCPU);
                 torch::Tensor flowBackwardDiffCPU = flowBackwardDiff.to(torch::kCPU);
                 torch::Tensor outputCPU = batchOut.to(torch::kCPU);
+                torch::Tensor output2CPU = batchOut2.to(torch::kCPU);
                 torch::Tensor batchOutScaled1CPU = batchOutScaled1.to(torch::kCPU);
                 torch::Tensor batchOutScaled2CPU = batchOutScaled2.to(torch::kCPU);
                 for (int j=0; j<480; ++j) {
@@ -264,6 +281,8 @@ void ModelProto::train(SequenceStorage&& storage)
                             imageFlowBackwardDiff.ptr<float>(j)[i*3 + c] = flowBackwardDiffCPU.data_ptr<float>()
                                 [displaySeqId*480*640*3 + j*640*3 + i*3 + c];
                             imageOut.ptr<float>(j)[i*3 + c] = outputCPU.data_ptr<float>()
+                                [displaySeqId*3*480*640 + c*480*640 + j*640 + i];
+                            imageOut2.ptr<float>(j)[i*3 + c] = output2CPU.data_ptr<float>()
                                 [displaySeqId*3*480*640 + c*480*640 + j*640 + i];
                         }
                         for (int c=0; c<2; ++c) {
@@ -305,6 +324,7 @@ void ModelProto::train(SequenceStorage&& storage)
                 imShowYUV("Backward Flow Mapped", imageFlowBackwardMapped);
                 imShowYUV("Backward Flow Diff", imageFlowBackwardDiff);
                 imShowYUV("Prediction 1", imageOut);
+                imShowYUV("Prediction 1, Double EDEC", imageOut2);
                 imShowYUV("Prediction 1 Scaled 1", imageOutScaled1);
                 imShowYUV("Prediction 1 Scaled 2", imageOutScaled2);
                 cv::waitKey(1);
@@ -315,11 +335,11 @@ void ModelProto::train(SequenceStorage&& storage)
             torch::Tensor encodingVar = encoding1.var();
 
             printf(
-                "\r[%2ld/%2ld][%3ld/%3ld] loss: %9.6f frameLoss: %9.6f flowForwardLoss: %9.6f flowBackwardLoss: %9.6f encodingMean: %9.6f encodingVar: %9.6f",
+                "\r[%2ld/%2ld][%3ld/%3ld] loss: %9.6f frameLoss: %9.6f frameLossDoubleEdec: %9.6f flowForwardLoss: %9.6f flowBackwardLoss: %9.6f encodingMean: %9.6f encodingVar: %9.6f doubleEncodingLoss: %9.6f",
                 epoch, nTrainingEpochs, t, sequenceLength,
-                loss.item<float>(), frameLoss.item<float>(),
+                loss.item<float>(), frameLoss.item<float>(), frameLossDoubleEdec.item<float>(),
                 flowForwardLoss.item<float>(), flowBackwardLoss.item<float>(),
-                encodingMean.item<float>(), encodingVar.item<float>());
+                encodingMean.item<float>(), encodingVar.item<float>(), doubleEncodingLoss.item<float>());
             fflush(stdout);
         }
     }
