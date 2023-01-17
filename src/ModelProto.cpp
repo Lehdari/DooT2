@@ -38,7 +38,7 @@ namespace {
     }
 
     // Loss function for YUV images
-    inline torch::Tensor imageLoss(const torch::Tensor& target, const torch::Tensor& pred)
+    inline torch::Tensor imageLoss(const torch::Tensor& target, const torch::Tensor& pred, float gradWeight = 2.0f)
     {
         using namespace torch::indexing;
 
@@ -58,8 +58,8 @@ namespace {
 
         return
             yuvLoss(target, pred) +
-            yuvLoss(targetGradX, predGradX) +
-            yuvLoss(targetGradY, predGradY);
+            gradWeight * yuvLoss(targetGradX, predGradX) +
+            gradWeight * yuvLoss(targetGradY, predGradY);
     }
 
     void imShowYUV(const std::string& windowName, cv::Mat& image) {
