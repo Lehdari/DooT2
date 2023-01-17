@@ -216,8 +216,8 @@ void ModelProto::train(SequenceStorage&& storage)
             auto& batchOutScaled2 = std::get<2>(tupleOut);
 
             // Double encode-decode
-            torch::Tensor encoding1b = _frameEncoder->forward(batchOut);
-            auto tupleOut2 = _frameDecoder->forward(encoding1b);
+            torch::Tensor encoding1double = _frameEncoder->forward(batchOut);
+            auto tupleOut2 = _frameDecoder->forward(encoding1double);
             auto& batchOut2 = std::get<0>(tupleOut2);
             auto& batchOut2Scaled1 = std::get<1>(tupleOut2);
             auto& batchOut2Scaled2 = std::get<2>(tupleOut2);
@@ -248,7 +248,8 @@ void ModelProto::train(SequenceStorage&& storage)
             torch::Tensor encodingMeanLoss = 0.01f * torch::sum(torch::square(encodingMean - encodingZeros));
             torch::Tensor encodingVarLoss = 0.01f * torch::sum(torch::square(encodingVar - encodingOnes));
             // Double encoding loss
-            torch::Tensor doubleEncodingLoss = 0.01f * torch::mse_loss(encoding1, encoding1b);
+            torch::Tensor encoding1detached = encoding1.detach(); // prevent gradient flowing back through encoding1 so that the double edec loss won't pull it towards the worse double encoding
+            torch::Tensor doubleEncodingLoss = 0.01f * torch::mse_loss(encoding1detached, encoding1double);
 
             // Total loss
             torch::Tensor loss = frameLoss + frameLossDoubleEdec + flowForwardLoss + flowBackwardLoss + encodingMeanLoss + encodingVarLoss + doubleEncodingLoss;
