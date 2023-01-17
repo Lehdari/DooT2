@@ -16,10 +16,6 @@
 
 #include "Constants.hpp"
 
-<<<<<<< HEAD
-using namespace doot2;
-using namespace gvizdoom;
-=======
 
 using namespace doot2;
 using namespace gvizdoom;
@@ -27,7 +23,6 @@ using namespace torch;
 using namespace torch::indexing;
 namespace fs = std::filesystem;
 
->>>>>>> add encodings and heatmap-based rewards to sequence storage
 
 App::App() :
     _rnd                        (1507715517),
