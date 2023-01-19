@@ -87,9 +87,9 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> FrameDecoderImpl::forwar
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 160x120x128
 
     // 4x downscaled output
-    torch::Tensor s4_Y = 0.5f + 0.5f * torch::tanh(_convTranspose5_Y(
+    torch::Tensor s4_Y = 0.5f + 0.51f * torch::tanh(_convTranspose5_Y(
         x.index({Slice(), Slice(None, 64), Slice(), Slice()})));
-    torch::Tensor s4_UV = 0.5f * torch::tanh(_convTranspose5_UV(
+    torch::Tensor s4_UV = 0.51f * torch::tanh(_convTranspose5_UV(
         x.index({Slice(), Slice(None, 64), Slice(), Slice()})));
     torch::Tensor s4 = torch::cat({s4_Y, s4_UV}, 1);
 
@@ -97,17 +97,17 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> FrameDecoderImpl::forwar
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 320x240x64
 
     // 2x downscaled output
-    torch::Tensor s2_Y = 0.5f + 0.5f * torch::tanh(_convTranspose6_Y(
+    torch::Tensor s2_Y = 0.5f + 0.51f * torch::tanh(_convTranspose6_Y(
         x.index({Slice(), Slice(None, 32), Slice(), Slice()})));
-    torch::Tensor s2_UV = 0.5f * torch::tanh(_convTranspose6_UV(
+    torch::Tensor s2_UV = 0.51f * torch::tanh(_convTranspose6_UV(
         x.index({Slice(), Slice(None, 32), Slice(), Slice()})));
     torch::Tensor s2 = torch::cat({s2_Y, s2_UV}, 1);
 
     x = _resNext7(x);
-    torch::Tensor s_Y = 0.5f + 0.5f * torch::tanh(_convTranspose7_Y(
+    torch::Tensor s_Y = 0.5f + 0.51f * torch::tanh(_convTranspose7_Y(
         x.index({Slice(), Slice(None, 16), Slice(), Slice()}))); // 640x480x1
     s_Y = s_Y.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)});
-    torch::Tensor s_UV = 0.5f * torch::tanh(_convTranspose7_UV(
+    torch::Tensor s_UV = 0.51f * torch::tanh(_convTranspose7_UV(
         x.index({Slice(), Slice(16, None), Slice(), Slice()}))); // 640x480x2
     s_UV = s_UV.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)});
     torch::Tensor s = torch::cat({s_Y, s_UV}, 1);
