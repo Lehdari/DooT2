@@ -79,7 +79,7 @@ ModelProto::ModelProto() :
         _frameEncoder->parameters(),
         _frameDecoder->parameters(),
         _flowDecoder->parameters()},
-        torch::optim::AdamOptions(learningRate).betas({0.9, 0.999})),
+        torch::optim::AdamWOptions(learningRate).betas({0.9, 0.999}).weight_decay(0.001)),
     _trainingFinished   (true)
 {
     // Load frame encoder
