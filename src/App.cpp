@@ -220,7 +220,7 @@ void App::nextMap()
     }
 
     gvizdoom::GameConfig newGameConfig = doomGame.getGameConfig();
-    newGameConfig.map = _batchEntryId + 1;
+    newGameConfig.map = _rnd()%29 + 1;
 
     doomGame.restart(newGameConfig);
 }
