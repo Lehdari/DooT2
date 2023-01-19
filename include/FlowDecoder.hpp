@@ -20,8 +20,7 @@ public:
     torch::Tensor forward(torch::Tensor x);
 
 private:
-    torch::nn::Linear           _linear1;
-    torch::nn::ConvTranspose2d  _convTranspose1;
+    torch::nn::Conv2d           _conv1;
     torch::nn::BatchNorm2d      _bnDec1;
     torch::nn::ConvTranspose2d  _convTranspose2;
     torch::nn::BatchNorm2d      _bnDec2;
