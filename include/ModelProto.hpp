@@ -41,7 +41,7 @@ private:
     FrameEncoder        _frameEncoder;
     FrameDecoder        _frameDecoder;
     FlowDecoder         _flowDecoder;
-    torch::optim::Adam  _optimizer;
+    torch::optim::AdamW _optimizer;
     std::mutex          _trainingMutex;
     std::thread         _trainingThread;
     std::atomic_bool    _trainingFinished;
