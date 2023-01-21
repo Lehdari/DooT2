@@ -2,10 +2,9 @@ cmake_minimum_required(VERSION 3.20)
 project(DooT2)
 
 
-# required for env with a RTX 4090
-set(CMAKE_CUDA_ARCHITECTURES 89)
-set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
-set(CUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda-11.8)
+set(CMAKE_CUDA_ARCHITECTURES 89 CACHE STRING "Supported CUDA architectures")
+set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc CACHE PATH "CUDA Compiler location")
+set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda-11.8 CACHE PATH "CUDA Toolkit location")
 
 
 # Add external dependencies
