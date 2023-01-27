@@ -1,3 +1,6 @@
 [submodule "ext/GViZDoom"]
 	path = ext/GViZDoom
 	url = git@github.com:Lehdari/GViZDoom.git
+[submodule "ext/json"]
+	path = ext/json
+	url = git@github.com:nlohmann/json.git

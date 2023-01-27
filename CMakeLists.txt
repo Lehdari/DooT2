@@ -48,6 +48,7 @@ target_link_libraries(doot2
     PUBLIC  Eigen3::Eigen
     PUBLIC  opencv_highgui
     PUBLIC  torch
+    PUBLIC  nlohmann_json
 )
 target_compile_definitions(doot2
     PUBLIC  ASSETS_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/assets\"
