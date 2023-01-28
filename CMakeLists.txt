@@ -33,6 +33,7 @@ set(DOOT2_SOURCES
     src/ModelProto.cpp
     src/ResNeXtModule.cpp
     src/SequenceStorage.cpp
+    src/TimeSeries.cpp
 )
 
 
