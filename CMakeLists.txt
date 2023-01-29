@@ -57,3 +57,28 @@ target_compile_definitions(doot2
 set_target_properties(doot2 PROPERTIES
     CXX_STANDARD    20
 )
+
+
+# Add tests
+set(DOOT2_TEST_SOURCES
+    src/TimeSeries.cpp
+    src/tests/TestTimeSeries.cpp
+)
+
+include(GoogleTest)
+add_executable(doot2_tests ${DOOT2_TEST_SOURCES})
+target_include_directories(doot2_tests
+    PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+set_target_properties(doot2_tests PROPERTIES
+    CXX_STANDARD    20
+)
+target_link_libraries(doot2_tests
+    PUBLIC  GTest::gtest_main
+    PUBLIC  nlohmann_json
+)
+gtest_add_tests(TARGET doot2_tests
+    TEST_SUFFIX .noArgs
+    TEST_LIST   noArgsTests
+)
+gtest_discover_tests(doot2_tests)
