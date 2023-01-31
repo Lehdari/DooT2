@@ -75,6 +75,8 @@ set_target_properties(doot2_tests PROPERTIES
 )
 target_link_libraries(doot2_tests
     PUBLIC  GTest::gtest_main
+    PUBLIC  gtest
+    PUBLIC  pthread
     PUBLIC  nlohmann_json
 )
 gtest_add_tests(TARGET doot2_tests
