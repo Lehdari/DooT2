@@ -1,10 +1,5 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.26)
 project(DooT2)
-
-
-set(CMAKE_CUDA_ARCHITECTURES 89 CACHE STRING "Supported CUDA architectures")
-set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc CACHE PATH "CUDA Compiler location")
-set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda-11.8 CACHE PATH "CUDA Toolkit location")
 
 
 # Add external dependencies
@@ -13,12 +8,6 @@ add_subdirectory(ext)
 find_package(SDL2 REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(OpenCV REQUIRED)
-
-option(LIBTORCH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../pytorch/torch")
-set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${LIBTORCH_DIR})
-set(Caffe2_DIR "${LIBTORCH_DIR}/share/cmake/Caffe2/") # ???
-include_directories("${LIBTORCH_DIR}/lib/include") # ???
-find_package(Torch REQUIRED)
 
 # Source files
 set(DOOT2_SOURCES
@@ -48,14 +37,16 @@ target_link_libraries(doot2
     PUBLIC  ${SDL2_LIBRARIES}
     PUBLIC  Eigen3::Eigen
     PUBLIC  opencv_highgui
-    PUBLIC  torch
+    PUBLIC  torch_interface
     PUBLIC  nlohmann_json
+    PUBLIC  pthread
 )
 target_compile_definitions(doot2
     PUBLIC  ASSETS_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/assets\"
 )
 set_target_properties(doot2 PROPERTIES
-    CXX_STANDARD    20
+    CXX_STANDARD        20
+    CUDA_ARCHITECTURES  native
 )
 
 
@@ -71,7 +62,8 @@ target_include_directories(doot2_tests
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 set_target_properties(doot2_tests PROPERTIES
-    CXX_STANDARD    20
+    CXX_STANDARD        20
+    CUDA_ARCHITECTURES  native
 )
 target_link_libraries(doot2_tests
     PUBLIC  GTest::gtest_main
