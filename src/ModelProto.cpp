@@ -121,7 +121,7 @@ ModelProto::ModelProto() :
     }
 }
 
-void ModelProto::train(SequenceStorage&& storage)
+void ModelProto::train(SequenceStorage& storage)
 {
     using namespace torch::indexing;
     static std::default_random_engine rnd(1507715517);
@@ -426,23 +426,7 @@ void ModelProto::train(SequenceStorage&& storage)
     _trainingFinished = true;
 }
 
-void ModelProto::trainAsync(SequenceStorage&& storage)
+void ModelProto::infer(const TensorVector& input, TensorVector& output)
 {
-    if (_trainingThread.joinable())
-        _trainingThread.join();
-    _trainingThread = std::thread{&ModelProto::train, this, std::move(storage)};
-}
-
-bool ModelProto::trainingFinished() const noexcept
-{
-    return _trainingFinished;
-}
-
-void ModelProto::waitForTrainingFinish()
-{
-    if (_trainingFinished)
-        return;
-
-    if (_trainingThread.joinable())
-        _trainingThread.join();
+    // TODO
 }

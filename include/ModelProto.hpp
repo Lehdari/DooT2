@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "Model.hpp"
 #include "FrameEncoder.hpp"
 #include "FrameDecoder.hpp"
 #include "FlowDecoder.hpp"
@@ -24,7 +25,7 @@
 class SequenceStorage;
 
 
-class ModelProto {
+class ModelProto final : public Model {
 public:
     ModelProto();
     ModelProto(const ModelProto&) = delete;
@@ -32,10 +33,8 @@ public:
     ModelProto& operator=(const ModelProto&) = delete;
     ModelProto& operator=(ModelProto&&) = delete;
 
-    void train(SequenceStorage&& storage);
-    void trainAsync(SequenceStorage&& storage);
-    bool trainingFinished() const noexcept;
-    void waitForTrainingFinish();
+    void train(SequenceStorage& storage);
+    void infer(const TensorVector& input, TensorVector& output);
 
 private:
     FrameEncoder        _frameEncoder;
