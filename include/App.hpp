@@ -15,7 +15,7 @@
 #include "HeatmapActionModule.hpp"
 #include "DoorTraversalActionModule.hpp"
 #include "SequenceStorage.hpp"
-#include "ModelProto.hpp"
+#include "AutoEncoderModel.hpp"
 
 #include <SDL.h>
 #include <opencv2/core/mat.hpp>
@@ -53,7 +53,7 @@ private:
     size_t                      _batchEntryId;
     bool                        _newPatchReady;
 
-    ModelProto                  _model;
+    AutoEncoderModel            _model;
 
 
     void nextMap(); // proceed to next map

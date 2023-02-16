@@ -1,6 +1,6 @@
 //
 // Project: DooT2
-// File: ModelProto.cpp
+// File: AutoEncoderModel.cpp
 //
 // Copyright (c) 2022 Miika 'Lehdari' Lehtimäki
 // You may use, distribute and modify this code under the terms
@@ -8,8 +8,9 @@
 // with this source code package.
 //
 
-#include "ModelProto.hpp"
+#include "AutoEncoderModel.hpp"
 #include "SequenceStorage.hpp"
+#include "Constants.hpp"
 
 #include <opencv2/core/mat.hpp> // TODO temp
 #include <opencv2/highgui.hpp> // TODO temp
@@ -17,7 +18,6 @@
 #include <filesystem>
 #include <random>
 
-#include "Constants.hpp"
 
 static constexpr double     learningRate            = 1.0e-3; // TODO
 static constexpr int64_t    nTrainingIterations     = 4*64;
@@ -77,7 +77,7 @@ namespace {
 }
 
 
-ModelProto::ModelProto() :
+AutoEncoderModel::AutoEncoderModel() :
     _optimizer          ({
         _frameEncoder->parameters(),
         _frameDecoder->parameters(),
@@ -121,7 +121,7 @@ ModelProto::ModelProto() :
     }
 }
 
-void ModelProto::train(SequenceStorage& storage)
+void AutoEncoderModel::train(SequenceStorage& storage)
 {
     using namespace torch::indexing;
     static std::default_random_engine rnd(1507715517);
@@ -426,7 +426,7 @@ void ModelProto::train(SequenceStorage& storage)
     _trainingFinished = true;
 }
 
-void ModelProto::infer(const TensorVector& input, TensorVector& output)
+void AutoEncoderModel::infer(const TensorVector& input, TensorVector& output)
 {
     // TODO
 }

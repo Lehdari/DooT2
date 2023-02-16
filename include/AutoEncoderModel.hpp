@@ -1,6 +1,6 @@
 //
 // Project: DooT2
-// File: ModelProto.hpp
+// File: AutoEncoderModel.hpp
 //
 // Copyright (c) 2022 Miika 'Lehdari' Lehtimäki
 // You may use, distribute and modify this code under the terms
@@ -25,13 +25,13 @@
 class SequenceStorage;
 
 
-class ModelProto final : public Model {
+class AutoEncoderModel final : public Model {
 public:
-    ModelProto();
-    ModelProto(const ModelProto&) = delete;
-    ModelProto(ModelProto&&) = delete;
-    ModelProto& operator=(const ModelProto&) = delete;
-    ModelProto& operator=(ModelProto&&) = delete;
+    AutoEncoderModel();
+    AutoEncoderModel(const AutoEncoderModel&) = delete;
+    AutoEncoderModel(AutoEncoderModel&&) = delete;
+    AutoEncoderModel& operator=(const AutoEncoderModel&) = delete;
+    AutoEncoderModel& operator=(AutoEncoderModel&&) = delete;
 
     void train(SequenceStorage& storage);
     void infer(const TensorVector& input, TensorVector& output);

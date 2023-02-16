@@ -14,12 +14,12 @@ set(DOOT2_SOURCES
     src/main.cpp
     src/ActionManager.cpp
     src/App.cpp
+    src/AutoEncoderModel.cpp
     src/DoorTraversalActionModule.cpp
     src/FlowDecoder.cpp
     src/FrameDecoder.cpp
     src/FrameEncoder.cpp
     src/HeatmapActionModule.cpp
-    src/ModelProto.cpp
     src/ResNeXtModule.cpp
     src/SequenceStorage.cpp
     src/TimeSeries.cpp
