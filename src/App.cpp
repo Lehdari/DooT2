@@ -193,12 +193,8 @@ void App::loop()
 
         // Train
         if (_newPatchReady) {
-            // Create copy of the sequence storage
-            auto sequenceStorageCopy(_sequenceStorage);
-
             printf("Training...\n");
-            _model.waitForTrainingFinish();
-            _model.trainAsync(std::move(sequenceStorageCopy));
+            _model.train(_sequenceStorage);
             _newPatchReady = false;
         }
 
