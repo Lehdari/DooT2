@@ -1,7 +1,8 @@
-#include "gvizdoom/DoomGame.hpp"
-
 #include "App.hpp"
 #include "Utils.hpp"
+#include "AutoEncoderModel.hpp"
+
+#include "gvizdoom/DoomGame.hpp"
 
 
 int main()
@@ -16,7 +17,10 @@ int main()
     auto& doomGame = gvizdoom::DoomGame::instance();
     doomGame.init(config);
 
-    App app;
+
+    AutoEncoderModel model;
+
+    App app(&model);
     app.loop();
 
     return 0;

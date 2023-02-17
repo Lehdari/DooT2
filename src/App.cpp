@@ -9,17 +9,19 @@
 //
 
 #include "App.hpp"
+#include "Constants.hpp"
+#include "Model.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
 
 #include <opencv2/highgui.hpp>
 
-#include "Constants.hpp"
 
 using namespace doot2;
 using namespace gvizdoom;
 
-App::App() :
+
+App::App(Model* model) :
     _rnd                        (1507715517),
     _window                     (nullptr),
     _renderer                   (nullptr),
@@ -34,8 +36,12 @@ App::App() :
     _initPlayerPos              (0.0f, 0.0f),
     _frameId                    (0),
     _batchEntryId               (0),
-    _newPatchReady              (false)
+    _newPatchReady              (false),
+    _model                      (model)
 {
+    if (_model == nullptr)
+        throw std::runtime_error("model must not be nullptr");
+
     auto& doomGame = DoomGame::instance();
 
     // Initialize SDL
@@ -194,7 +200,7 @@ void App::loop()
         // Train
         if (_newPatchReady) {
             printf("Training...\n");
-            _model.train(_sequenceStorage);
+            _model->train(_sequenceStorage);
             _newPatchReady = false;
         }
 

@@ -15,7 +15,6 @@
 #include "HeatmapActionModule.hpp"
 #include "DoorTraversalActionModule.hpp"
 #include "SequenceStorage.hpp"
-#include "AutoEncoderModel.hpp"
 
 #include <SDL.h>
 #include <opencv2/core/mat.hpp>
@@ -24,9 +23,12 @@
 #include <random>
 
 
+class Model;
+
+
 class App {
 public:
-    App();
+    App(Model* model);
     // TODO RO5
     ~App();
 
@@ -53,7 +55,7 @@ private:
     size_t                      _batchEntryId;
     bool                        _newPatchReady;
 
-    AutoEncoderModel            _model;
+    Model*                      _model;
 
 
     void nextMap(); // proceed to next map
