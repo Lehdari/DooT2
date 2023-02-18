@@ -26,6 +26,7 @@ set(DOOT2_SOURCES
     src/AutoEncoderModel.cpp
     src/DoorTraversalActionModule.cpp
     src/FlowDecoder.cpp
+    src/FourierFeatureModule.cpp
     src/FrameDecoder.cpp
     src/FrameEncoder.cpp
     src/HeatmapActionModule.cpp
