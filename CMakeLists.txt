@@ -24,10 +24,12 @@ set(DOOT2_SOURCES
     src/ActionManager.cpp
     src/App.cpp
     src/AutoEncoderModel.cpp
+    src/AutoEncoderModel2.cpp
     src/DoorTraversalActionModule.cpp
     src/FlowDecoder.cpp
     src/FourierFeatureModule.cpp
     src/FrameDecoder.cpp
+    src/FrameDecoder2.cpp
     src/FrameEncoder.cpp
     src/HeatmapActionModule.cpp
     src/Model.cpp
