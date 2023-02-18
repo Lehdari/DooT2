@@ -17,9 +17,9 @@ using namespace torch;
 ResNeXtModuleImpl::ResNeXtModuleImpl(int nInputChannels, int nGroupChannels, int nGroups, int nOutputChannels) :
     _nInputChannels     (nInputChannels),
     _nOutputChannels    (nOutputChannels),
-    _nGroups    (nGroups),
-    _convFinal  (nn::Conv2dOptions(nGroupChannels*_nGroups, nOutputChannels, {1,1}).bias(false)),
-    _bnFinal    (nn::BatchNorm2dOptions(nOutputChannels))
+    _nGroups            (nGroups),
+    _convFinal          (nn::Conv2dOptions(nGroupChannels*_nGroups, nOutputChannels, {1,1}).bias(false)),
+    _bnFinal            (nn::BatchNorm2dOptions(nOutputChannels))
 {
     // Add 1x1, 3x3 conv layers and batch norms for each group
     _groups.reserve(_nGroups);
