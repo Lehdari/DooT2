@@ -33,8 +33,7 @@ public:
     AutoEncoderModel& operator=(const AutoEncoderModel&) = delete;
     AutoEncoderModel& operator=(AutoEncoderModel&&) = delete;
 
-    void train(SequenceStorage& storage);
-    void infer(const TensorVector& input, TensorVector& output);
+    void infer(const TensorVector& input, TensorVector& output) override;
 
 private:
     FrameEncoder        _frameEncoder;
@@ -44,4 +43,6 @@ private:
     std::mutex          _trainingMutex;
     std::thread         _trainingThread;
     std::atomic_bool    _trainingFinished;
+
+    void trainImpl(SequenceStorage& storage) override;
 };

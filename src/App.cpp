@@ -199,8 +199,9 @@ void App::loop()
 
         // Train
         if (_newPatchReady) {
+            _model->waitForTrainingFinished();
             printf("Training...\n");
-            _model->train(_sequenceStorage);
+            _model->trainAsync(_sequenceStorage);
             _newPatchReady = false;
         }
 

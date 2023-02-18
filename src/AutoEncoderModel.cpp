@@ -121,7 +121,7 @@ AutoEncoderModel::AutoEncoderModel() :
     }
 }
 
-void AutoEncoderModel::train(SequenceStorage& storage)
+void AutoEncoderModel::trainImpl(SequenceStorage& storage)
 {
     using namespace torch::indexing;
     static std::default_random_engine rnd(1507715517);
