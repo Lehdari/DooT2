@@ -20,6 +20,7 @@ set(DOOT2_SOURCES
     src/FrameDecoder.cpp
     src/FrameEncoder.cpp
     src/HeatmapActionModule.cpp
+    src/Model.cpp
     src/ResNeXtModule.cpp
     src/SequenceStorage.cpp
     src/TimeSeries.cpp
