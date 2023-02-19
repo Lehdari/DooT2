@@ -62,10 +62,8 @@ public:
     // Serialize to JSON
     nlohmann::json toJson() const;
 
-#ifndef NDEBUG
-    // DEBUG: Get total number of TimeSeries instances
+    // Get total number of TimeSeries instances
     static size_t getNumInstances();
-#endif
 
 private:
     size_t  _size;

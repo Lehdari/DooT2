@@ -110,14 +110,10 @@ Json TimeSeries::toJson() const
     return json;
 }
 
-#ifndef NDEBUG
-
 size_t TimeSeries::getNumInstances()
 {
     return storage.size();
 }
-
-#endif
 
 void TimeSeries::addEntriesRecursive()
 {
