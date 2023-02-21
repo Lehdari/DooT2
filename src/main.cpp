@@ -1,4 +1,5 @@
 #include "App.hpp"
+#include "Trainer.hpp"
 #include "Utils.hpp"
 #include "AutoEncoderModel.hpp"
 
@@ -20,7 +21,10 @@ int main()
 
     AutoEncoderModel model;
 
-    App app(&model);
+    Trainer trainer(&model);
+    trainer.loop();
+
+    App app;
     app.loop();
 
     return 0;

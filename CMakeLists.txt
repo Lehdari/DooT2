@@ -24,6 +24,7 @@ set(DOOT2_SOURCES
     src/ResNeXtModule.cpp
     src/SequenceStorage.cpp
     src/TimeSeries.cpp
+    src/Trainer.cpp
 )
 
 
