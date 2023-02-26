@@ -39,10 +39,15 @@ public:
 
     virtual void infer(const TensorVector& input, TensorVector& output) = 0;
 
+    void abortTraining() noexcept;
+
 private:
     std::mutex              _trainingMutex;
     std::condition_variable _trainingCv;
     bool                    _trainingFinished;
+
+protected:
+    std::atomic_bool        _abortTraining{false};
 
     // Required for storing the copy of the storage made in trainAsync
     void trainAsyncThreadWrapper(SequenceStorage&& storage);

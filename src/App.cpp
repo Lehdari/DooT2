@@ -16,6 +16,7 @@
 using namespace doot2;
 using namespace gvizdoom;
 
+
 App::App() :
     _window                     (nullptr),
     _renderer                   (nullptr),

@@ -50,3 +50,8 @@ void Model::trainAsyncThreadWrapper(SequenceStorage&& storage)
 {
     train(storage);
 }
+
+void Model::abortTraining() noexcept
+{
+    _abortTraining = true;
+}

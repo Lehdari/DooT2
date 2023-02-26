@@ -19,6 +19,7 @@
 #include <opencv2/core/mat.hpp>
 #include "gvizdoom/Action.hpp"
 
+#include <atomic>
 #include <random>
 
 
@@ -32,11 +33,11 @@ public:
     ~Trainer();
 
     void loop();
-
+    void quit();
 private:
     using Rnd = std::default_random_engine;
     Rnd                         _rnd;
-    bool                        _quit;
+    std::atomic_bool            _quit;
     ActionManager               _actionManager;
     HeatmapActionModule         _heatmapActionModule;
     DoorTraversalActionModule   _doorTraversalActionModule;
