@@ -5,6 +5,7 @@
 
 #include "gvizdoom/DoomGame.hpp"
 
+#include <thread>
 
 int main()
 {
@@ -22,10 +23,11 @@ int main()
     AutoEncoderModel model;
 
     Trainer trainer(&model);
-    trainer.loop();
-
     App app;
-    app.loop();
 
+    std::thread trainerThread(&Trainer::loop, &trainer);
+    app.loop();
+    trainer.quit();
+    trainerThread.join();
     return 0;
 }

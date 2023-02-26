@@ -50,6 +50,11 @@ Trainer::~Trainer()
 {
 }
 
+void Trainer::quit()
+{
+    _quit = true;
+}
+
 void Trainer::loop()
 {
     auto& doomGame = DoomGame::instance();
@@ -125,6 +130,8 @@ void Trainer::loop()
 
         ++_frameId;
     }
+
+    _model->abortTraining();
 }
 
 void Trainer::nextMap()

@@ -279,6 +279,13 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
             + encodingMeanLoss
             + encodingVarLoss;
 
+        if (_abortTraining)
+        {
+            cv::destroyAllWindows();
+            _trainingFinished = true;
+            return;
+        }
+        
         // Backward pass
         loss.backward();
 
@@ -401,6 +408,11 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
             encodingMean.min().item<float>(), encodingMean.max().item<float>(),
             encodingVar.min().item<float>(), encodingVar.max().item<float>());
         fflush(stdout);
+
+        if (_abortTraining)
+        {
+            break;
+        }
     }
 
     // Save models
