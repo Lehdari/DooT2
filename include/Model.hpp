@@ -12,10 +12,14 @@
 
 #include "Types.hpp"
 #include "SequenceStorage.hpp"
+#include "DoubleBuffer.hpp"
 
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+
+
+using TrainingState = double; // TODO something more elaborate
 
 
 // Interface class for models
@@ -40,6 +44,8 @@ public:
     virtual void infer(const TensorVector& input, TensorVector& output) = 0;
 
     void abortTraining() noexcept;
+
+    DoubleBuffer<TrainingState> trainingState;
 
 private:
     std::mutex              _trainingMutex;
