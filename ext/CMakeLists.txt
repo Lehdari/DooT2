@@ -1,4 +1,5 @@
 # Direct CMake submodules
+add_subdirectory(GraphicsUtils)
 add_subdirectory(GViZDoom)
 add_subdirectory(json)
 
