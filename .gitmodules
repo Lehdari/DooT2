@@ -7,3 +7,6 @@
 [submodule "ext/pytorch"]
 	path = ext/pytorch
 	url = git@github.com:pytorch/pytorch.git
+[submodule "ext/GraphicsUtils"]
+	path = ext/GraphicsUtils
+	url = git@github.com:Lehdari/GraphicsUtils.git
