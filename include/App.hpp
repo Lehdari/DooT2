@@ -17,9 +17,13 @@
 #include "backends/imgui_impl_sdl.h"
 
 
+class Trainer;
+class Model;
+
+
 class App {
 public:
-    App();
+    App(Trainer* trainer, Model* model);
     // TODO RO5
     ~App();
 
@@ -30,6 +34,9 @@ private:
     SDL_GLContext   _glContext;
 
     bool            _quit;
+
+    Trainer*        _trainer;
+    Model*          _model;
 
     inline void imGuiNewFrame() const;
     inline void imGuiRender() const;

@@ -10,6 +10,8 @@
 
 #include "App.hpp"
 #include "Constants.hpp"
+#include "Trainer.hpp"
+#include "Model.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
 #include "glad/glad.h"
@@ -19,10 +21,12 @@ using namespace doot2;
 using namespace gvizdoom;
 
 
-App::App() :
+App::App(Trainer* trainer, Model* model) :
     _window     (nullptr),
     _glContext  (nullptr),
-    _quit       (false)
+    _quit       (false),
+    _trainer    (trainer),
+    _model      (model)
 {
     auto& doomGame = DoomGame::instance();
 
@@ -118,6 +122,10 @@ void App::gui() const
     imGuiNewFrame();
 
     ImGui::Begin("Training");
+    {
+        auto stateReadHandle = _model->trainingState.read();
+        ImGui::Text("Loss: %0.5f", *stateReadHandle);
+    }
     ImGui::End();
 
     imGuiRender();
