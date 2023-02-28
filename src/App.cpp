@@ -12,16 +12,17 @@
 #include "Constants.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
+#include "glad/glad.h"
+
 
 using namespace doot2;
 using namespace gvizdoom;
 
 
 App::App() :
-    _window                     (nullptr),
-    _renderer                   (nullptr),
-    _texture                    (nullptr),
-    _quit                       (false)
+    _window     (nullptr),
+    _glContext  (nullptr),
+    _quit       (false)
 {
     auto& doomGame = DoomGame::instance();
 
@@ -34,39 +35,58 @@ App::App() :
         "DooT2",
         SDL_WINDOWPOS_UNDEFINED,
         SDL_WINDOWPOS_UNDEFINED,
-        doomGame.getScreenWidth(),
-        doomGame.getScreenHeight(),
-        SDL_WINDOW_SHOWN);
+        1920, // TODO settings
+        1080, // TODO settings
+        SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL);
     if (_window == nullptr) {
         printf("Error: SDL Window could not be created! SDL_Error: %s\n", SDL_GetError());
         return;
     }
-    _renderer = SDL_CreateRenderer(_window, -1, SDL_RENDERER_ACCELERATED);
-    if (_renderer == nullptr) {
-        printf("Error: SDL Renderer could not be created! SDL_Error: %s\n", SDL_GetError());
+
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4); // TODO settings
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6); // TODO settings
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG); // TODO settings
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE); // TODO settings
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, true); // TODO settings
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
+
+    _glContext = SDL_GL_CreateContext(_window);
+    if (_glContext == nullptr) {
+        printf("Error: SDL OpenGL context could not be created! SDL_Error: %s\n",
+            SDL_GetError());
         return;
     }
-    _texture = SDL_CreateTexture(
-        _renderer,
-        SDL_PIXELFORMAT_BGRA32,
-        SDL_TEXTUREACCESS_STREAMING,
-        doomGame.getScreenWidth(),
-        doomGame.getScreenHeight());
-    if (_texture == nullptr) {
-        printf("Error: SDL Texture could not be created! SDL_Error: %s\n", SDL_GetError());
+
+    // Load OpenGL extensions
+    if (!gladLoadGL()) {
+        printf("Error: gladLoadGL failed\n");
         return;
     }
+
+    // Initialize imgui
+    ImGui::CreateContext();
+    ImGui_ImplSDL2_InitForOpenGL(_window, _glContext);
+    ImGui_ImplOpenGL3_Init("#version 460");
+
+    // Initialize OpenGL
+    glViewport(0, 0, 1920, 1080); // TODO settings
+    glClearColor(0.2f, 0.2f, 0.2f, 1.f);
+    glEnable(GL_DEPTH_TEST);
 }
 
 App::~App()
 {
-    // Destroy SDL objects and quit SDL subsystems
-    if (_texture != nullptr)
-        SDL_DestroyTexture(_texture);
-    if (_renderer != nullptr)
-        SDL_DestroyRenderer(_renderer);
+    // Destroy imgui
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplSDL2_Shutdown();
+    ImGui::DestroyContext();
+
+    // Destroy window and quit SDL subsystems
+    if (_glContext != nullptr)
+        SDL_GL_DeleteContext(_glContext);
     if (_window != nullptr)
         SDL_DestroyWindow(_window);
+    SDL_Quit();
 }
 
 void App::loop()
@@ -82,5 +102,23 @@ void App::loop()
                 _quit = true;
             }
         }
+
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        gui();
+
+        // Swap draw and display buffers
+        SDL_GL_SwapWindow(_window);
+        SDL_Delay(10);
     }
+}
+
+void App::gui() const
+{
+    imGuiNewFrame();
+
+    ImGui::Begin("Training");
+    ImGui::End();
+
+    imGuiRender();
 }

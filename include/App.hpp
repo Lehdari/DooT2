@@ -12,6 +12,10 @@
 
 #include <SDL.h>
 
+#include "imgui.h"
+#include "backends/imgui_impl_opengl3.h"
+#include "backends/imgui_impl_sdl.h"
+
 
 class App {
 public:
@@ -22,9 +26,31 @@ public:
     void loop();
 
 private:
-    SDL_Window*                 _window;
-    SDL_Renderer*               _renderer;
-    SDL_Texture*                _texture;
+    SDL_Window*     _window;
+    SDL_GLContext   _glContext;
 
-    bool                        _quit;
+    bool            _quit;
+
+    inline void imGuiNewFrame() const;
+    inline void imGuiRender() const;
+
+    void gui() const;
 };
+
+
+void App::imGuiNewFrame() const
+{
+    // Initialize imgui frame
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplSDL2_NewFrame(_window);
+    ImGui::NewFrame();
+}
+
+void App::imGuiRender() const
+{
+    // Generate draw data
+    ImGui::Render();
+
+    // Render imgui
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
