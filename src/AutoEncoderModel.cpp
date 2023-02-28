@@ -409,6 +409,11 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
             encodingVar.min().item<float>(), encodingVar.max().item<float>());
         fflush(stdout);
 
+        {   // Write the state
+            auto stateWriteHandle = trainingState.write();
+            *stateWriteHandle = loss.item<double>();
+        }
+
         if (_abortTraining)
         {
             break;
