@@ -23,7 +23,7 @@ int main()
     AutoEncoderModel model;
 
     Trainer trainer(&model);
-    App app;
+    App app(&trainer, &model);
 
     std::thread trainerThread(&Trainer::loop, &trainer);
     app.loop();
