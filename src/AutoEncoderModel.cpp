@@ -87,6 +87,11 @@ AutoEncoderModel::AutoEncoderModel() :
 {
     using namespace doot2;
 
+    {   // Initialize the time series
+        auto timeSeriesWriteHandle = timeSeries.write();
+        timeSeriesWriteHandle->addSeries<double>("loss", 0.0);
+    }
+
     // Load frame encoder
     if (fs::exists(frameEncoderFilename)) {
         printf("Loading frame encoder model from %s\n", frameEncoderFilename); // TODO logging
@@ -412,6 +417,11 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
         {   // Write the state
             auto stateWriteHandle = trainingState.write();
             (*stateWriteHandle)["loss"] = loss.item<double>();
+        }
+
+        {   // Write the time series
+            auto timeSeriesWriteHandle = timeSeries.write();
+            timeSeriesWriteHandle->addEntries("loss", loss.item<double>());
         }
 
         if (_abortTraining)

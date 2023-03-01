@@ -15,6 +15,8 @@
 #include "Types.hpp"
 #include "SequenceStorage.hpp"
 #include "DoubleBuffer.hpp"
+#include "SingleBuffer.hpp"
+#include "TimeSeries.hpp"
 
 #include <thread>
 #include <mutex>
@@ -47,7 +49,9 @@ public:
 
     void abortTraining() noexcept;
 
+    // Information about training
     DoubleBuffer<TrainingState> trainingState;
+    SingleBuffer<TimeSeries>    timeSeries;
 
 private:
     std::mutex              _trainingMutex;

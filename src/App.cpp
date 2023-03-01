@@ -131,6 +131,14 @@ void App::gui() const
         double loss = stateReadHandle->contains("loss") ? stateReadHandle->at("loss").get<double>() : 0.0;
         ImGui::Text("Loss: %0.5f", loss);
     }
+
+    if (ImPlot::BeginPlot("Loss")) {
+        auto timeSeriesReadHandle = _model->timeSeries.read();
+        auto& lossVector = *timeSeriesReadHandle->getSeriesVector<double>("loss");
+        ImPlot::PlotLine("loss", lossVector.data(), (int)lossVector.size());
+        ImPlot::EndPlot();
+    }
+
     ImGui::End();
 
     imGuiRender();
