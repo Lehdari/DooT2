@@ -53,6 +53,7 @@ Trainer::~Trainer()
 void Trainer::quit()
 {
     _quit = true;
+    _model->abortTraining();
 }
 
 void Trainer::loop()
@@ -123,6 +124,9 @@ void Trainer::loop()
         // Train
         if (_newPatchReady) {
             _model->waitForTrainingFinished();
+            // quit() might've been called in the meanwhile
+            if (_quit) break;
+
             printf("Training...\n");
             _model->trainAsync(_sequenceStorage);
             _newPatchReady = false;
@@ -131,7 +135,7 @@ void Trainer::loop()
         ++_frameId;
     }
 
-    _model->abortTraining();
+    _model->waitForTrainingFinished();
 }
 
 void Trainer::nextMap()
