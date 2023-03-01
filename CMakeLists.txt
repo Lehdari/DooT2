@@ -37,6 +37,7 @@ target_include_directories(doot2
 target_link_libraries(doot2
     PUBLIC  gvizdoom
     PUBLIC  gut_opengl
+    PUBLIC  ImPlot
     PUBLIC  ${SDL2_LIBRARIES}
     PUBLIC  Eigen3::Eigen
     PUBLIC  opencv_highgui
