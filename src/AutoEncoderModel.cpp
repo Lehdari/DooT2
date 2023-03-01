@@ -411,7 +411,7 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
 
         {   // Write the state
             auto stateWriteHandle = trainingState.write();
-            *stateWriteHandle = loss.item<double>();
+            (*stateWriteHandle)["loss"] = loss.item<double>();
         }
 
         if (_abortTraining)

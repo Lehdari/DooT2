@@ -124,7 +124,8 @@ void App::gui() const
     ImGui::Begin("Training");
     {
         auto stateReadHandle = _model->trainingState.read();
-        ImGui::Text("Loss: %0.5f", *stateReadHandle);
+        double loss = stateReadHandle->contains("loss") ? stateReadHandle->at("loss").get<double>() : 0.0;
+        ImGui::Text("Loss: %0.5f", loss);
     }
     ImGui::End();
 

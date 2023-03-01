@@ -10,6 +10,8 @@
 
 #pragma once
 
+#include "nlohmann/json.hpp"
+
 #include "Types.hpp"
 #include "SequenceStorage.hpp"
 #include "DoubleBuffer.hpp"
@@ -19,7 +21,7 @@
 #include <condition_variable>
 
 
-using TrainingState = double; // TODO something more elaborate
+using TrainingState = nlohmann::json;
 
 
 // Interface class for models
