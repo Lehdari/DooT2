@@ -15,6 +15,7 @@
 
 #include "gvizdoom/DoomGame.hpp"
 #include "glad/glad.h"
+#include "implot.h"
 
 
 using namespace doot2;
@@ -71,6 +72,7 @@ App::App(Trainer* trainer, Model* model) :
     ImGui::CreateContext();
     ImGui_ImplSDL2_InitForOpenGL(_window, _glContext);
     ImGui_ImplOpenGL3_Init("#version 460");
+    ImPlot::CreateContext();
 
     // Initialize OpenGL
     glViewport(0, 0, 1920, 1080); // TODO settings
@@ -81,6 +83,7 @@ App::App(Trainer* trainer, Model* model) :
 App::~App()
 {
     // Destroy imgui
+    ImPlot::DestroyContext();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();

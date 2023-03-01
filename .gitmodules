@@ -7,3 +7,6 @@
 [submodule "ext/GraphicsUtils"]
 	path = ext/GraphicsUtils
 	url = git@github.com:Lehdari/GraphicsUtils.git
+[submodule "ext/implot"]
+	path = ext/implot
+	url = git@github.com:epezent/implot.git

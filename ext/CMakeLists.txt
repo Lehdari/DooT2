@@ -2,6 +2,19 @@
 add_subdirectory(GraphicsUtils)
 add_subdirectory(GViZDoom)
 
+# ImPlot
+add_library(ImPlot SHARED
+    implot/implot.cpp
+    implot/implot_demo.cpp
+    implot/implot_items.cpp
+)
+target_include_directories(ImPlot
+    PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/implot
+)
+target_link_libraries(ImPlot
+    PRIVATE gut_opengl
+)
+
 # PyTorch requires a bit of extra work:
 
 # Create build directory
