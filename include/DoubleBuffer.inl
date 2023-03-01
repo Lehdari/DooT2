@@ -35,6 +35,12 @@ const T_Data& DoubleBuffer<T_Data>::ReadHandle::operator*() const noexcept
 }
 
 template<typename T_Data>
+const T_Data* DoubleBuffer<T_Data>::ReadHandle::operator->() const noexcept
+{
+    return _data;
+}
+
+template<typename T_Data>
 DoubleBuffer<T_Data>::WriteHandle::~WriteHandle()
 {
     *_writeHandleActive = false;
@@ -60,6 +66,12 @@ template<typename T_Data>
 T_Data& DoubleBuffer<T_Data>::WriteHandle::operator*() noexcept
 {
     return *_data;
+}
+
+template<typename T_Data>
+T_Data* DoubleBuffer<T_Data>::WriteHandle::operator->() noexcept
+{
+    return _data;
 }
 
 template<typename T_Data>

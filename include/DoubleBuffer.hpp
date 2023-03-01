@@ -28,6 +28,7 @@ public:
         ~ReadHandle();
 
         const T_Data& operator*() const noexcept;
+        const T_Data* operator->() const noexcept;
 
         friend class DoubleBuffer<T_Data>;
 
@@ -50,6 +51,7 @@ public:
         ~WriteHandle();
 
         T_Data& operator*() noexcept;
+        T_Data* operator->() noexcept;
 
         friend class DoubleBuffer<T_Data>;
 
