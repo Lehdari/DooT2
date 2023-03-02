@@ -121,18 +121,20 @@ void App::loop()
     }
 }
 
-void App::gui() const
+void App::gui()
 {
     imGuiNewFrame();
 
     ImGui::Begin("Training");
-    {
-        auto stateReadHandle = _model->trainingState.read();
-        double loss = stateReadHandle->contains("loss") ? stateReadHandle->at("loss").get<double>() : 0.0;
-        ImGui::Text("Loss: %0.5f", loss);
-    }
+    ImGui::Checkbox("Autofit plot", &_guiState._lossPlotAutoFit);
 
     if (ImPlot::BeginPlot("Loss")) {
+        if (_guiState._lossPlotAutoFit) {
+            ImPlot::SetupAxes("Training Step", "Loss",ImPlotAxisFlags_AutoFit,ImPlotAxisFlags_AutoFit);
+        }
+        else {
+            ImPlot::SetupAxes("Training Step", "Loss", ImPlotAxisFlags_None, ImPlotAxisFlags_None);
+        }
         auto timeSeriesReadHandle = _model->timeSeries.read();
         auto& lossVector = *timeSeriesReadHandle->getSeriesVector<double>("loss");
         ImPlot::PlotLine("loss", lossVector.data(), (int)lossVector.size());

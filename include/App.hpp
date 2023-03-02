@@ -41,7 +41,13 @@ private:
     inline void imGuiNewFrame() const;
     inline void imGuiRender() const;
 
-    void gui() const;
+    struct GuiState {
+        bool    _lossPlotAutoFit    {false};
+    };
+
+    GuiState        _guiState;
+
+    void gui();
 };
 
 
