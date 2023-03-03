@@ -147,8 +147,20 @@ void App::gui()
             auto lossPlotAxisFlags = _guiState._lossPlotAutoFit ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
             ImPlot::SetupAxes("Training Step", "Loss", lossPlotAxisFlags, lossPlotAxisFlags);
 
+            // TODO fetch all these vectors dynamically in runtime (except for time)
+            auto& timeVector = *timeSeriesReadHandle->getSeriesVector<double>("time");
             auto& lossVector = *timeSeriesReadHandle->getSeriesVector<double>("loss");
-            ImPlot::PlotLine("loss", lossVector.data(), (int) lossVector.size());
+            auto& frameLossVector = *timeSeriesReadHandle->getSeriesVector<double>("frameLoss");
+            auto& flowForwardLossVector = *timeSeriesReadHandle->getSeriesVector<double>("flowForwardLoss");
+            auto& flowBackwardLossVector = *timeSeriesReadHandle->getSeriesVector<double>("flowBackwardLoss");
+            auto& frameLossDoubleEdecVector = *timeSeriesReadHandle->getSeriesVector<double>("frameLossDoubleEdec");
+            auto& doubleEncodingLossVector = *timeSeriesReadHandle->getSeriesVector<double>("doubleEncodingLoss");
+            ImPlot::PlotLine("loss", timeVector.data(), lossVector.data(), (int) lossVector.size());
+            ImPlot::PlotLine("frameLoss", timeVector.data(), frameLossVector.data(), (int) frameLossVector.size());
+            ImPlot::PlotLine("flowForwardLoss", timeVector.data(), flowForwardLossVector.data(), (int) flowForwardLossVector.size());
+            ImPlot::PlotLine("flowBackwardLoss", timeVector.data(), flowBackwardLossVector.data(), (int) flowBackwardLossVector.size());
+            ImPlot::PlotLine("frameLossDoubleEdec", timeVector.data(), frameLossDoubleEdecVector.data(), (int) frameLossDoubleEdecVector.size());
+            ImPlot::PlotLine("doubleEncodingLoss", timeVector.data(), doubleEncodingLossVector.data(), (int) doubleEncodingLossVector.size());
             ImPlot::EndPlot();
         }
 
