@@ -17,6 +17,8 @@
 #include "glad/glad.h"
 #include "implot.h"
 
+#include <chrono>
+
 
 using namespace gvizdoom;
 
@@ -97,8 +99,14 @@ App::~App()
 
 void App::loop()
 {
+    using namespace std::chrono;
+
+    constexpr double framerate = 60.0; // TODO settings
+
     SDL_Event event;
     while (!_quit) {
+        auto frameBegin = high_resolution_clock::now();
+
         while(SDL_PollEvent(&event)) {
             ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_QUIT ||
@@ -114,9 +122,14 @@ void App::loop()
 
         gui();
 
+        // Introduce delay to cap the framerate
+        auto frameEnd = high_resolution_clock::now();
+        auto frameTime = duration_cast<microseconds>(frameEnd - frameBegin).count();
+        int delayMs = std::max((int)std::floor((1000.0/framerate)-((double)frameTime*0.001)), 0);
+        SDL_Delay(delayMs);
+
         // Swap draw and display buffers
         SDL_GL_SwapWindow(_window);
-        SDL_Delay(10);
     }
 }
 
