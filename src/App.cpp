@@ -140,14 +140,25 @@ void App::gui()
     ImGui::Begin("Training");
     ImGui::Checkbox("Autofit plot", &_guiState._lossPlotAutoFit);
 
-    if (ImPlot::BeginPlot("Loss")) {
-        auto lossPlotAxisFlags = _guiState._lossPlotAutoFit ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
-        ImPlot::SetupAxes("Training Step", "Loss", lossPlotAxisFlags, lossPlotAxisFlags);
-
+    {   // Loss plot
         auto timeSeriesReadHandle = _model->timeSeries.read();
-        auto& lossVector = *timeSeriesReadHandle->getSeriesVector<double>("loss");
-        ImPlot::PlotLine("loss", lossVector.data(), (int)lossVector.size());
-        ImPlot::EndPlot();
+
+        if (ImPlot::BeginPlot("Loss")) {
+            auto lossPlotAxisFlags = _guiState._lossPlotAutoFit ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
+            ImPlot::SetupAxes("Training Step", "Loss", lossPlotAxisFlags, lossPlotAxisFlags);
+
+            auto& lossVector = *timeSeriesReadHandle->getSeriesVector<double>("loss");
+            ImPlot::PlotLine("loss", lossVector.data(), (int) lossVector.size());
+            ImPlot::EndPlot();
+        }
+
+        if (ImGui::Button("Save")) {
+            auto plotJson = timeSeriesReadHandle->toJson();
+            std::ofstream plotFile("loss.json");
+            plotFile << plotJson;
+            plotFile.close();
+            printf("Plot saved!\n");
+        }
     }
 
     ImGui::End();
