@@ -128,12 +128,9 @@ void App::gui()
     ImGui::Checkbox("Autofit plot", &_guiState._lossPlotAutoFit);
 
     if (ImPlot::BeginPlot("Loss")) {
-        if (_guiState._lossPlotAutoFit) {
-            ImPlot::SetupAxes("Training Step", "Loss",ImPlotAxisFlags_AutoFit,ImPlotAxisFlags_AutoFit);
-        }
-        else {
-            ImPlot::SetupAxes("Training Step", "Loss", ImPlotAxisFlags_None, ImPlotAxisFlags_None);
-        }
+        auto lossPlotAxisFlags = _guiState._lossPlotAutoFit ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
+        ImPlot::SetupAxes("Training Step", "Loss", lossPlotAxisFlags, lossPlotAxisFlags);
+
         auto timeSeriesReadHandle = _model->timeSeries.read();
         auto& lossVector = *timeSeriesReadHandle->getSeriesVector<double>("loss");
         ImPlot::PlotLine("loss", lossVector.data(), (int)lossVector.size());
