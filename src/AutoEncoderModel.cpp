@@ -26,6 +26,7 @@ static constexpr int64_t    nTrainingIterations     = 4*64;
 using namespace torch;
 namespace tf = torch::nn::functional;
 namespace fs = std::filesystem;
+using namespace std::chrono;
 
 
 #define FLOW 1
@@ -83,13 +84,20 @@ AutoEncoderModel::AutoEncoderModel() :
         _frameDecoder->parameters(),
         _flowDecoder->parameters()},
         torch::optim::AdamWOptions(learningRate).betas({0.9, 0.999}).weight_decay(0.001)),
-    _trainingFinished   (true)
+    _trainingFinished   (true),
+    _trainingStartTime  (high_resolution_clock::now())
 {
     using namespace doot2;
 
     {   // Initialize the time series
         auto timeSeriesWriteHandle = timeSeries.write();
+        timeSeriesWriteHandle->addSeries<double>("time", 0.0);
         timeSeriesWriteHandle->addSeries<double>("loss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("frameLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("flowForwardLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("flowBackwardLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("frameLossDoubleEdec", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("doubleEncodingLoss", 0.0);
     }
 
     // Load frame encoder
@@ -421,7 +429,17 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
 
         {   // Write the time series
             auto timeSeriesWriteHandle = timeSeries.write();
-            timeSeriesWriteHandle->addEntries("loss", loss.item<double>());
+            auto currentTime = high_resolution_clock::now();
+
+            timeSeriesWriteHandle->addEntries(
+                "time", (double)duration_cast<milliseconds>(currentTime-_trainingStartTime).count() / 1000.0,
+                "loss", loss.item<double>(),
+                "frameLoss", frameLoss.item<double>(),
+                "flowForwardLoss", flowForwardLoss.item<double>(),
+                "flowBackwardLoss", flowBackwardLoss.item<double>(),
+                "frameLossDoubleEdec", frameLossDoubleEdec.item<double>(),
+                "doubleEncodingLoss", doubleEncodingLoss.item<double>()
+            );
         }
 
         if (_abortTraining)
