@@ -16,6 +16,8 @@
 #include "backends/imgui_impl_opengl3.h"
 #include "backends/imgui_impl_sdl2.h"
 
+#include "gut_opengl/Texture.hpp"
+
 
 class Trainer;
 class Model;
@@ -42,7 +44,8 @@ private:
     inline void imGuiRender() const;
 
     struct GuiState {
-        bool    _lossPlotAutoFit    {false};
+        bool            _lossPlotAutoFit    {false};
+        gut::Texture    _frameTexture;
     };
 
     GuiState        _guiState;
