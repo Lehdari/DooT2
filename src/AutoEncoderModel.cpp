@@ -99,6 +99,10 @@ AutoEncoderModel::AutoEncoderModel() :
         timeSeriesWriteHandle->addSeries<double>("frameLossDoubleEdec", 0.0);
         timeSeriesWriteHandle->addSeries<double>("doubleEncodingLoss", 0.0);
     }
+    // Initialize images
+    {
+        *images["input1"].write() = Image<float>(640, 480, ImageFormat::YUV);
+    }
 
     // Load frame encoder
     if (fs::exists(frameEncoderFilename)) {
@@ -328,6 +332,11 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
 #endif
             torch::Tensor batchOutScaled1CPU = batchOutScaled1.to(torch::kCPU);
             torch::Tensor batchOutScaled2CPU = batchOutScaled2.to(torch::kCPU);
+            {
+                auto input1Handle = images["input1"].write();
+                torch::Tensor input1 = batchIn1CPU.index({(int)displaySeqId, Slice(), Slice(), Slice()});
+                input1Handle->copyFrom(input1.data_ptr<float>());
+            }
             for (int j = 0; j < 480; ++j) {
                 for (int i = 0; i < 640; ++i) {
                     for (int c = 0; c < 3; ++c) {
