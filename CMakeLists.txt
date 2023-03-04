@@ -6,7 +6,7 @@ project(DooT2)
 add_subdirectory(ext)
 
 find_package(SDL2 REQUIRED)
-find_package(Eigen3 REQUIRED)
+find_package(Eigen3 3.4 REQUIRED)
 find_package(OpenCV REQUIRED)
 
 # Source files
