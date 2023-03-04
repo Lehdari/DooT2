@@ -79,6 +79,10 @@ App::App(Trainer* trainer, Model* model) :
     glViewport(0, 0, 1920, 1080); // TODO settings
     glClearColor(0.2f, 0.2f, 0.2f, 1.f);
     glEnable(GL_DEPTH_TEST);
+
+    // Initialize GUI state
+    _guiState._frameTexture.create(doomGame.getScreenWidth(), doomGame.getScreenHeight(),
+        GL_TEXTURE_2D, GL_RGBA, GL_UNSIGNED_BYTE);
 }
 
 App::~App()
@@ -135,9 +139,11 @@ void App::loop()
 
 void App::gui()
 {
+    auto& doomGame = DoomGame::instance();
+
     imGuiNewFrame();
 
-    ImGui::Begin("Training");
+    ImGui::Begin("Plot");
     ImGui::Checkbox("Autofit plot", &_guiState._lossPlotAutoFit);
 
     {   // Loss plot
@@ -173,7 +179,18 @@ void App::gui()
         }
     }
 
-    ImGui::End();
+    ImGui::End(); // Plot
+
+    ImGui::Begin("Frame");
+    {
+        auto frameHandle = _trainer->getFrameReadHandle();
+        _guiState._frameTexture.updateFromBuffer(frameHandle->data(), GL_BGRA);
+    }
+    auto frameTexId = _guiState._frameTexture.id();
+    ImGui::Image((void*)(intptr_t)frameTexId,
+        ImVec2(doomGame.getScreenWidth(), doomGame.getScreenHeight()),
+        ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+    ImGui::End(); // Frame
 
     imGuiRender();
 }
