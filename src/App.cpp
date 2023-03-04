@@ -84,6 +84,9 @@ App::App(Trainer* trainer, Model* model) :
     // Initialize GUI state
     _guiState._frameTexture.create(doomGame.getScreenWidth(), doomGame.getScreenHeight(),
         GL_TEXTURE_2D, GL_RGBA, GL_UNSIGNED_BYTE);
+    _guiState._input1Image = Image<float>(doomGame.getScreenWidth(), doomGame.getScreenHeight());
+    _guiState._input1Texture.create(doomGame.getScreenWidth(), doomGame.getScreenHeight(),
+        GL_TEXTURE_2D, GL_RGBA, GL_UNSIGNED_BYTE);
 }
 
 App::~App()
@@ -187,14 +190,26 @@ void App::gui()
             auto frameHandle = _trainer->getFrameReadHandle();
             _guiState._frameTexture.updateFromBuffer(frameHandle->data(), GL_BGRA);
         }
-        auto frameTexId = _guiState._frameTexture.id();
-        ImGui::Image((void*) (intptr_t) frameTexId,
+        ImGui::Image((void*)(intptr_t)_guiState._frameTexture.id(),
             ImVec2(doomGame.getScreenWidth(), doomGame.getScreenHeight()),
             ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
         ImGui::End(); // Frame
     }
     else {
         ImGui::End(); // Frame
+    }
+
+    if (_guiState._showInput1 && ImGui::Begin("input1", &_guiState._showInput1)) {
+        convertImage(*_model->images["input1"].read(), _guiState._input1Image, ImageFormat::BGRA);
+        _guiState._input1Texture.updateFromBuffer(_guiState._input1Image.data(), GL_BGRA);
+
+        ImGui::Image((void*)(intptr_t)_guiState._input1Texture.id(),
+            ImVec2(_guiState._input1Texture.width(), _guiState._input1Texture.height()),
+            ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+        ImGui::End(); // input1
+    }
+    else {
+        ImGui::End(); // input1
     }
 
     imGuiRender();
