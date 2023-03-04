@@ -45,6 +45,7 @@ private:
 
     struct GuiState {
         bool            _lossPlotAutoFit    {false};
+        bool            _showFrame          {true};
         gut::Texture    _frameTexture;
     };
 

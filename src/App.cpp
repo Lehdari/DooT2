@@ -74,6 +74,7 @@ App::App(Trainer* trainer, Model* model) :
     ImGui_ImplSDL2_InitForOpenGL(_window, _glContext);
     ImGui_ImplOpenGL3_Init("#version 460");
     ImPlot::CreateContext();
+    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     // Initialize OpenGL
     glViewport(0, 0, 1920, 1080); // TODO settings
@@ -181,16 +182,20 @@ void App::gui()
 
     ImGui::End(); // Plot
 
-    ImGui::Begin("Frame");
-    {
-        auto frameHandle = _trainer->getFrameReadHandle();
-        _guiState._frameTexture.updateFromBuffer(frameHandle->data(), GL_BGRA);
+    if (_guiState._showFrame && ImGui::Begin("Frame", &_guiState._showFrame)) {
+        {
+            auto frameHandle = _trainer->getFrameReadHandle();
+            _guiState._frameTexture.updateFromBuffer(frameHandle->data(), GL_BGRA);
+        }
+        auto frameTexId = _guiState._frameTexture.id();
+        ImGui::Image((void*) (intptr_t) frameTexId,
+            ImVec2(doomGame.getScreenWidth(), doomGame.getScreenHeight()),
+            ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+        ImGui::End(); // Frame
     }
-    auto frameTexId = _guiState._frameTexture.id();
-    ImGui::Image((void*)(intptr_t)frameTexId,
-        ImVec2(doomGame.getScreenWidth(), doomGame.getScreenHeight()),
-        ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
-    ImGui::End(); // Frame
+    else {
+        ImGui::End(); // Frame
+    }
 
     imGuiRender();
 }
