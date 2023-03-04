@@ -15,8 +15,9 @@
 #include "imgui.h"
 #include "backends/imgui_impl_opengl3.h"
 #include "backends/imgui_impl_sdl2.h"
-
 #include "gut_opengl/Texture.hpp"
+
+#include "Image.hpp"
 
 
 class Trainer;
@@ -46,7 +47,10 @@ private:
     struct GuiState {
         bool            _lossPlotAutoFit    {false};
         bool            _showFrame          {true};
+        bool            _showInput1         {true};
         gut::Texture    _frameTexture;
+        Image<float>    _input1Image; // for YUV->BGRA conversion
+        gut::Texture    _input1Texture;
     };
 
     GuiState        _guiState;
