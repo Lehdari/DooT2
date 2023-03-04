@@ -215,6 +215,11 @@ INLINE void Image<T_Data>::applyFormatConversion(
     SrcPixelsMap srcPixels(srcBuffer, T_NChannelsSrc, nSrcBufferElements / T_NChannelsSrc);
     DestPixelsMap destPixels(destBuffer, T_NChannelsDest, nDestBufferElements / T_NChannelsDest);
     destPixels = matrix * srcPixels;
+
+    // set alpha channel to 1 (this will break if alpha channel is other than the last one)
+    if constexpr (T_NChannelsSrc == 3 && T_NChannelsDest == 4) {
+        destPixels(Eigen::last, Eigen::all).setOnes();
+    }
 }
 
 
