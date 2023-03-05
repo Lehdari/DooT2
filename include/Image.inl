@@ -15,10 +15,12 @@ INLINE int getImageFormatNChannels(ImageFormat imageFormat)
             return 4;
         case ImageFormat::YUV:
             return 3;
+        case ImageFormat::GRAY:
+            return 1;
         case ImageFormat::UNCHANGED:
             return 0;
         default:
-            return -1;
+            throw std::runtime_error("BUG: Support for the image format not implemented!");
     }
     return -1;
 }
@@ -156,6 +158,11 @@ void Image<T_Data>::convertImageFormat(
         case 0:
             throw std::runtime_error("Invalid image format (bug)");
 
+        case 1:
+            convertImageFormat_<1>(srcFormat, destFormat,
+                srcBuffer, nSrcBufferElements, destBuffer, nDestBufferElements);
+            break;
+
         case 3:
             convertImageFormat_<3>(srcFormat, destFormat,
                 srcBuffer, nSrcBufferElements, destBuffer, nDestBufferElements);
@@ -183,6 +190,12 @@ inline void Image<T_Data>::convertImageFormat_(
         throw std::runtime_error("Invalid image format (bug)");
     case 0: // UNCHANGED, do nothing
         return;
+    case 1: {
+        static const auto conversionMatrix =
+            getImageFormatConversionMatrix<T_Data, T_NChannelsSrc, 1>(srcFormat, destFormat);
+        applyFormatConversion<T_NChannelsSrc, 1>(conversionMatrix,
+            srcBuffer, nSrcBufferElements, destBuffer, nDestBufferElements);
+    }   return;
     case 3: {
         static const auto conversionMatrix =
             getImageFormatConversionMatrix<T_Data, T_NChannelsSrc, 3>(srcFormat, destFormat);
@@ -217,7 +230,7 @@ INLINE void Image<T_Data>::applyFormatConversion(
     destPixels = matrix * srcPixels;
 
     // set alpha channel to 1 (this will break if alpha channel is other than the last one)
-    if constexpr (T_NChannelsSrc == 3 && T_NChannelsDest == 4) {
+    if constexpr (T_NChannelsSrc < 4 && T_NChannelsDest == 4) {
         destPixels(Eigen::last, Eigen::all).setOnes();
     }
 }
@@ -323,6 +336,14 @@ inline Eigen::Matrix<T_Data, T_NChannelsDest, T_NChannelsSrc> getImageFormatConv
                 }();
                 return matrix;
             }
+            case ImageFormat::GRAY: { // BGRA -> GRAY
+                static const auto matrix = [](){
+                    ConversionMatrix matrix;
+                    matrix  <<  0.114,      0.587,      0.299,      0.0;
+                    return matrix;
+                }();
+                return matrix;
+            }
             default:
                 break;
             }
@@ -346,7 +367,46 @@ inline Eigen::Matrix<T_Data, T_NChannelsDest, T_NChannelsSrc> getImageFormatConv
                 }();
                 return matrix;
             }
+            case ImageFormat::GRAY: { // YUV -> GRAY
+                static const auto matrix = [](){
+                    ConversionMatrix matrix;
+                    matrix  <<  1.0,    0.0,    0.0;
+                    return matrix;
+                }();
+                return matrix;
+            }
+            default: break;
+            }
+        }   break;
 
+        default: break;
+        }
+    }
+    else if constexpr (T_NChannelsSrc == 1) {
+        switch (srcFormat) {
+        case ImageFormat::GRAY: {
+            switch (destFormat) {
+            case ImageFormat::BGRA: { // GRAY -> BGRA
+                static const auto matrix = [](){
+                    ConversionMatrix matrix;
+                    matrix  <<  1.0,
+                                1.0,
+                                1.0,
+                                0.0;
+                    return matrix;
+                }();
+                return matrix;
+            }
+            case ImageFormat::YUV: { // GRAY -> YUV
+                static const auto matrix = [](){
+                    ConversionMatrix matrix;
+                    matrix  <<  1.0,
+                                0.0,
+                                0.0;
+                    return matrix;
+                }();
+                return matrix;
+            }
             default: break;
             }
         }   break;
