@@ -19,6 +19,7 @@ set(DOOT2_SOURCES
     src/FlowDecoder.cpp
     src/FrameDecoder.cpp
     src/FrameEncoder.cpp
+    src/GuiImageRelay.cpp
     src/HeatmapActionModule.cpp
     src/Model.cpp
     src/ResNeXtModule.cpp
