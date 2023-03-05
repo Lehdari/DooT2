@@ -13,8 +13,6 @@
 #include "Constants.hpp"
 
 #include <gvizdoom/DoomGame.hpp>
-#include <opencv2/core/mat.hpp> // TODO temp
-#include <opencv2/highgui.hpp> // TODO temp
 
 #include <filesystem>
 #include <random>
@@ -65,15 +63,6 @@ namespace {
             yuvLoss(target, pred) +
             gradWeight * yuvLoss(targetGradX, predGradX) +
             gradWeight * yuvLoss(targetGradY, predGradY);
-    }
-
-    void imShowYUV(const std::string& windowName, cv::Mat& image) {
-        Image<float> imageYUV(image.cols, image.rows, ImageFormat::YUV, reinterpret_cast<float*>(image.data));
-        Image<float> imageBGRA;
-        convertImage(imageYUV, imageBGRA, ImageFormat::BGRA);
-        cv::Mat matBGRA(image.rows, image.cols, CV_32FC4, const_cast<float*>(imageBGRA.data()));
-
-        cv::imshow(windowName, matBGRA);
     }
 
 }
@@ -175,23 +164,6 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
         device = torch::kCUDA;
     }
     //torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU); // shorthand for above
-
-    cv::Mat imageIn1(480, 640, CV_32FC3); // TODO temp
-    cv::Mat imageIn1Scaled1(240, 320, CV_32FC3); // TODO temp
-    cv::Mat imageIn1Scaled2(120, 160, CV_32FC3); // TODO temp
-    cv::Mat imageIn2(480, 640, CV_32FC3); // TODO temp
-    cv::Mat imageOut(480, 640, CV_32FC3); // TODO temp
-    cv::Mat imageOut2(480, 640, CV_32FC3); // TODO temp
-    cv::Mat imageOutScaled1(240, 320, CV_32FC3); // TODO temp
-    cv::Mat imageOutScaled2(120, 160, CV_32FC3); // TODO temp
-    cv::Mat imageFlowForward(480, 640, CV_32FC3, cv::Scalar(0.5f, 0.5f, 0.5f)); // TODO temp
-    cv::Mat imageFlowForwardMapped(480, 640, CV_32FC3); // TODO temp
-    cv::Mat imageFlowForwardDiff(480, 640, CV_32FC1); // TODO temp
-    cv::Mat imageFlowBackward(480, 640, CV_32FC3, cv::Scalar(0.5f, 0.5f, 0.5f)); // TODO temp
-    cv::Mat imageFlowBackwardMapped(480, 640, CV_32FC3); // TODO temp
-    cv::Mat imageFlowBackwardDiff(480, 640, CV_32FC1); // TODO temp
-    cv::Mat imageInGradX(480, 639, CV_32FC3); // TODO temp
-    cv::Mat imageInGradY(479, 640, CV_32FC3); // TODO temp
 
     // Move model parameters to GPU
     _frameEncoder->to(device);
@@ -316,7 +288,6 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
 
         if (_abortTraining)
         {
-            cv::destroyAllWindows();
             _trainingFinished = true;
             return;
         }
@@ -369,80 +340,6 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
             images["flow_backward"].write()->copyFrom(flowBackwardCPU.data_ptr<float>());
             images["flow_backward_mapped"].write()->copyFrom(flowFrameBackwardCPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
             images["flow_backward_diff"].write()->copyFrom(flowBackwardDiffCPU.data_ptr<float>());
-
-            for (int j = 0; j < 480; ++j) {
-                for (int i = 0; i < 640; ++i) {
-                    for (int c = 0; c < 3; ++c) {
-                        imageIn1.ptr<float>(j)[i * 3 + c] = batchIn1CPU.data_ptr<float>()
-                            [j * 640 * 3 + i * 3 + c];
-                        imageIn2.ptr<float>(j)[i * 3 + c] = batchIn2CPU.data_ptr<float>()
-                            [j * 640 * 3 + i * 3 + c];
-#if FLOW
-                        imageFlowForwardMapped.ptr<float>(j)[i * 3 + c] = flowFrameForwardCPU.data_ptr<float>()
-                            [c * 480 * 640 + j * 640 + i];
-                        imageFlowBackwardMapped.ptr<float>(j)[i * 3 + c] = flowFrameBackwardCPU.data_ptr<float>()
-                            [c * 480 * 640 + j * 640 + i];
-#endif
-                        imageOut.ptr<float>(j)[i * 3 + c] = outputCPU.data_ptr<float>()
-                            [c * 480 * 640 + j * 640 + i];
-#if DOUBLE_EDEC
-                        imageOut2.ptr<float>(j)[i * 3 + c] = output2CPU.data_ptr<float>()
-                            [c * 480 * 640 + j * 640 + i];
-#endif
-                    }
-#if FLOW
-                    for (int c = 0; c < 2; ++c) {
-                        imageFlowForward.ptr<float>(j)[i * 3 + c] = flowForwardCPU.data_ptr<float>()
-                            [c * 480 * 640 + j * 640 + i];
-                        imageFlowBackward.ptr<float>(j)[i * 3 + c] = flowBackwardCPU.data_ptr<float>()
-                            [c * 480 * 640 + j * 640 + i];
-                    }
-                    imageFlowForwardDiff.ptr<float>(j)[i] = flowForwardDiffCPU.data_ptr<float>()
-                        [j * 640 + i];
-                    imageFlowBackwardDiff.ptr<float>(j)[i] = flowBackwardDiffCPU.data_ptr<float>()
-                        [j * 640 + i];
-#endif
-                }
-            }
-            for (int j = 0; j < 240; ++j) {
-                for (int i = 0; i < 320; ++i) {
-                    for (int c = 0; c < 3; ++c) {
-                        imageIn1Scaled1.ptr<float>(j)[i * 3 + c] = batchIn1Scaled1CPU.data_ptr<float>()
-                            [j * 320 * 3 + i * 3 + c];
-                        imageOutScaled1.ptr<float>(j)[i * 3 + c] = batchOutScaled1CPU.data_ptr<float>()
-                            [c * 240 * 320 + j * 320 + i];
-                    }
-                }
-            }
-            for (int j = 0; j < 120; ++j) {
-                for (int i = 0; i < 160; ++i) {
-                    for (int c = 0; c < 3; ++c) {
-                        imageIn1Scaled2.ptr<float>(j)[i * 3 + c] = batchIn1Scaled2CPU.data_ptr<float>()
-                            [j * 160 * 3 + i * 3 + c];
-                        imageOutScaled2.ptr<float>(j)[i * 3 + c] = batchOutScaled2CPU.data_ptr<float>()
-                            [c * 120 * 160 + j * 160 + i];
-                    }
-                }
-            }
-            imShowYUV("Input 1", imageIn1);
-            imShowYUV("Input 1 Scaled 1", imageIn1Scaled1);
-            imShowYUV("Input 1 Scaled 2", imageIn1Scaled2);
-            imShowYUV("Input 2", imageIn2);
-#if FLOW
-            cv::imshow("Forward Flow", imageFlowForward);
-            imShowYUV("Forward Flow Mapped", imageFlowForwardMapped);
-            cv::imshow("Forward Flow Diff", imageFlowForwardDiff);
-            cv::imshow("Backward Flow", imageFlowBackward);
-            imShowYUV("Backward Flow Mapped", imageFlowBackwardMapped);
-            cv::imshow("Backward Flow Diff", imageFlowBackwardDiff);
-#endif
-            imShowYUV("Prediction 1", imageOut);
-#if DOUBLE_EDEC
-            imShowYUV("Prediction 1, Double EDEC", imageOut2);
-#endif
-            imShowYUV("Prediction 1 Scaled 1", imageOutScaled1);
-            imShowYUV("Prediction 1 Scaled 2", imageOutScaled2);
-            cv::waitKey(1);
         }
 
         // Print loss
