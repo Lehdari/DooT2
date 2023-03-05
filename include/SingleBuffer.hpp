@@ -29,6 +29,7 @@ public:
 
         const T_Data& operator*() const noexcept;
         const T_Data* operator->() const noexcept;
+        const T_Data* get() const noexcept;
 
         friend class SingleBuffer<T_Data>;
 
@@ -52,6 +53,7 @@ public:
 
         T_Data& operator*() noexcept;
         T_Data* operator->() noexcept;
+        T_Data* get() noexcept;
 
         friend class SingleBuffer<T_Data>;
 
