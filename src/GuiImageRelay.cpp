@@ -19,7 +19,7 @@ static inline ImageFormat inferTargetFormat(ImageFormat imageBufferFormat)
 {
     switch (imageBufferFormat) {
         case ImageFormat::GRAY:
-            return ImageFormat::GRAY;
+            return ImageFormat::BGRA; // Actually just use BGRA since GRAY renders by only using the red channel
         default:
             return ImageFormat::BGRA;
     }
