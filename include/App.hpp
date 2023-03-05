@@ -17,7 +17,7 @@
 #include "backends/imgui_impl_sdl2.h"
 #include "gut_opengl/Texture.hpp"
 
-#include "Image.hpp"
+#include "GuiImageRelay.hpp"
 
 
 class Trainer;
@@ -45,12 +45,15 @@ private:
     inline void imGuiRender() const;
 
     struct GuiState {
+        using ImageRelayMap = std::unordered_map<std::string, GuiImageRelay>;
+
         bool            _lossPlotAutoFit    {false};
         bool            _showFrame          {true};
-        bool            _showInput1         {true};
         gut::Texture    _frameTexture;
-        Image<float>    _input1Image; // for YUV->BGRA conversion
-        gut::Texture    _input1Texture;
+
+        bool            _showTrainingImages {true};
+        ImageRelayMap   _modelImageRelays;
+        std::string     _currentModelImage;
     };
 
     GuiState        _guiState;
