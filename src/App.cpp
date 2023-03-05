@@ -84,9 +84,9 @@ App::App(Trainer* trainer, Model* model) :
     // Initialize GUI state
     _guiState._frameTexture.create(doomGame.getScreenWidth(), doomGame.getScreenHeight(),
         GL_TEXTURE_2D, GL_RGBA, GL_UNSIGNED_BYTE);
-    _guiState._input1Image = Image<float>(doomGame.getScreenWidth(), doomGame.getScreenHeight());
-    _guiState._input1Texture.create(doomGame.getScreenWidth(), doomGame.getScreenHeight(),
-        GL_TEXTURE_2D, GL_RGBA, GL_UNSIGNED_BYTE);
+    for (auto& [name, imageBuffer] : _model->images) {
+        _guiState._modelImageRelays.emplace(name, &imageBuffer);
+    }
 }
 
 App::~App()
@@ -199,17 +199,26 @@ void App::gui()
         ImGui::End(); // Frame
     }
 
-    if (_guiState._showInput1 && ImGui::Begin("input1", &_guiState._showInput1)) {
-        convertImage(*_model->images["input1"].read(), _guiState._input1Image, ImageFormat::BGRA);
-        _guiState._input1Texture.updateFromBuffer(_guiState._input1Image.data(), GL_BGRA);
+    if (_guiState._showTrainingImages && ImGui::Begin("Training Images", &_guiState._showTrainingImages)) {
+        if (ImGui::BeginCombo("##combo", _guiState._currentModelImage.c_str())) // The second parameter is the label previewed before opening the combo.
+        {
+            for (auto& [name, imageRelay] : _guiState._modelImageRelays) {
+                bool isSelected = (_guiState._currentModelImage == name);
+                if (ImGui::Selectable(name.c_str(), isSelected))
+                    _guiState._currentModelImage = name;
+                if (isSelected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
 
-        ImGui::Image((void*)(intptr_t)_guiState._input1Texture.id(),
-            ImVec2(_guiState._input1Texture.width(), _guiState._input1Texture.height()),
-            ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
-        ImGui::End(); // input1
+        if (!_guiState._currentModelImage.empty())
+            _guiState._modelImageRelays[_guiState._currentModelImage].render();
+
+        ImGui::End(); // Training Images
     }
     else {
-        ImGui::End(); // input1
+        ImGui::End(); // Training Images
     }
 
     imGuiRender();
