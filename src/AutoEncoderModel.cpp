@@ -12,6 +12,7 @@
 #include "SequenceStorage.hpp"
 #include "Constants.hpp"
 
+#include <gvizdoom/DoomGame.hpp>
 #include <opencv2/core/mat.hpp> // TODO temp
 #include <opencv2/highgui.hpp> // TODO temp
 
@@ -89,6 +90,8 @@ AutoEncoderModel::AutoEncoderModel() :
 {
     using namespace doot2;
 
+    auto& doomGame = gvizdoom::DoomGame::instance();
+
     {   // Initialize the time series
         auto timeSeriesWriteHandle = timeSeries.write();
         timeSeriesWriteHandle->addSeries<double>("time", 0.0);
@@ -101,7 +104,10 @@ AutoEncoderModel::AutoEncoderModel() :
     }
     // Initialize images
     {
-        *images["input1"].write() = Image<float>(640, 480, ImageFormat::YUV);
+        auto width = doomGame.getScreenWidth();
+        auto height = doomGame.getScreenHeight();
+        *images["input_1"].write() = Image<float>(width, height, ImageFormat::YUV);
+        *images["prediction_1"].write() = Image<float>(width, height, ImageFormat::YUV);
     }
 
     // Load frame encoder
@@ -302,7 +308,7 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
             _trainingFinished = true;
             return;
         }
-        
+
         // Backward pass
         loss.backward();
 
@@ -314,60 +320,59 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
             _flowDecoder->zero_grad();
 
             // Display
-            torch::Tensor batchIn1CPU = batchIn1.to(torch::kCPU);
-            torch::Tensor batchIn1Scaled1CPU = batchIn1Scaled1.to(torch::kCPU);
-            torch::Tensor batchIn1Scaled2CPU = batchIn1Scaled2.to(torch::kCPU);
-            torch::Tensor batchIn2CPU = batchIn2.to(torch::kCPU);
+            torch::Tensor batchIn1CPU = batchIn1.index({(int)displaySeqId, "..."}).to(torch::kCPU);
+            torch::Tensor batchIn1Scaled1CPU = batchIn1Scaled1.index({(int)displaySeqId, "..."}).to(torch::kCPU);
+            torch::Tensor batchIn1Scaled2CPU = batchIn1Scaled2.index({(int)displaySeqId, "..."}).to(torch::kCPU);
+            torch::Tensor batchIn2CPU = batchIn2.index({(int)displaySeqId, "..."}).to(torch::kCPU);
 #if FLOW
-            torch::Tensor flowForwardCPU = flowForward.to(torch::kCPU) * 2.0f + 0.5f;
-            torch::Tensor flowFrameForwardCPU = flowFrameForward.to(torch::kCPU);
-            torch::Tensor flowForwardDiffCPU = flowForwardDiff.contiguous().to(torch::kCPU);
-            torch::Tensor flowBackwardCPU = flowBackward.to(torch::kCPU) * 2.0f + 0.5f;
-            torch::Tensor flowFrameBackwardCPU = flowFrameBackward.to(torch::kCPU);
-            torch::Tensor flowBackwardDiffCPU = flowBackwardDiff.contiguous().to(torch::kCPU);
+            torch::Tensor flowForwardCPU = flowForward.index({(int)displaySeqId, "..."}).to(torch::kCPU) * 2.0f + 0.5f;
+            torch::Tensor flowFrameForwardCPU = flowFrameForward.index({(int)displaySeqId, "..."}).to(torch::kCPU);
+            torch::Tensor flowForwardDiffCPU = flowForwardDiff.index({(int)displaySeqId, "..."}).contiguous().to(torch::kCPU);
+            torch::Tensor flowBackwardCPU = flowBackward.index({(int)displaySeqId, "..."}).to(torch::kCPU) * 2.0f + 0.5f;
+            torch::Tensor flowFrameBackwardCPU = flowFrameBackward.index({(int)displaySeqId, "..."}).to(torch::kCPU);
+            torch::Tensor flowBackwardDiffCPU = flowBackwardDiff.index({(int)displaySeqId, "..."}).contiguous().to(torch::kCPU);
 #endif
-            torch::Tensor outputCPU = batchOut.to(torch::kCPU);
+            torch::Tensor outputCPU = batchOut.index({(int)displaySeqId, "..."}).to(torch::kCPU);
 #if DOUBLE_EDEC
-            torch::Tensor output2CPU = batchOut2.to(torch::kCPU);
+            torch::Tensor output2CPU = batchOut2.index({(int)displaySeqId, "..."}).to(torch::kCPU);
 #endif
-            torch::Tensor batchOutScaled1CPU = batchOutScaled1.to(torch::kCPU);
-            torch::Tensor batchOutScaled2CPU = batchOutScaled2.to(torch::kCPU);
-            {
-                auto input1Handle = images["input1"].write();
-                torch::Tensor input1 = batchIn1CPU.index({(int)displaySeqId, Slice(), Slice(), Slice()});
-                input1Handle->copyFrom(input1.data_ptr<float>());
-            }
+            torch::Tensor batchOutScaled1CPU = batchOutScaled1.index({(int)displaySeqId, "..."}).to(torch::kCPU);
+            torch::Tensor batchOutScaled2CPU = batchOutScaled2.index({(int)displaySeqId, "..."}).to(torch::kCPU);
+
+            images["input_1"].write()->copyFrom(batchIn1CPU.data_ptr<float>());
+            images["prediction_1"].write()->copyFrom(outputCPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
+
             for (int j = 0; j < 480; ++j) {
                 for (int i = 0; i < 640; ++i) {
                     for (int c = 0; c < 3; ++c) {
                         imageIn1.ptr<float>(j)[i * 3 + c] = batchIn1CPU.data_ptr<float>()
-                            [displaySeqId * 480 * 640 * 3 + j * 640 * 3 + i * 3 + c];
+                            [j * 640 * 3 + i * 3 + c];
                         imageIn2.ptr<float>(j)[i * 3 + c] = batchIn2CPU.data_ptr<float>()
-                            [displaySeqId * 480 * 640 * 3 + j * 640 * 3 + i * 3 + c];
+                            [j * 640 * 3 + i * 3 + c];
 #if FLOW
                         imageFlowForwardMapped.ptr<float>(j)[i * 3 + c] = flowFrameForwardCPU.data_ptr<float>()
-                            [displaySeqId * 3 * 480 * 640 + c * 480 * 640 + j * 640 + i];
+                            [c * 480 * 640 + j * 640 + i];
                         imageFlowBackwardMapped.ptr<float>(j)[i * 3 + c] = flowFrameBackwardCPU.data_ptr<float>()
-                            [displaySeqId * 3 * 480 * 640 + c * 480 * 640 + j * 640 + i];
+                            [c * 480 * 640 + j * 640 + i];
 #endif
                         imageOut.ptr<float>(j)[i * 3 + c] = outputCPU.data_ptr<float>()
-                            [displaySeqId * 3 * 480 * 640 + c * 480 * 640 + j * 640 + i];
+                            [c * 480 * 640 + j * 640 + i];
 #if DOUBLE_EDEC
                         imageOut2.ptr<float>(j)[i * 3 + c] = output2CPU.data_ptr<float>()
-                            [displaySeqId * 3 * 480 * 640 + c * 480 * 640 + j * 640 + i];
+                            [c * 480 * 640 + j * 640 + i];
 #endif
                     }
 #if FLOW
                     for (int c = 0; c < 2; ++c) {
                         imageFlowForward.ptr<float>(j)[i * 3 + c] = flowForwardCPU.data_ptr<float>()
-                            [displaySeqId * 2 * 480 * 640 + c * 480 * 640 + j * 640 + i];
+                            [c * 480 * 640 + j * 640 + i];
                         imageFlowBackward.ptr<float>(j)[i * 3 + c] = flowBackwardCPU.data_ptr<float>()
-                            [displaySeqId * 2 * 480 * 640 + c * 480 * 640 + j * 640 + i];
+                            [c * 480 * 640 + j * 640 + i];
                     }
                     imageFlowForwardDiff.ptr<float>(j)[i] = flowForwardDiffCPU.data_ptr<float>()
-                        [displaySeqId * 480 * 640 + j * 640 + i];
+                        [j * 640 + i];
                     imageFlowBackwardDiff.ptr<float>(j)[i] = flowBackwardDiffCPU.data_ptr<float>()
-                        [displaySeqId * 480 * 640 + j * 640 + i];
+                        [j * 640 + i];
 #endif
                 }
             }
@@ -375,9 +380,9 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
                 for (int i = 0; i < 320; ++i) {
                     for (int c = 0; c < 3; ++c) {
                         imageIn1Scaled1.ptr<float>(j)[i * 3 + c] = batchIn1Scaled1CPU.data_ptr<float>()
-                            [displaySeqId * 240 * 320 * 3 + j * 320 * 3 + i * 3 + c];
+                            [j * 320 * 3 + i * 3 + c];
                         imageOutScaled1.ptr<float>(j)[i * 3 + c] = batchOutScaled1CPU.data_ptr<float>()
-                            [displaySeqId * 3 * 240 * 320 + c * 240 * 320 + j * 320 + i];
+                            [c * 240 * 320 + j * 320 + i];
                     }
                 }
             }
@@ -385,9 +390,9 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
                 for (int i = 0; i < 160; ++i) {
                     for (int c = 0; c < 3; ++c) {
                         imageIn1Scaled2.ptr<float>(j)[i * 3 + c] = batchIn1Scaled2CPU.data_ptr<float>()
-                            [displaySeqId * 120 * 160 * 3 + j * 160 * 3 + i * 3 + c];
+                            [j * 160 * 3 + i * 3 + c];
                         imageOutScaled2.ptr<float>(j)[i * 3 + c] = batchOutScaled2CPU.data_ptr<float>()
-                            [displaySeqId * 3 * 120 * 160 + c * 120 * 160 + j * 160 + i];
+                            [c * 120 * 160 + j * 160 + i];
                     }
                 }
             }
