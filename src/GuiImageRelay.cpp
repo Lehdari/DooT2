@@ -14,9 +14,42 @@
 #include "imgui.h"
 
 
-GuiImageRelay::GuiImageRelay(SingleBuffer<Image<float>>* imageBuffer) :
-    _imageBuffer    (imageBuffer)
+// Helper function for deciding which channel format to use for the image relay
+static inline ImageFormat inferTargetFormat(ImageFormat imageBufferFormat)
 {
+    switch (imageBufferFormat) {
+        case ImageFormat::GRAY:
+            return ImageFormat::GRAY;
+        default:
+            return ImageFormat::BGRA;
+    }
+
+    throw std::runtime_error("BUG: Should not be reached");
+}
+
+// Helper function for ImageFormat -> GLEnum mapping
+static inline GLenum toGLFormat(ImageFormat format)
+{
+    switch (format) {
+        case ImageFormat::BGRA:
+            return GL_BGRA;
+        case ImageFormat::GRAY:
+            return GL_RED;
+        default:
+            throw std::runtime_error("Unsupported target format");
+    }
+
+    throw std::runtime_error("BUG: Should not be reached");
+}
+
+
+GuiImageRelay::GuiImageRelay(SingleBuffer<Image<float>>* imageBuffer) :
+    _imageBuffer    (imageBuffer),
+    _targetFormat   (_imageBuffer == nullptr ? ImageFormat::BGRA : inferTargetFormat(_imageBuffer->read()->format())),
+    _texture        (GL_TEXTURE_2D, _targetFormat == ImageFormat::GRAY ? GL_RED : GL_RGBA, GL_FLOAT)
+{
+    auto imageHandle = _imageBuffer->read();
+    _texture.create(imageHandle->width(), imageHandle->height());
 }
 
 void GuiImageRelay::render()
@@ -28,13 +61,14 @@ void GuiImageRelay::render()
     auto* renderImage = imageHandle.get();
 
     // Conversion might be required
-    if (imageHandle->format() != ImageFormat::BGRA) {
-        convertImage(*imageHandle, _image, ImageFormat::BGRA);
+    if (imageHandle->format() != _targetFormat) {
+        convertImage(*imageHandle, _image, _targetFormat);
         renderImage = &_image;
     }
 
     // Update texture
-    _texture.updateFromBuffer(renderImage->data(), GL_BGRA, renderImage->width(), renderImage->height());
+    _texture.updateFromBuffer(renderImage->data(), toGLFormat(renderImage->format()),
+        renderImage->width(), renderImage->height());
 
     // Render
     ImGui::Image((void*)(intptr_t)_texture.id(),

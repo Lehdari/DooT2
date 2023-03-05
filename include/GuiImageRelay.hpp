@@ -29,6 +29,7 @@ public:
 
 private:
     SingleBuffer<Image<float>>* _imageBuffer;
+    ImageFormat                 _targetFormat;  // format the input image will be converted to
     Image<float>                _image;         // used for potential conversions
     gut::Texture                _texture;
 };
