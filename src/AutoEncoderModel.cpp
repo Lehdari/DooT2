@@ -107,7 +107,19 @@ AutoEncoderModel::AutoEncoderModel() :
         auto width = doomGame.getScreenWidth();
         auto height = doomGame.getScreenHeight();
         *images["input_1"].write() = Image<float>(width, height, ImageFormat::YUV);
+        *images["input_1_scaled_1"].write() = Image<float>(width/2, height/2, ImageFormat::YUV);
+        *images["input_1_scaled_2"].write() = Image<float>(width/4, height/4, ImageFormat::YUV);
+        *images["input_2"].write() = Image<float>(width, height, ImageFormat::YUV);
         *images["prediction_1"].write() = Image<float>(width, height, ImageFormat::YUV);
+        *images["prediction_1_scaled_1"].write() = Image<float>(width/2, height/2, ImageFormat::YUV);
+        *images["prediction_1_scaled_2"].write() = Image<float>(width/4, height/4, ImageFormat::YUV);
+        *images["prediction_1_double_edec"].write() = Image<float>(width, height, ImageFormat::YUV);
+        *images["flow_forward"].write() = Image<float>(width, height, ImageFormat::BGRA);
+        *images["flow_forward_mapped"].write() = Image<float>(width, height, ImageFormat::YUV);
+        *images["flow_forward_diff"].write() = Image<float>(width, height, ImageFormat::GRAY);
+        *images["flow_backward"].write() = Image<float>(width, height, ImageFormat::BGRA);
+        *images["flow_backward_mapped"].write() = Image<float>(width, height, ImageFormat::YUV);
+        *images["flow_backward_diff"].write() = Image<float>(width, height, ImageFormat::GRAY);
     }
 
     // Load frame encoder
@@ -326,9 +338,13 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
             torch::Tensor batchIn2CPU = batchIn2.index({(int)displaySeqId, "..."}).to(torch::kCPU);
 #if FLOW
             torch::Tensor flowForwardCPU = flowForward.index({(int)displaySeqId, "..."}).to(torch::kCPU) * 2.0f + 0.5f;
+            flowForwardCPU = torch::cat({flowForwardCPU, torch::zeros({flowForwardCPU.sizes()[0], flowForwardCPU.sizes()[1], 1l})}, 2);
+            flowForwardCPU = torch::cat({flowForwardCPU, torch::ones({flowForwardCPU.sizes()[0], flowForwardCPU.sizes()[1], 1l})}, 2);
             torch::Tensor flowFrameForwardCPU = flowFrameForward.index({(int)displaySeqId, "..."}).to(torch::kCPU);
             torch::Tensor flowForwardDiffCPU = flowForwardDiff.index({(int)displaySeqId, "..."}).contiguous().to(torch::kCPU);
             torch::Tensor flowBackwardCPU = flowBackward.index({(int)displaySeqId, "..."}).to(torch::kCPU) * 2.0f + 0.5f;
+            flowBackwardCPU = torch::cat({flowBackwardCPU, torch::zeros({flowBackwardCPU.sizes()[0], flowBackwardCPU.sizes()[1], 1l})}, 2);
+            flowBackwardCPU = torch::cat({flowBackwardCPU, torch::ones({flowBackwardCPU.sizes()[0], flowBackwardCPU.sizes()[1], 1l})}, 2);
             torch::Tensor flowFrameBackwardCPU = flowFrameBackward.index({(int)displaySeqId, "..."}).to(torch::kCPU);
             torch::Tensor flowBackwardDiffCPU = flowBackwardDiff.index({(int)displaySeqId, "..."}).contiguous().to(torch::kCPU);
 #endif
@@ -340,7 +356,19 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
             torch::Tensor batchOutScaled2CPU = batchOutScaled2.index({(int)displaySeqId, "..."}).to(torch::kCPU);
 
             images["input_1"].write()->copyFrom(batchIn1CPU.data_ptr<float>());
+            images["input_1_scaled_1"].write()->copyFrom(batchIn1Scaled1CPU.data_ptr<float>());
+            images["input_1_scaled_2"].write()->copyFrom(batchIn1Scaled2CPU.data_ptr<float>());
+            images["input_2"].write()->copyFrom(batchIn2CPU.data_ptr<float>());
             images["prediction_1"].write()->copyFrom(outputCPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
+            images["prediction_1_scaled_1"].write()->copyFrom(batchOutScaled1CPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
+            images["prediction_1_scaled_2"].write()->copyFrom(batchOutScaled2CPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
+            images["prediction_1_double_edec"].write()->copyFrom(output2CPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
+            images["flow_forward"].write()->copyFrom(flowForwardCPU.data_ptr<float>());
+            images["flow_forward_mapped"].write()->copyFrom(flowFrameForwardCPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
+            images["flow_forward_diff"].write()->copyFrom(flowForwardDiffCPU.data_ptr<float>());
+            images["flow_backward"].write()->copyFrom(flowBackwardCPU.data_ptr<float>());
+            images["flow_backward_mapped"].write()->copyFrom(flowFrameBackwardCPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
+            images["flow_backward_diff"].write()->copyFrom(flowBackwardDiffCPU.data_ptr<float>());
 
             for (int j = 0; j < 480; ++j) {
                 for (int i = 0; i < 640; ++i) {
