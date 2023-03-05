@@ -17,7 +17,6 @@
 #include "SequenceStorage.hpp"
 #include "SingleBuffer.hpp"
 
-#include <opencv2/core/mat.hpp>
 #include "gvizdoom/Action.hpp"
 
 #include <atomic>
