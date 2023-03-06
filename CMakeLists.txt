@@ -33,6 +33,7 @@ add_executable(doot2 ${DOOT2_SOURCES})
 target_include_directories(doot2
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
     PUBLIC  ${SDL2_INCLUDE_DIRS}
+    PUBLIC  ext/CLI11/include
 )
 target_link_libraries(doot2
     PUBLIC  gvizdoom

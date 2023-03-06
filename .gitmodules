@@ -10,3 +10,6 @@
 [submodule "ext/implot"]
 	path = ext/implot
 	url = git@github.com:epezent/implot.git
+[submodule "ext/CLI11"]
+	path = ext/CLI11
+	url = https://github.com/CLIUtils/CLI11.git
