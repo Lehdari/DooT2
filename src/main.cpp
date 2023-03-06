@@ -1,4 +1,5 @@
 #include "App.hpp"
+#include "Constants.hpp"
 #include "CLI/CLI.hpp"
 #include "Trainer.hpp"
 #include "Utils.hpp"
@@ -11,8 +12,11 @@
 int main()
 {
     CLI::App cliApp{"DooT2 Machine Learning Research Platform"};
-    uint32_t cliBatchSize; 
+    uint32_t cliBatchSize{doot2::batchSize};
+    uint32_t cliSequenceLength{doot2::sequenceLength}; 
+
     cliApp.add_option("--batchsize,-b", cliBatchSize, "Batch size for the autoencoder model");
+    cliApp.add_option("--sequencelen,-s", cliSequenceLength, "Sequence length for the autoencoder model");
 
     CLI11_PARSE(cliApp);
 
@@ -29,7 +33,7 @@ int main()
 
     AutoEncoderModel model;
 
-    Trainer trainer(&model);
+    Trainer trainer(&model, cliBatchSize, cliSequenceLength);
     App app(&trainer, &model);
 
     std::thread trainerThread(&Trainer::loop, &trainer);

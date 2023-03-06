@@ -18,7 +18,6 @@
 #include "implot.h"
 
 
-using namespace doot2;
 using namespace gvizdoom;
 
 

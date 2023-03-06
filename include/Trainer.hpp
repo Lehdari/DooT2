@@ -12,8 +12,8 @@
 
 
 #include "ActionManager.hpp"
-#include "HeatmapActionModule.hpp"
 #include "DoorTraversalActionModule.hpp"
+#include "HeatmapActionModule.hpp"
 #include "SequenceStorage.hpp"
 
 #include <opencv2/core/mat.hpp>
@@ -28,7 +28,7 @@ class Model;
 
 class Trainer {
 public:
-    Trainer(Model* model);
+    Trainer(Model* model, uint32_t batchSizeIn, size_t sequenceLengthIn);
     ~Trainer();
     Trainer(const Trainer&) = delete;
     Trainer(Trainer&&) noexcept = delete;
@@ -53,6 +53,6 @@ private:
     bool                        _newPatchReady;
 
     Model*                      _model;
-
+    
     void nextMap(); // proceed to next map
 };

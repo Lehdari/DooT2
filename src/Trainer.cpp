@@ -17,18 +17,18 @@
 #include <opencv2/highgui.hpp>
 
 
-using namespace doot2;
 using namespace gvizdoom;
 
 
-Trainer::Trainer(Model* model) :
+Trainer::Trainer(Model* model, uint32_t batchSizeIn, size_t sequenceLengthIn) :
     _rnd                        (1507715517),
     _quit                       (false),
     _heatmapActionModule        (HeatmapActionModule::Settings{256, 32.0f}),
     _doorTraversalActionModule  (false),
-    _sequenceStorage            (SequenceStorage::Settings{batchSize, sequenceLength,
+    _sequenceStorage            (SequenceStorage::Settings{batchSizeIn, sequenceLengthIn,
                                     true, false,
-                                    frameWidth, frameHeight, ImageFormat::YUV}),
+                                    doot2::frameWidth, doot2::frameHeight, ImageFormat::YUV,
+                                    doot2::encodingLength}),
     _positionPlot               (1024, 1024, CV_32FC3, cv::Scalar(0.0f)),
     _initPlayerPos              (0.0f, 0.0f),
     _frameId                    (0),
@@ -63,7 +63,7 @@ void Trainer::loop()
     Vec2f playerPosScreen(0.0f, 0.0f);
 
     size_t recordBeginFrameId = 768+_rnd()%512;
-    size_t recordEndFrameId = recordBeginFrameId + sequenceLength;
+    size_t recordEndFrameId = recordBeginFrameId + _sequenceStorage.settings().length;
 
     while (!_quit) {
         // Player position relative to the starting position (_initPlayerPos)
@@ -78,7 +78,7 @@ void Trainer::loop()
         if (_frameId >= recordEndFrameId || doomGame.update(action)) {
             nextMap();
             recordBeginFrameId = 768+_rnd()%512;
-            recordEndFrameId = recordBeginFrameId+sequenceLength;
+            recordEndFrameId = recordBeginFrameId + _sequenceStorage.settings().length;
             continue;
         }
 
@@ -146,7 +146,7 @@ void Trainer::nextMap()
     _positionPlot *= 0.0f;
 
     _frameId = 0;
-    if (++_batchEntryId >= batchSize) {
+    if (++_batchEntryId >= _sequenceStorage.settings().batchSize) {
         _newPatchReady = true;
         _batchEntryId = 0;
     }
