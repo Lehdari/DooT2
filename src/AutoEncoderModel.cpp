@@ -174,12 +174,12 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
     pixelDataIn = pixelDataIn.permute({0, 1, 4, 2, 3});
 
     Tensor flowBase = tf::affine_grid(torch::tensor({{1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
-        TensorOptions().device(device)).broadcast_to({doot2::batchSize, 2, 3}),
-        {doot2::batchSize, 2, 480, 640});
+        TensorOptions().device(device)).broadcast_to({storage.settings().batchSize, 2, 3}),
+        {storage.settings().batchSize, 2, 480, 640});
 
     // Required for latent space normalization
-    torch::Tensor encodingZeros = torch::zeros({doot2::encodingLength}, TensorOptions().device(device));
-    torch::Tensor encodingOnes = torch::ones({doot2::encodingLength}, TensorOptions().device(device));
+    torch::Tensor encodingZeros = torch::zeros({storage.settings().encodingLength}, TensorOptions().device(device));
+    torch::Tensor encodingOnes = torch::ones({storage.settings().encodingLength}, TensorOptions().device(device));
 
     _frameEncoder->zero_grad();
     _frameDecoder->zero_grad();
@@ -192,7 +192,7 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
         int64_t t = rnd() % (sequenceLength-1);
 
         // Pick random sequence to display
-        size_t displaySeqId = rnd() % doot2::batchSize;
+        size_t displaySeqId = rnd() % storage.settings().batchSize;
 
         // ID of the frame (in sequence) to be used in the training batch
         torch::Tensor batchIn1 = pixelDataIn.index({(int)t});
