@@ -46,13 +46,21 @@ private:
     inline void imGuiRender() const;
 
     struct GuiState {
+        using TimeSeriesMap = std::map<std::string, std::pair<const std::vector<double>*, bool>>; // bool: is the series active (displayed)
         using ImageRelayMap = std::map<std::string, GuiImageRelay>;
 
-        bool            _lossPlotAutoFit    {false};
-        bool            _showFrame          {true};
+        // Plot window state
+        TimeSeriesMap   _plotTimeSeriesVectors;
+        bool            _lossPlotAutoFit        {false};
+        bool            _lossPlotTimeMode       {false};
+        char            _plotFileName[256]      {"loss.plot"};
+
+        // Frame window state
+        bool            _showFrame              {true};
         gut::Texture    _frameTexture;
 
-        bool            _showTrainingImages {true};
+        // Training Images frame
+        bool            _showTrainingImages     {true};
         ImageRelayMap   _modelImageRelays;
         std::string     _currentModelImage;
     };
