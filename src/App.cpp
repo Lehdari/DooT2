@@ -84,6 +84,19 @@ App::App(Trainer* trainer, Model* model) :
     // Initialize GUI state
     _guiState._frameTexture.create(doomGame.getScreenWidth(), doomGame.getScreenHeight(),
         GL_TEXTURE_2D, GL_RGBA, GL_UNSIGNED_BYTE);
+    {   // Update the plot time series map
+        auto timeSeriesHandle = _model->timeSeries.read();
+        auto timeSeriesNames = timeSeriesHandle->getSeriesNames();
+        for (const auto& name : timeSeriesNames) {
+            if (name == "time") // "time" is dedicated to be used as plot x-coordinates when time mode is selected
+                continue;
+            auto* seriesVector = timeSeriesHandle->getSeriesVector<double>(name);
+            if (seriesVector == nullptr) // should not happen, most likely caused by using wrong type (not double)
+                throw std::runtime_error("No time series vector with name \"" + name + "\" found! (check the time series type)");
+            _guiState._plotTimeSeriesVectors.emplace(name, std::make_pair(seriesVector, false));
+        }
+    }
+    // Update the model images map
     for (auto& [name, imageBuffer] : _model->images) {
         _guiState._modelImageRelays.emplace(name, &imageBuffer);
     }
@@ -148,38 +161,60 @@ void App::gui()
     imGuiNewFrame();
 
     ImGui::Begin("Plot");
+    ImVec2 plotWindowSize = ImGui::GetWindowSize();
+    ImGui::SetNextItemWidth(plotWindowSize.x * 0.5f - ImGui::GetFontSize() * 12.5f);
+    if (ImGui::BeginCombo("##PlotSelector", "Select Plots")) {
+        for (auto& [name, timeSeries] : _guiState._plotTimeSeriesVectors) {
+            ImGui::Checkbox(name.c_str(), &timeSeries.second);
+        }
+        ImGui::EndCombo();
+    }
+
+
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(plotWindowSize.x * 0.5f - ImGui::GetFontSize() * 12.5f);
+    ImGui::InputText("##PlotFileName", _guiState._plotFileName, 255);
+
+    // Save button
+    ImGui::SameLine();
+    if (ImGui::Button("Save")) {
+        auto timeSeriesReadHandle = _model->timeSeries.read();
+        auto plotJson = timeSeriesReadHandle->toJson();
+        std::ofstream plotFile(_guiState._plotFileName);
+        plotFile << plotJson;
+        plotFile.close();
+        printf("Plot saved!\n");
+    }
+
+    // TODO load timeseries button here
+
+    ImGui::SameLine();
     ImGui::Checkbox("Autofit plot", &_guiState._lossPlotAutoFit);
+    ImGui::SameLine();
+    ImGui::Checkbox("Time on X-axis", &_guiState._lossPlotTimeMode);
 
     {   // Loss plot
         auto timeSeriesReadHandle = _model->timeSeries.read();
 
-        if (ImPlot::BeginPlot("Loss")) {
+        if (ImPlot::BeginPlot("##Plot", ImVec2(-1, -1))) {
             auto lossPlotAxisFlags = _guiState._lossPlotAutoFit ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
-            ImPlot::SetupAxes("Training Step", "Loss", lossPlotAxisFlags, lossPlotAxisFlags);
+            ImPlot::SetupAxes(_guiState._lossPlotTimeMode ? "Training Time (s)" : "Training Step", "",
+                lossPlotAxisFlags, lossPlotAxisFlags);
 
-            // TODO fetch all these vectors dynamically in runtime (except for time)
             auto& timeVector = *timeSeriesReadHandle->getSeriesVector<double>("time");
-            auto& lossVector = *timeSeriesReadHandle->getSeriesVector<double>("loss");
-            auto& frameLossVector = *timeSeriesReadHandle->getSeriesVector<double>("frameLoss");
-            auto& flowForwardLossVector = *timeSeriesReadHandle->getSeriesVector<double>("flowForwardLoss");
-            auto& flowBackwardLossVector = *timeSeriesReadHandle->getSeriesVector<double>("flowBackwardLoss");
-            auto& frameLossDoubleEdecVector = *timeSeriesReadHandle->getSeriesVector<double>("frameLossDoubleEdec");
-            auto& doubleEncodingLossVector = *timeSeriesReadHandle->getSeriesVector<double>("doubleEncodingLoss");
-            ImPlot::PlotLine("loss", timeVector.data(), lossVector.data(), (int) lossVector.size());
-            ImPlot::PlotLine("frameLoss", timeVector.data(), frameLossVector.data(), (int) frameLossVector.size());
-            ImPlot::PlotLine("flowForwardLoss", timeVector.data(), flowForwardLossVector.data(), (int) flowForwardLossVector.size());
-            ImPlot::PlotLine("flowBackwardLoss", timeVector.data(), flowBackwardLossVector.data(), (int) flowBackwardLossVector.size());
-            ImPlot::PlotLine("frameLossDoubleEdec", timeVector.data(), frameLossDoubleEdecVector.data(), (int) frameLossDoubleEdecVector.size());
-            ImPlot::PlotLine("doubleEncodingLoss", timeVector.data(), doubleEncodingLossVector.data(), (int) doubleEncodingLossVector.size());
-            ImPlot::EndPlot();
-        }
+            for (auto& [name, timeSeries] : _guiState._plotTimeSeriesVectors) {
+                if (timeSeries.second) {
+                    if (_guiState._lossPlotTimeMode) {
+                        ImPlot::PlotLine(name.c_str(), timeVector.data(), timeSeries.first->data(),
+                            (int) timeSeries.first->size());
+                    }
+                    else {
+                        ImPlot::PlotLine(name.c_str(), timeSeries.first->data(), (int)timeSeries.first->size());
+                    }
+                }
+            }
 
-        if (ImGui::Button("Save")) {
-            auto plotJson = timeSeriesReadHandle->toJson();
-            std::ofstream plotFile("loss.json");
-            plotFile << plotJson;
-            plotFile.close();
-            printf("Plot saved!\n");
+            ImPlot::EndPlot();
         }
     }
 
