@@ -10,14 +10,15 @@
 
 #pragma once
 
-#include <SDL.h>
+#include "GuiImageRelay.hpp"
 
+#include <SDL.h>
 #include "imgui.h"
 #include "backends/imgui_impl_opengl3.h"
 #include "backends/imgui_impl_sdl2.h"
 #include "gut_opengl/Texture.hpp"
 
-#include "GuiImageRelay.hpp"
+#include <map>
 
 
 class Trainer;
@@ -45,7 +46,7 @@ private:
     inline void imGuiRender() const;
 
     struct GuiState {
-        using ImageRelayMap = std::unordered_map<std::string, GuiImageRelay>;
+        using ImageRelayMap = std::map<std::string, GuiImageRelay>;
 
         bool            _lossPlotAutoFit    {false};
         bool            _showFrame          {true};
