@@ -29,8 +29,11 @@ class Model;
 class Trainer {
 public:
     Trainer(Model* model);
-    // TODO RO5
     ~Trainer();
+    Trainer(const Trainer&) = delete;
+    Trainer(Trainer&&) noexcept = delete;
+    Trainer& operator=(const Trainer&) = delete;
+    Trainer& operator=(Trainer&&) = delete;
 
     void loop();
     void quit();
