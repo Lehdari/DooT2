@@ -43,7 +43,7 @@ App::App(Trainer* trainer, Model* model) :
         SDL_WINDOWPOS_UNDEFINED,
         1920, // TODO settings
         1080, // TODO settings
-        SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL);
+        SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
     if (_window == nullptr) {
         printf("Error: SDL Window could not be created! SDL_Error: %s\n", SDL_GetError());
         return;
