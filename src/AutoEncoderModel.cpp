@@ -94,35 +94,35 @@ AutoEncoderModel::AutoEncoderModel() :
 
     // Load frame encoder
     if (fs::exists(frameEncoderFilename)) {
-        printf("Loading frame encoder model from %s\n", frameEncoderFilename); // TODO logging
+        printf("Loading frame encoder model from %s\n", frameEncoderFilename.c_str()); // TODO logging
         serialize::InputArchive inputArchive;
         inputArchive.load_from(frameEncoderFilename);
         _frameEncoder->load(inputArchive);
     }
     else {
-        printf("No %s found. Initializing new frame encoder model.\n", frameEncoderFilename); // TODO logging
+        printf("No %s found. Initializing new frame encoder model.\n", frameEncoderFilename.c_str()); // TODO logging
     }
 
     // Load frame decoder
     if (fs::exists(frameDecoderFilename)) {
-        printf("Loading frame decoder model from %s\n", frameDecoderFilename); // TODO logging
+        printf("Loading frame decoder model from %s\n", frameDecoderFilename.c_str()); // TODO logging
         serialize::InputArchive inputArchive;
         inputArchive.load_from(frameDecoderFilename);
         _frameDecoder->load(inputArchive);
     }
     else {
-        printf("No %s found. Initializing new frame decoder model.\n", frameDecoderFilename); // TODO logging
+        printf("No %s found. Initializing new frame decoder model.\n", frameDecoderFilename.c_str()); // TODO logging
     }
 
     // Load flow decoder
     if (fs::exists(flowDecoderFilename)) {
-        printf("Loading frame decoder model from %s\n", flowDecoderFilename); // TODO logging
+        printf("Loading frame decoder model from %s\n", flowDecoderFilename.c_str()); // TODO logging
         serialize::InputArchive inputArchive;
         inputArchive.load_from(flowDecoderFilename);
         _flowDecoder->load(inputArchive);
     }
     else {
-        printf("No %s found. Initializing new flow decoder model.\n", flowDecoderFilename); // TODO logging
+        printf("No %s found. Initializing new flow decoder model.\n", flowDecoderFilename.c_str()); // TODO logging
     }
 }
 
@@ -431,23 +431,29 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
     }
 
     // Save models
+    try
     {
-        printf("Saving frame encoder model to %s\n", doot2::frameEncoderFilename);
-        serialize::OutputArchive outputArchive;
-        _frameEncoder->save(outputArchive);
-        outputArchive.save_to(doot2::frameEncoderFilename);
+        {
+            printf("Saving frame encoder model to %s\n", doot2::frameEncoderFilename.c_str());
+            serialize::OutputArchive outputArchive;
+            _frameEncoder->save(outputArchive);
+            outputArchive.save_to(doot2::frameEncoderFilename);
+        }
+        {
+            printf("Saving frame decoder model to %s\n", doot2::frameDecoderFilename.c_str());
+            serialize::OutputArchive outputArchive;
+            _frameDecoder->save(outputArchive);
+            outputArchive.save_to(doot2::frameDecoderFilename);
+        }
+        {
+            printf("Saving flow decoder model to %s\n", doot2::flowDecoderFilename.c_str());
+            serialize::OutputArchive outputArchive;
+            _flowDecoder->save(outputArchive);
+            outputArchive.save_to(doot2::flowDecoderFilename);
+        }
     }
-    {
-        printf("Saving frame decoder model to %s\n", doot2::frameDecoderFilename);
-        serialize::OutputArchive outputArchive;
-        _frameDecoder->save(outputArchive);
-        outputArchive.save_to(doot2::frameDecoderFilename);
-    }
-    {
-        printf("Saving flow decoder model to %s\n", doot2::flowDecoderFilename);
-        serialize::OutputArchive outputArchive;
-        _flowDecoder->save(outputArchive);
-        outputArchive.save_to(doot2::flowDecoderFilename);
+    catch (const std::exception& e) {
+        printf("Could not save the models: '%s'\n", e.what());
     }
 
     _trainingFinished = true;

@@ -18,6 +18,7 @@
 
 
 using namespace gvizdoom;
+namespace fs = std::filesystem;
 
 
 Trainer::Trainer(Model* model, uint32_t batchSizeIn, size_t sequenceLengthIn) :
@@ -44,6 +45,14 @@ Trainer::Trainer(Model* model, uint32_t batchSizeIn, size_t sequenceLengthIn) :
     // Setup ActionManager
     _actionManager.addModule(&_doorTraversalActionModule);
     _actionManager.addModule(&_heatmapActionModule);
+
+    // Create output directories if they do not exist
+    if (not fs::exists(doot2::modelsDirectory)) {
+        printf("Default models directory does not exist. Trying to create the directory\n");
+        if (not fs::create_directories(fs::path(doot2::modelsDirectory))) {
+            printf("Could not create the directory for models. Expect a crash upon training\n");
+        }
+    }
 }
 
 Trainer::~Trainer()
