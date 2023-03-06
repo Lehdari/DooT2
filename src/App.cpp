@@ -160,6 +160,9 @@ void App::gui()
 
     imGuiNewFrame();
 
+    // Make the entire window dockable
+    ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+
     ImGui::Begin("Plot");
     ImVec2 plotWindowSize = ImGui::GetWindowSize();
     ImGui::SetNextItemWidth(plotWindowSize.x * 0.5f - ImGui::GetFontSize() * 12.5f);
