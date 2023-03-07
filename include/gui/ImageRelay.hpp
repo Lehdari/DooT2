@@ -1,6 +1,6 @@
 //
 // Project: DooT2
-// File: GuiImageRelay.hpp
+// File: ImageRelay.hpp
 //
 // Copyright (c) 2023 Miika 'Lehdari' Lehtimäki
 // You may use, distribute and modify this code under the terms
@@ -18,12 +18,14 @@
 template <typename T_Data> class SingleBuffer;
 
 
+namespace gui {
+
 // Class for rendering images to ImGui from threaded sources
-class GuiImageRelay {
+class ImageRelay {
 public:
     // The constructor takes direct pointer handle to a buffer, meaning the user takes responsibility
     // that the lifetime of the relay does not exceed the lifetime of the buffer.
-    GuiImageRelay(SingleBuffer<Image<float>>* imageBuffer = nullptr);
+    ImageRelay(SingleBuffer<Image<float>>* imageBuffer = nullptr);
 
     void render();
 
@@ -33,3 +35,5 @@ private:
     Image<float>                _image;         // used for potential conversions
     gut::Texture                _texture;
 };
+
+} // namespace gui
