@@ -1,6 +1,6 @@
 //
 // Project: DooT2
-// File: GuiImageRelay.cpp
+// File: ImageRelay.cpp
 //
 // Copyright (c) 2023 Miika 'Lehdari' Lehtimäki
 // You may use, distribute and modify this code under the terms
@@ -8,7 +8,7 @@
 // with this source code package.
 //
 
-#include "GuiImageRelay.hpp"
+#include "gui/ImageRelay.hpp"
 #include "SingleBuffer.hpp"
 
 #include "imgui.h"
@@ -43,7 +43,7 @@ static inline GLenum toGLFormat(ImageFormat format)
 }
 
 
-GuiImageRelay::GuiImageRelay(SingleBuffer<Image<float>>* imageBuffer) :
+gui::ImageRelay::ImageRelay(SingleBuffer<Image<float>>* imageBuffer) :
     _imageBuffer    (imageBuffer),
     _targetFormat   (_imageBuffer == nullptr ? ImageFormat::BGRA : inferTargetFormat(_imageBuffer->read()->format())),
     _texture        (GL_TEXTURE_2D, _targetFormat == ImageFormat::GRAY ? GL_RED : GL_RGBA, GL_FLOAT)
@@ -52,7 +52,7 @@ GuiImageRelay::GuiImageRelay(SingleBuffer<Image<float>>* imageBuffer) :
     _texture.create(imageHandle->width(), imageHandle->height());
 }
 
-void GuiImageRelay::render()
+void gui::ImageRelay::render()
 {
     if (_imageBuffer == nullptr)
         throw std::runtime_error("BUG: trying to render GuiImageRelay instance with imageBuffer == nullptr");

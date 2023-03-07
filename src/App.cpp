@@ -15,7 +15,6 @@
 
 #include "gvizdoom/DoomGame.hpp"
 #include "glad/glad.h"
-#include "implot.h"
 
 #include <chrono>
 
@@ -69,47 +68,18 @@ App::App(Trainer* trainer, Model* model) :
         return;
     }
 
-    // Initialize imgui
-    ImGui::CreateContext();
-    ImGui_ImplSDL2_InitForOpenGL(_window, _glContext);
-    ImGui_ImplOpenGL3_Init("#version 460");
-    ImPlot::CreateContext();
-    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-
     // Initialize OpenGL
     glViewport(0, 0, 1920, 1080); // TODO settings
     glClearColor(0.2f, 0.2f, 0.2f, 1.f);
     glEnable(GL_DEPTH_TEST);
 
-    // Initialize GUI state
-    _guiState._frameTexture.create(doomGame.getScreenWidth(), doomGame.getScreenHeight(),
-        GL_TEXTURE_2D, GL_RGBA, GL_UNSIGNED_BYTE);
-    {   // Update the plot time series map
-        auto timeSeriesHandle = _model->timeSeries.read();
-        auto timeSeriesNames = timeSeriesHandle->getSeriesNames();
-        for (const auto& name : timeSeriesNames) {
-            if (name == "time") // "time" is dedicated to be used as plot x-coordinates when time mode is selected
-                continue;
-            auto* seriesVector = timeSeriesHandle->getSeriesVector<double>(name);
-            if (seriesVector == nullptr) // should not happen, most likely caused by using wrong type (not double)
-                throw std::runtime_error("No time series vector with name \"" + name + "\" found! (check the time series type)");
-            _guiState._plotTimeSeriesVectors.emplace(name, std::make_pair(seriesVector, false));
-        }
-    }
-    // Update the model images map
-    for (auto& [name, imageBuffer] : _model->images) {
-        _guiState._modelImageRelays.emplace(name, &imageBuffer);
-    }
+    // Initialize gui
+    _gui.init(_window, &_glContext);
+    _gui.update(_model);
 }
 
 App::~App()
 {
-    // Destroy imgui
-    ImPlot::DestroyContext();
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplSDL2_Shutdown();
-    ImGui::DestroyContext();
-
     // Destroy window and quit SDL subsystems
     if (_glContext != nullptr)
         SDL_GL_DeleteContext(_glContext);
@@ -141,7 +111,7 @@ void App::loop()
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        gui();
+        _gui.render(_window, _trainer, _model);
 
         // Introduce delay to cap the framerate
         auto frameEnd = high_resolution_clock::now();
@@ -152,112 +122,4 @@ void App::loop()
         // Swap draw and display buffers
         SDL_GL_SwapWindow(_window);
     }
-}
-
-void App::gui()
-{
-    auto& doomGame = DoomGame::instance();
-
-    imGuiNewFrame();
-
-    // Make the entire window dockable
-    ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
-
-    ImGui::Begin("Plot");
-    ImVec2 plotWindowSize = ImGui::GetWindowSize();
-    ImGui::SetNextItemWidth(plotWindowSize.x * 0.5f - ImGui::GetFontSize() * 12.5f);
-    if (ImGui::BeginCombo("##PlotSelector", "Select Plots")) {
-        for (auto& [name, timeSeries] : _guiState._plotTimeSeriesVectors) {
-            ImGui::Checkbox(name.c_str(), &timeSeries.second);
-        }
-        ImGui::EndCombo();
-    }
-
-
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(plotWindowSize.x * 0.5f - ImGui::GetFontSize() * 12.5f);
-    ImGui::InputText("##PlotFileName", _guiState._plotFileName, 255);
-
-    // Save button
-    ImGui::SameLine();
-    if (ImGui::Button("Save")) {
-        auto timeSeriesReadHandle = _model->timeSeries.read();
-        auto plotJson = timeSeriesReadHandle->toJson();
-        std::ofstream plotFile(_guiState._plotFileName);
-        plotFile << plotJson;
-        plotFile.close();
-        printf("Plot saved!\n");
-    }
-
-    // TODO load timeseries button here
-
-    ImGui::SameLine();
-    ImGui::Checkbox("Autofit plot", &_guiState._lossPlotAutoFit);
-    ImGui::SameLine();
-    ImGui::Checkbox("Time on X-axis", &_guiState._lossPlotTimeMode);
-
-    {   // Loss plot
-        auto timeSeriesReadHandle = _model->timeSeries.read();
-
-        if (ImPlot::BeginPlot("##Plot", ImVec2(-1, -1))) {
-            auto lossPlotAxisFlags = _guiState._lossPlotAutoFit ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
-            ImPlot::SetupAxes(_guiState._lossPlotTimeMode ? "Training Time (s)" : "Training Step", "",
-                lossPlotAxisFlags, lossPlotAxisFlags);
-
-            auto& timeVector = *timeSeriesReadHandle->getSeriesVector<double>("time");
-            for (auto& [name, timeSeries] : _guiState._plotTimeSeriesVectors) {
-                if (timeSeries.second) {
-                    if (_guiState._lossPlotTimeMode) {
-                        ImPlot::PlotLine(name.c_str(), timeVector.data(), timeSeries.first->data(),
-                            (int) timeSeries.first->size());
-                    }
-                    else {
-                        ImPlot::PlotLine(name.c_str(), timeSeries.first->data(), (int)timeSeries.first->size());
-                    }
-                }
-            }
-
-            ImPlot::EndPlot();
-        }
-    }
-
-    ImGui::End(); // Plot
-
-    if (_guiState._showFrame && ImGui::Begin("Frame", &_guiState._showFrame)) {
-        {
-            auto frameHandle = _trainer->getFrameReadHandle();
-            _guiState._frameTexture.updateFromBuffer(frameHandle->data(), GL_BGRA);
-        }
-        ImGui::Image((void*)(intptr_t)_guiState._frameTexture.id(),
-            ImVec2(doomGame.getScreenWidth(), doomGame.getScreenHeight()),
-            ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
-        ImGui::End(); // Frame
-    }
-    else {
-        ImGui::End(); // Frame
-    }
-
-    if (_guiState._showTrainingImages && ImGui::Begin("Training Images", &_guiState._showTrainingImages)) {
-        if (ImGui::BeginCombo("##combo", _guiState._currentModelImage.c_str())) // The second parameter is the label previewed before opening the combo.
-        {
-            for (auto& [name, imageRelay] : _guiState._modelImageRelays) {
-                bool isSelected = (_guiState._currentModelImage == name);
-                if (ImGui::Selectable(name.c_str(), isSelected))
-                    _guiState._currentModelImage = name;
-                if (isSelected)
-                    ImGui::SetItemDefaultFocus();
-            }
-            ImGui::EndCombo();
-        }
-
-        if (!_guiState._currentModelImage.empty())
-            _guiState._modelImageRelays[_guiState._currentModelImage].render();
-
-        ImGui::End(); // Training Images
-    }
-    else {
-        ImGui::End(); // Training Images
-    }
-
-    imGuiRender();
 }

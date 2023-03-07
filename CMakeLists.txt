@@ -10,7 +10,12 @@ find_package(Eigen3 3.4 REQUIRED)
 find_package(OpenCV REQUIRED)
 
 # Source files
+set(DOOT2_GUI_SOURCES
+    src/gui/Gui.cpp
+    src/gui/ImageRelay.cpp
+)
 set(DOOT2_SOURCES
+    ${DOOT2_GUI_SOURCES}
     src/main.cpp
     src/ActionManager.cpp
     src/App.cpp
@@ -19,7 +24,6 @@ set(DOOT2_SOURCES
     src/FlowDecoder.cpp
     src/FrameDecoder.cpp
     src/FrameEncoder.cpp
-    src/GuiImageRelay.cpp
     src/HeatmapActionModule.cpp
     src/Model.cpp
     src/ResNeXtModule.cpp
