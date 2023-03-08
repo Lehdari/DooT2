@@ -9,8 +9,11 @@
 //
 
 #include "gui/Gui.hpp"
-#include "Trainer.hpp"
+#include "gui/GameWindow.hpp"
+#include "gui/PlotWindow.hpp"
+#include "gui/ImagesWindow.hpp"
 #include "Model.hpp"
+#include "Trainer.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
 #include "implot.h"
@@ -42,6 +45,11 @@ void Gui::init(SDL_Window* window, SDL_GLContext* glContext)
     ImGui_ImplOpenGL3_Init("#version 460");
     ImPlot::CreateContext();
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+    // Add default windows (TODO replace with dynamic windowing)
+    _windows.push_back(std::unique_ptr<gui::Window>(new gui::GameWindow()));
+    _windows.push_back(std::unique_ptr<gui::Window>(new gui::PlotWindow()));
+    _windows.push_back(std::unique_ptr<gui::Window>(new gui::ImagesWindow()));
 }
 
 void Gui::update(Model* model)
@@ -77,100 +85,8 @@ void Gui::render(SDL_Window* window, Trainer* trainer, Model* model)
     // Make the entire window dockable
     ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 
-    ImGui::Begin("Plot");
-    ImVec2 plotWindowSize = ImGui::GetWindowSize();
-    ImGui::SetNextItemWidth(plotWindowSize.x * 0.5f - ImGui::GetFontSize() * 12.5f);
-    if (ImGui::BeginCombo("##PlotSelector", "Select Plots")) {
-        for (auto& [name, timeSeries] : _guiState._plotTimeSeriesVectors) {
-            ImGui::Checkbox(name.c_str(), &timeSeries.second);
-        }
-        ImGui::EndCombo();
-    }
-
-
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(plotWindowSize.x * 0.5f - ImGui::GetFontSize() * 12.5f);
-    ImGui::InputText("##PlotFileName", _guiState._plotFileName, 255);
-
-    // Save button
-    ImGui::SameLine();
-    if (ImGui::Button("Save")) {
-        auto timeSeriesReadHandle = model->timeSeries.read();
-        auto plotJson = timeSeriesReadHandle->toJson();
-        std::ofstream plotFile(_guiState._plotFileName);
-        plotFile << plotJson;
-        plotFile.close();
-        printf("Plot saved!\n");
-    }
-
-    // TODO load timeseries button here
-
-    ImGui::SameLine();
-    ImGui::Checkbox("Autofit plot", &_guiState._lossPlotAutoFit);
-    ImGui::SameLine();
-    ImGui::Checkbox("Time on X-axis", &_guiState._lossPlotTimeMode);
-
-    {   // Loss plot
-        auto timeSeriesReadHandle = model->timeSeries.read();
-
-        if (ImPlot::BeginPlot("##Plot", ImVec2(-1, -1))) {
-            auto lossPlotAxisFlags = _guiState._lossPlotAutoFit ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
-            ImPlot::SetupAxes(_guiState._lossPlotTimeMode ? "Training Time (s)" : "Training Step", "",
-                lossPlotAxisFlags, lossPlotAxisFlags);
-
-            auto& timeVector = *timeSeriesReadHandle->getSeriesVector<double>("time");
-            for (auto& [name, timeSeries] : _guiState._plotTimeSeriesVectors) {
-                if (timeSeries.second) {
-                    if (_guiState._lossPlotTimeMode) {
-                        ImPlot::PlotLine(name.c_str(), timeVector.data(), timeSeries.first->data(),
-                            (int) timeSeries.first->size());
-                    }
-                    else {
-                        ImPlot::PlotLine(name.c_str(), timeSeries.first->data(), (int)timeSeries.first->size());
-                    }
-                }
-            }
-
-            ImPlot::EndPlot();
-        }
-    }
-
-    ImGui::End(); // Plot
-
-    if (_guiState._showFrame && ImGui::Begin("Frame", &_guiState._showFrame)) {
-        {
-            auto frameHandle = trainer->getFrameReadHandle();
-            _guiState._frameTexture.updateFromBuffer(frameHandle->data(), GL_BGRA);
-        }
-        ImGui::Image((void*)(intptr_t)_guiState._frameTexture.id(),
-            ImVec2(doomGame.getScreenWidth(), doomGame.getScreenHeight()),
-            ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
-        ImGui::End(); // Frame
-    }
-    else {
-        ImGui::End(); // Frame
-    }
-
-    if (_guiState._showTrainingImages && ImGui::Begin("Training Images", &_guiState._showTrainingImages)) {
-        if (ImGui::BeginCombo("##combo", _guiState._currentModelImage.c_str())) // The second parameter is the label previewed before opening the combo.
-        {
-            for (auto& [name, imageRelay] : _guiState._modelImageRelays) {
-                bool isSelected = (_guiState._currentModelImage == name);
-                if (ImGui::Selectable(name.c_str(), isSelected))
-                    _guiState._currentModelImage = name;
-                if (isSelected)
-                    ImGui::SetItemDefaultFocus();
-            }
-            ImGui::EndCombo();
-        }
-
-        if (!_guiState._currentModelImage.empty())
-            _guiState._modelImageRelays[_guiState._currentModelImage].render();
-
-        ImGui::End(); // Training Images
-    }
-    else {
-        ImGui::End(); // Training Images
+    for (auto& w : _windows) {
+        w->render(trainer, model, &_guiState);
     }
 
     imGuiRender();
