@@ -10,7 +10,9 @@
 
 #pragma once
 
-#include "ImageRelay.hpp"
+#include "gui/Window.hpp"
+#include "gui/ImageRelay.hpp"
+#include "gui/State.hpp"
 #include "TimeSeries.hpp"
 
 #include "gut_opengl/Texture.hpp"
@@ -29,6 +31,9 @@ typedef void *SDL_GLContext;
 
 namespace gui {
 
+class Window;
+
+
 class Gui {
 public:
     ~Gui();
@@ -39,27 +44,8 @@ public:
     void render(SDL_Window* window, Trainer* trainer, Model* model);
 
 private:
-    struct State {
-        using TimeSeriesMap = std::map<std::string, std::pair<const std::vector<double>*, bool>>; // bool: is the series active (displayed)
-        using ImageRelayMap = std::map<std::string, gui::ImageRelay>;
-
-        // Plot window state
-        TimeSeriesMap   _plotTimeSeriesVectors;
-        bool            _lossPlotAutoFit        {false};
-        bool            _lossPlotTimeMode       {false};
-        char            _plotFileName[256]      {"loss.plot"};
-
-        // Frame window state
-        bool            _showFrame              {true};
-        gut::Texture    _frameTexture;
-
-        // Training Images frame
-        bool            _showTrainingImages     {true};
-        ImageRelayMap   _modelImageRelays;
-        std::string     _currentModelImage;
-    };
-
-    State   _guiState;
+    State                                   _guiState;
+    std::vector<std::unique_ptr<Window>>    _windows;
 
     inline static void imGuiNewFrame(SDL_Window* window);
     inline static void imGuiRender();
