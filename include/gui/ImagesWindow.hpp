@@ -12,16 +12,20 @@
 
 #include "Window.hpp"
 
+#include <string>
+
 
 namespace gui {
 
 class ImagesWindow : public Window {
 public:
-    ImagesWindow(std::set<int>* activeIds) :
-        Window(activeIds)
-    {}
+    ImagesWindow(std::set<int>* activeIds);
 
+    virtual void update(gui::State* guiState) override;
     virtual void render(Trainer* trainer, Model* model, gui::State* guiState) override;
+
+private:
+    std::string _currentModelImage;
 };
 
 };

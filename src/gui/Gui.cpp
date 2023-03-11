@@ -45,35 +45,30 @@ void Gui::init(SDL_Window* window, SDL_GLContext* glContext)
     ImGui_ImplOpenGL3_Init("#version 460");
     ImPlot::CreateContext();
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-
-    // Add default windows (TODO replace with dynamic windowing)
-    createWindow<gui::GameWindow>();
-    createWindow<gui::PlotWindow>();
-    createWindow<gui::ImagesWindow>();
 }
 
 void Gui::update(Model* model)
 {
-    // Update the plot time series map
-    _guiState._plotTimeSeriesVectors.clear();
-    {
-        auto timeSeriesHandle = model->timeSeries.read();
-        auto timeSeriesNames = timeSeriesHandle->getSeriesNames();
-        for (const auto& name : timeSeriesNames) {
-            if (name == "time") // "time" is dedicated to be used as plot x-coordinates when time mode is selected
-                continue;
-            auto* seriesVector = timeSeriesHandle->getSeriesVector<double>(name);
-            if (seriesVector == nullptr) // the series was not of double type, skip it
-                continue;
-            _guiState._plotTimeSeriesVectors.emplace(name, std::make_pair(seriesVector, false));
-        }
-    }
+    _guiState._timeSeries["training"] = &model->timeSeries;
 
-    // Update the model images map
+    // Update the model image relays map
     _guiState._modelImageRelays.clear();
     for (auto& [name, imageBuffer] : model->images) {
         _guiState._modelImageRelays.emplace(name, &imageBuffer);
     }
+
+    // Update all the windows
+    for (auto& w : _windows) {
+        w->update(&_guiState);
+    }
+}
+
+void Gui::createDefaultLayout()
+{
+    _windows.clear();
+    createWindow<gui::GameWindow>();
+    createWindow<gui::PlotWindow>();
+    createWindow<gui::ImagesWindow>();
 }
 
 void Gui::render(SDL_Window* window, Trainer* trainer, Model* model)
@@ -85,11 +80,11 @@ void Gui::render(SDL_Window* window, Trainer* trainer, Model* model)
     // Menu bar
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("New window")) {
-            if (ImGui::MenuItem("Game window", nullptr))
+            if (ImGui::MenuItem("Game", nullptr))
                 createWindow<gui::GameWindow>();
-            if (ImGui::MenuItem("Plot window", nullptr))
+            if (ImGui::MenuItem("Plotting", nullptr))
                 createWindow<gui::PlotWindow>();
-            if (ImGui::MenuItem("Training images window", nullptr))
+            if (ImGui::MenuItem("Images", nullptr))
                 createWindow<gui::ImagesWindow>();
             ImGui::EndMenu();
         }

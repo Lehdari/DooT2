@@ -21,6 +21,7 @@ public:
         Window(activeIds)
     {}
 
+    virtual void update(gui::State* guiState) override;
     virtual void render(Trainer* trainer, Model* model, gui::State* guiState) override;
 };
 

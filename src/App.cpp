@@ -76,6 +76,7 @@ App::App(Trainer* trainer, Model* model) :
     // Initialize gui
     _gui.init(_window, &_glContext);
     _gui.update(_model);
+    _gui.createDefaultLayout();
 }
 
 App::~App()

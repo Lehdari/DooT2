@@ -41,6 +41,7 @@ public:
 
     void init(SDL_Window* window, SDL_GLContext* glContext);
     void update(Model* model);
+    void createDefaultLayout();
 
     void render(SDL_Window* window, Trainer* trainer, Model* model);
 
@@ -85,10 +86,12 @@ void Gui::createWindow()
     for (auto& w : _windows) {
         if (!w) {
             w.reset(new T_Window(activeWindows<T_Window>()));
+            w->update(&_guiState);
             return;
         }
     }
     _windows.push_back(std::unique_ptr<gui::Window>(new T_Window(activeWindows<T_Window>())));
+    _windows.back()->update(&_guiState);
 }
 
 template<typename T_Window>

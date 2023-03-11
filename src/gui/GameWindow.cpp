@@ -16,6 +16,10 @@
 #include "imgui.h"
 
 
+void gui::GameWindow::update(gui::State* guiState)
+{
+}
+
 void gui::GameWindow::render(Trainer* trainer, Model* model, gui::State* guiState)
 {
     if (!_open) return;

@@ -16,26 +16,25 @@
 #include <string>
 
 
+class TimeSeries;
+template <typename T_Data>
+class SingleBuffer;
+
+
 namespace gui {
 
 struct State {
-    using TimeSeriesMap = std::map<std::string, std::pair<const std::vector<double>*, bool>>; // bool: is the series active (displayed)
+    using TimeSeriesMap = std::unordered_map<std::string, SingleBuffer<TimeSeries>*>;
     using ImageRelayMap = std::map<std::string, gui::ImageRelay>;
 
-    // Plot window state
-    TimeSeriesMap   _plotTimeSeriesVectors;
-    bool            _lossPlotAutoFit        {false};
-    bool            _lossPlotTimeMode       {false};
-    char            _plotFileName[256]      {"loss.plot"};
+    // Sources for time series data
+    TimeSeriesMap   _timeSeries;
 
-    // Frame window state
-    bool            _showFrame              {true};
+    // Game window state
     gut::Texture    _frameTexture;
 
     // Training Images frame
-    bool            _showTrainingImages     {true};
     ImageRelayMap   _modelImageRelays;
-    std::string     _currentModelImage;
 };
 
 } // namespace gui
