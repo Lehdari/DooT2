@@ -47,9 +47,9 @@ void Gui::init(SDL_Window* window, SDL_GLContext* glContext)
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     // Add default windows (TODO replace with dynamic windowing)
-    _windows.push_back(std::unique_ptr<gui::Window>(new gui::GameWindow()));
-    _windows.push_back(std::unique_ptr<gui::Window>(new gui::PlotWindow()));
-    _windows.push_back(std::unique_ptr<gui::Window>(new gui::ImagesWindow()));
+    createWindow<gui::GameWindow>();
+    createWindow<gui::PlotWindow>();
+    createWindow<gui::ImagesWindow>();
 }
 
 void Gui::update(Model* model)
@@ -82,11 +82,33 @@ void Gui::render(SDL_Window* window, Trainer* trainer, Model* model)
 
     imGuiNewFrame(window);
 
+    // Menu bar
+    if (ImGui::BeginMainMenuBar()) {
+        if (ImGui::BeginMenu("New window")) {
+            if (ImGui::MenuItem("Game window", nullptr))
+                createWindow<gui::GameWindow>();
+            if (ImGui::MenuItem("Plot window", nullptr))
+                createWindow<gui::PlotWindow>();
+            if (ImGui::MenuItem("Training images window", nullptr))
+                createWindow<gui::ImagesWindow>();
+            ImGui::EndMenu();
+        }
+        ImGui::EndMainMenuBar();
+    }
+
     // Make the entire window dockable
     ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 
+    // Render windows
     for (auto& w : _windows) {
+        if (!w)
+            continue;
+
         w->render(trainer, model, &_guiState);
+
+        // Check if window has been closed
+        if (w->isClosed())
+            w.reset();
     }
 
     imGuiRender();

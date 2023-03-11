@@ -16,6 +16,7 @@ set(DOOT2_GUI_SOURCES
     src/gui/ImageRelay.cpp
     src/gui/ImagesWindow.cpp
     src/gui/PlotWindow.cpp
+    src/gui/Window.cpp
 )
 set(DOOT2_SOURCES
     ${DOOT2_GUI_SOURCES}
