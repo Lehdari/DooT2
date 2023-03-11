@@ -14,24 +14,34 @@
 #include "imgui.h"
 
 
+gui::ImagesWindow::ImagesWindow(std::set<int>* activeIds) :
+    Window              (activeIds),
+    _currentModelImage  ("")
+{
+}
+
+void gui::ImagesWindow::update(gui::State* guiState)
+{
+}
+
 void gui::ImagesWindow::render(Trainer* trainer, Model* model, gui::State* guiState)
 {
     if (!_open) return;
-    if (ImGui::Begin(("Training images " + std::to_string(_id)).c_str(), &_open)) {
-        if (ImGui::BeginCombo("##combo", guiState->_currentModelImage.c_str())) // The second parameter is the label previewed before opening the combo.
+    if (ImGui::Begin(("Images " + std::to_string(_id)).c_str(), &_open)) {
+        if (ImGui::BeginCombo("##combo", _currentModelImage.c_str())) // The second parameter is the label previewed before opening the combo.
         {
             for (auto& [name, imageRelay] : guiState->_modelImageRelays) {
-                bool isSelected = (guiState->_currentModelImage == name);
+                bool isSelected = (_currentModelImage == name);
                 if (ImGui::Selectable(name.c_str(), isSelected))
-                    guiState->_currentModelImage = name;
+                    _currentModelImage = name;
                 if (isSelected)
                     ImGui::SetItemDefaultFocus();
             }
             ImGui::EndCombo();
         }
 
-        if (!guiState->_currentModelImage.empty())
-            guiState->_modelImageRelays[guiState->_currentModelImage].render();
+        if (!_currentModelImage.empty())
+            guiState->_modelImageRelays[_currentModelImage].render();
 
         ImGui::End();
     }

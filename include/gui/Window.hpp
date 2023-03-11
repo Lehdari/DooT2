@@ -27,6 +27,11 @@ public:
     Window(std::set<int>* activeIds);
     virtual ~Window();
 
+    // Called when there's changes in gui state that might require synchronization between
+    // it and the window's internal state
+    virtual void update(gui::State* guiState) = 0;
+
+    // Called every frame in intent to render the window to screen
     virtual void render(Trainer* trainer, Model* model, gui::State* guiState) = 0;
 
     bool isClosed() const noexcept;

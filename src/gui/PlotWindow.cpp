@@ -14,67 +14,109 @@
 
 #include "implot.h"
 
-#include <fstream>
 
+void gui::PlotWindow::update(gui::State* guiState)
+{
+    // Update the available time series
+    ActiveSeriesMap newActiveSeries;
+    for (auto& [sourceName, timeSeries] : guiState->_timeSeries) {
+        auto timeSeriesHandle = timeSeries->read();
+        auto seriesNames = timeSeriesHandle->getSeriesNames();
+        for (auto& seriesName : seriesNames) {
+            if (seriesName == "time") // time is dedicated to be used in x-axis
+                continue;
+            bool active = false;
+            // Use existing value in case one exists
+            if (_activeSeries.contains(sourceName) && _activeSeries[sourceName].contains(seriesName))
+                active = _activeSeries[sourceName][seriesName];
+            newActiveSeries[sourceName][seriesName] = active;
+        }
+    }
+    _activeSeries = std::move(newActiveSeries);
+
+    // In case the active source has been removed, pick the first one available
+    if (!_activeSeries.contains(_activeSource)) {
+        if (_activeSeries.empty())
+            _activeSource = "";
+        else
+            _activeSource = _activeSeries.begin()->first;
+    }
+}
 
 void gui::PlotWindow::render(Trainer* trainer, Model* model, gui::State* guiState)
 {
     if (!_open) return;
-    if (ImGui::Begin(("Plot " + std::to_string(_id)).c_str(), &_open)) {
+    if (ImGui::Begin(("Plotting " + std::to_string(_id)).c_str(), &_open)) {
         ImVec2 plotWindowSize = ImGui::GetWindowSize();
+
+        // Time series source selector
         ImGui::SetNextItemWidth(plotWindowSize.x * 0.5f - ImGui::GetFontSize() * 12.5f);
-        if (ImGui::BeginCombo("##PlotSelector", "Select Plots")) {
-            for (auto& [name, timeSeries]: guiState->_plotTimeSeriesVectors) {
-                ImGui::Checkbox(name.c_str(), &timeSeries.second);
+        if (ImGui::BeginCombo("##SourceSelector", _activeSource.c_str())) // The second parameter is the label previewed before opening the combo.
+        {
+            for (auto& [sourceName, timeSeriesSource] : _activeSeries) {
+                bool isSelected = (_activeSource == sourceName);
+                if (ImGui::Selectable(sourceName.c_str(), isSelected))
+                    _activeSource = sourceName;
+                if (isSelected)
+                    ImGui::SetItemDefaultFocus();
             }
             ImGui::EndCombo();
         }
 
-
+        // Time series selector
         ImGui::SameLine();
         ImGui::SetNextItemWidth(plotWindowSize.x * 0.5f - ImGui::GetFontSize() * 12.5f);
-        ImGui::InputText("##PlotFileName", guiState->_plotFileName, 255);
+        if (ImGui::BeginCombo("##PlotSelector", "Select Plots")) {
+            for (auto& [name, active] : _activeSeries[_activeSource]) {
+                ImGui::Checkbox(name.c_str(), &active);
+            }
+            ImGui::EndCombo();
+        }
+
+#if 0 // TODO move elsewhere
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(plotWindowSize.x * 0.5f - ImGui::GetFontSize() * 12.5f);
+        ImGui::InputText("##PlotFileName", _plotFileName, 255);
 
         // Save button
         ImGui::SameLine();
         if (ImGui::Button("Save")) {
             auto timeSeriesReadHandle = model->timeSeries.read();
             auto plotJson = timeSeriesReadHandle->toJson();
-            std::ofstream plotFile(guiState->_plotFileName);
+            std::ofstream plotFile(_plotFileName);
             plotFile << plotJson;
             plotFile.close();
             printf("Plot saved!\n");
         }
-
-        // TODO load timeseries button here
+#endif
 
         ImGui::SameLine();
-        ImGui::Checkbox("Autofit plot", &guiState->_lossPlotAutoFit);
+        ImGui::Checkbox("Autofit plot", &_lossPlotAutoFit);
         ImGui::SameLine();
-        ImGui::Checkbox("Time on X-axis", &guiState->_lossPlotTimeMode);
+        ImGui::Checkbox("Time on X-axis", &_lossPlotTimeMode);
 
-        {   // Loss plot
-            auto timeSeriesReadHandle = model->timeSeries.read();
+        // Loss plot
+        if (ImPlot::BeginPlot("##Plot", ImVec2(-1, -1))) {
+            auto lossPlotAxisFlags = _lossPlotAutoFit ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
+            ImPlot::SetupAxes(_lossPlotTimeMode ? "Training Time (s)" : "Training Step", "",
+                lossPlotAxisFlags, lossPlotAxisFlags);
 
-            if (ImPlot::BeginPlot("##Plot", ImVec2(-1, -1))) {
-                auto lossPlotAxisFlags = guiState->_lossPlotAutoFit ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None;
-                ImPlot::SetupAxes(guiState->_lossPlotTimeMode ? "Training Time (s)" : "Training Step", "",
-                    lossPlotAxisFlags, lossPlotAxisFlags);
-
-                auto& timeVector = *timeSeriesReadHandle->getSeriesVector<double>("time");
-                for (auto& [name, timeSeries]: guiState->_plotTimeSeriesVectors) {
-                    if (timeSeries.second) {
-                        if (guiState->_lossPlotTimeMode) {
-                            ImPlot::PlotLine(name.c_str(), timeVector.data(), timeSeries.first->data(),
-                                (int) timeSeries.first->size());
+            for (auto& [sourceName, timeSeriesSource] : _activeSeries) {
+                auto timeSeriesHandle = guiState->_timeSeries[sourceName]->read();
+                auto& timeVector = *timeSeriesHandle->getSeriesVector<double>("time");
+                for (auto& [seriesName, active] : timeSeriesSource) {
+                    if (active) {
+                        auto& seriesVector = *timeSeriesHandle->getSeriesVector<double>(seriesName);
+                        if (_lossPlotTimeMode) {
+                            ImPlot::PlotLine(seriesName.c_str(), timeVector.data(), seriesVector.data(),
+                                (int)seriesVector.size());
                         } else {
-                            ImPlot::PlotLine(name.c_str(), timeSeries.first->data(), (int) timeSeries.first->size());
+                            ImPlot::PlotLine(seriesName.c_str(), seriesVector.data(), (int)seriesVector.size());
                         }
                     }
                 }
-
-                ImPlot::EndPlot();
             }
+            ImPlot::EndPlot();
         }
 
         ImGui::End();
