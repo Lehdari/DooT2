@@ -10,6 +10,8 @@
 
 #pragma once
 
+#include <set>
+
 
 class Trainer;
 class Model;
@@ -22,9 +24,19 @@ class State;
 
 class Window {
 public:
-    virtual ~Window() = default;
+    Window(std::set<int>* activeIds);
+    virtual ~Window();
 
-    virtual void render(Trainer* trainer, Model* model, gui::State* guiState) const = 0;
+    virtual void render(Trainer* trainer, Model* model, gui::State* guiState) = 0;
+
+    bool isClosed() const noexcept;
+
+protected:
+    std::set<int>*  _activeIds;
+    int             _id;
+    bool            _open   {true}; // set to false to close the window
+
+    int findFreeId();
 };
 
 } // namespace gui

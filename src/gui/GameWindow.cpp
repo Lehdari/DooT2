@@ -16,11 +16,13 @@
 #include "imgui.h"
 
 
-void gui::GameWindow::render(Trainer* trainer, Model* model, gui::State* guiState) const
+void gui::GameWindow::render(Trainer* trainer, Model* model, gui::State* guiState)
 {
+    if (!_open) return;
+
     auto& doomGame = gvizdoom::DoomGame::instance();
 
-    if (guiState->_showFrame && ImGui::Begin("Game", &guiState->_showFrame)) {
+    if (ImGui::Begin(("Game " + std::to_string(_id)).c_str(), &_open)) {
         {
             auto frameHandle = trainer->getFrameReadHandle();
             guiState->_frameTexture.updateFromBuffer(frameHandle->data(), GL_BGRA);
@@ -30,7 +32,6 @@ void gui::GameWindow::render(Trainer* trainer, Model* model, gui::State* guiStat
             ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
         ImGui::End();
     }
-    else {
+    else
         ImGui::End();
-    }
 }

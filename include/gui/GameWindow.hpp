@@ -17,7 +17,11 @@ namespace gui {
 
 class GameWindow : public Window {
 public:
-    virtual void render(Trainer* trainer, Model* model, gui::State* guiState) const override;
+    GameWindow(std::set<int>* activeIds) :
+        Window(activeIds)
+    {}
+
+    virtual void render(Trainer* trainer, Model* model, gui::State* guiState) override;
 };
 
 };

@@ -21,6 +21,7 @@
 #include "backends/imgui_impl_sdl2.h"
 
 #include <map>
+#include <set>
 
 
 class Trainer;
@@ -49,6 +50,14 @@ private:
 
     inline static void imGuiNewFrame(SDL_Window* window);
     inline static void imGuiRender();
+
+    // Create a new window of given type
+    template <typename T_Window>
+    void createWindow();
+
+    // Get set of active ids of given window type
+    template <typename T_Window>
+    static std::set<int>* activeWindows();
 };
 
 
@@ -67,6 +76,26 @@ void Gui::imGuiRender()
 
     // Render imgui
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+template<typename T_Window>
+void Gui::createWindow()
+{
+    // Find first available slot
+    for (auto& w : _windows) {
+        if (!w) {
+            w.reset(new T_Window(activeWindows<T_Window>()));
+            return;
+        }
+    }
+    _windows.push_back(std::unique_ptr<gui::Window>(new T_Window(activeWindows<T_Window>())));
+}
+
+template<typename T_Window>
+std::set<int>* Gui::activeWindows()
+{
+    static std::set<int> activeIds;
+    return &activeIds;
 }
 
 } // namespace gui

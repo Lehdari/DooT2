@@ -14,9 +14,10 @@
 #include "imgui.h"
 
 
-void gui::ImagesWindow::render(Trainer* trainer, Model* model, gui::State* guiState) const
+void gui::ImagesWindow::render(Trainer* trainer, Model* model, gui::State* guiState)
 {
-    if (guiState->_showTrainingImages && ImGui::Begin("Training Images", &guiState->_showTrainingImages)) {
+    if (!_open) return;
+    if (ImGui::Begin(("Training images " + std::to_string(_id)).c_str(), &_open)) {
         if (ImGui::BeginCombo("##combo", guiState->_currentModelImage.c_str())) // The second parameter is the label previewed before opening the combo.
         {
             for (auto& [name, imageRelay] : guiState->_modelImageRelays) {
@@ -32,9 +33,8 @@ void gui::ImagesWindow::render(Trainer* trainer, Model* model, gui::State* guiSt
         if (!guiState->_currentModelImage.empty())
             guiState->_modelImageRelays[guiState->_currentModelImage].render();
 
-        ImGui::End(); // Training Images
+        ImGui::End();
     }
-    else {
-        ImGui::End(); // Training Images
-    }
+    else
+        ImGui::End();
 }
