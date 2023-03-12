@@ -9,9 +9,7 @@
 //
 
 #include "gui/Gui.hpp"
-#include "gui/GameWindow.hpp"
-#include "gui/PlotWindow.hpp"
-#include "gui/ImagesWindow.hpp"
+#include "gui/WindowTypeUtils.hpp"
 #include "Model.hpp"
 #include "Trainer.hpp"
 
@@ -69,6 +67,41 @@ void Gui::createDefaultLayout()
     createWindow<gui::GameWindow>();
     createWindow<gui::PlotWindow>();
     createWindow<gui::ImagesWindow>();
+}
+
+void Gui::loadLayout(const std::filesystem::path& layoutFilename)
+{
+    std::ifstream layoutFile(layoutFilename);
+    auto layout = nlohmann::json::parse(layoutFile);
+
+    // Create and initialize windows from configs
+    auto windowLayouts = layout["windows"].get<std::vector<nlohmann::json>>();
+    for (auto& w : windowLayouts) {
+        auto* config = &w["config"];
+        if (config->is_null())
+            config = nullptr;
+
+        // Create a window: the lambda callback fetches the correct window type
+        windowTypeCallback(w["type"].get<std::string>(), [&]<typename T>() {
+            createWindow<T>(w["id"], config);
+        });
+    }
+}
+
+void Gui::saveLayout(const std::filesystem::path& layoutFilename) const
+{
+    std::vector<nlohmann::json> windowLayouts;
+    for (auto& w : _windows) {
+        windowLayouts.emplace_back();
+        windowLayouts.back()["type"] = windowTypeName(w->getTypeId());;
+        windowLayouts.back()["id"] = w->getId();
+        windowLayouts.back()["config"] = w->getConfig();
+    }
+
+    nlohmann::json layout;
+    layout["windows"] = windowLayouts;
+    std::ofstream layoutFile(layoutFilename);
+    layoutFile << std::setw(4) << layout << std::endl;
 }
 
 void Gui::render(SDL_Window* window, Trainer* trainer, Model* model)

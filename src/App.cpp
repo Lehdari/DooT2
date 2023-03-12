@@ -17,9 +17,12 @@
 #include "glad/glad.h"
 
 #include <chrono>
+#include <filesystem>
 
 
 using namespace gvizdoom;
+using namespace doot2;
+namespace fs = std::filesystem;
 
 
 App::App(Trainer* trainer, Model* model) :
@@ -76,11 +79,17 @@ App::App(Trainer* trainer, Model* model) :
     // Initialize gui
     _gui.init(_window, &_glContext);
     _gui.update(_model);
-    _gui.createDefaultLayout();
+    if (fs::exists(guiLayoutFilename))
+        _gui.loadLayout(guiLayoutFilename);
+    else
+        _gui.createDefaultLayout();
 }
 
 App::~App()
 {
+    // Save the GUI layout
+    _gui.saveLayout(guiLayoutFilename);
+
     // Destroy window and quit SDL subsystems
     if (_glContext != nullptr)
         SDL_GL_DeleteContext(_glContext);

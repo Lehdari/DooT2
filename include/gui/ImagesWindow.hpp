@@ -19,13 +19,15 @@ namespace gui {
 
 class ImagesWindow : public Window {
 public:
-    ImagesWindow(std::set<int>* activeIds);
+    ImagesWindow(std::set<int>* activeIds, int id = -1);
 
-    virtual void update(gui::State* guiState) override;
-    virtual void render(Trainer* trainer, Model* model, gui::State* guiState) override;
+    void update(gui::State* guiState) override;
+    void render(Trainer* trainer, Model* model, gui::State* guiState) override;
+    void applyConfig(const nlohmann::json& config) override;
+    nlohmann::json getConfig() const override;
 
 private:
-    std::string _currentModelImage;
+    std::string _activeImage;
 };
 
 };

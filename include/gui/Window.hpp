@@ -10,6 +10,8 @@
 
 #pragma once
 
+#include "nlohmann/json.hpp"
+
 #include <set>
 
 
@@ -22,9 +24,15 @@ namespace gui {
 class State;
 
 
+// When implementing a new class derived from Window, remember to list it in the macro
+// in the beginning of gui/WindowTypeUtils.hpp
 class Window {
 public:
-    Window(std::set<int>* activeIds);
+    // By providing id >= 0, the constructor will try to create a window with an explicit ID.
+    // This will fail and throw an exception in case the ID is already in use.
+    // When id < 0, an unique ID will be dynamically assigned.
+    template <typename T_Window>
+    Window(T_Window* window, std::set<int>* activeIds, int id = -1);
     virtual ~Window();
 
     // Called when there's changes in gui state that might require synchronization between
@@ -34,14 +42,48 @@ public:
     // Called every frame in intent to render the window to screen
     virtual void render(Trainer* trainer, Model* model, gui::State* guiState) = 0;
 
+    // Apply window state defined in a configuration JSON object
+    virtual void applyConfig(const nlohmann::json& config) = 0;
+
+    // Extract window state into a configuration JSON object
+    virtual nlohmann::json getConfig() const = 0;
+
     bool isClosed() const noexcept;
+    int getId() const noexcept;
+    int getTypeId() const noexcept;
+
+    template <typename T_Window>
+    inline static int typeId() noexcept;
 
 protected:
     std::set<int>*  _activeIds;
     int             _id;
+    int             _typeId;
     bool            _open   {true}; // set to false to close the window
 
     int findFreeId();
+
+private:
+    static int      _nTypeIds;
 };
+
+
+template <typename T_Window>
+Window::Window(T_Window* window, std::set<int>* activeIds, int id) :
+    _activeIds  (activeIds),
+    _id         (id < 0 ? findFreeId() : id),
+    _typeId     (typeId<T_Window>())
+{
+    if (_activeIds->contains(id))
+        throw std::runtime_error("Window id " + std::to_string(id) + " already in use");
+    _activeIds->emplace(_id);
+}
+
+template<typename T_Window>
+int Window::typeId() noexcept
+{
+    static int typeId = _nTypeIds++;
+    return typeId;
+}
 
 } // namespace gui
