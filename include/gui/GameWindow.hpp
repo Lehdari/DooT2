@@ -17,12 +17,14 @@ namespace gui {
 
 class GameWindow : public Window {
 public:
-    GameWindow(std::set<int>* activeIds) :
-        Window(activeIds)
+    GameWindow(std::set<int>* activeIds, int id = -1) :
+        Window(this, activeIds, id)
     {}
 
-    virtual void update(gui::State* guiState) override;
-    virtual void render(Trainer* trainer, Model* model, gui::State* guiState) override;
+    void update(gui::State* guiState) override;
+    void render(Trainer* trainer, Model* model, gui::State* guiState) override;
+    void applyConfig(const nlohmann::json& config) override;
+    nlohmann::json getConfig() const override;
 };
 
 };

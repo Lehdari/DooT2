@@ -14,9 +14,9 @@
 #include "imgui.h"
 
 
-gui::ImagesWindow::ImagesWindow(std::set<int>* activeIds) :
-    Window              (activeIds),
-    _currentModelImage  ("")
+gui::ImagesWindow::ImagesWindow(std::set<int>* activeIds, int id) :
+    Window          (this, activeIds, id),
+    _activeImage    ("")
 {
 }
 
@@ -28,23 +28,35 @@ void gui::ImagesWindow::render(Trainer* trainer, Model* model, gui::State* guiSt
 {
     if (!_open) return;
     if (ImGui::Begin(("Images " + std::to_string(_id)).c_str(), &_open)) {
-        if (ImGui::BeginCombo("##combo", _currentModelImage.c_str())) // The second parameter is the label previewed before opening the combo.
+        if (ImGui::BeginCombo("##combo", _activeImage.c_str())) // The second parameter is the label previewed before opening the combo.
         {
             for (auto& [name, imageRelay] : guiState->_modelImageRelays) {
-                bool isSelected = (_currentModelImage == name);
+                bool isSelected = (_activeImage == name);
                 if (ImGui::Selectable(name.c_str(), isSelected))
-                    _currentModelImage = name;
+                    _activeImage = name;
                 if (isSelected)
                     ImGui::SetItemDefaultFocus();
             }
             ImGui::EndCombo();
         }
 
-        if (!_currentModelImage.empty())
-            guiState->_modelImageRelays[_currentModelImage].render();
+        if (!_activeImage.empty())
+            guiState->_modelImageRelays[_activeImage].render();
 
         ImGui::End();
     }
     else
         ImGui::End();
+}
+
+void gui::ImagesWindow::applyConfig(const nlohmann::json& config)
+{
+    _activeImage = config["activeImage"].get<std::string>();
+}
+
+nlohmann::json gui::ImagesWindow::getConfig() const
+{
+    nlohmann::json config;
+    config["activeImage"] = _activeImage;
+    return config;
 }

@@ -10,13 +10,11 @@
 
 #include "gui/Window.hpp"
 
+#include <stdexcept>
 
-gui::Window::Window(std::set<int>* activeIds) :
-    _activeIds  (activeIds),
-    _id         (findFreeId())
-{
-    _activeIds->emplace(_id);
-}
+
+int gui::Window::_nTypeIds = 0;
+
 
 gui::Window::~Window()
 {
@@ -26,6 +24,16 @@ gui::Window::~Window()
 bool gui::Window::isClosed() const noexcept
 {
     return !_open;
+}
+
+int gui::Window::getId() const noexcept
+{
+    return _id;
+}
+
+int gui::Window::getTypeId() const noexcept
+{
+    return _typeId;
 }
 
 int gui::Window::findFreeId()

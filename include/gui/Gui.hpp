@@ -42,6 +42,8 @@ public:
     void init(SDL_Window* window, SDL_GLContext* glContext);
     void update(Model* model);
     void createDefaultLayout();
+    void loadLayout(const std::filesystem::path& layoutFilename);
+    void saveLayout(const std::filesystem::path& layoutFilename) const;
 
     void render(SDL_Window* window, Trainer* trainer, Model* model);
 
@@ -54,7 +56,7 @@ private:
 
     // Create a new window of given type
     template <typename T_Window>
-    void createWindow();
+    void createWindow(int id = -1, const nlohmann::json* config = nullptr);
 
     // Get set of active ids of given window type
     template <typename T_Window>
@@ -80,18 +82,35 @@ void Gui::imGuiRender()
 }
 
 template<typename T_Window>
-void Gui::createWindow()
+void Gui::createWindow(int id, const nlohmann::json* config)
 {
-    // Find first available slot
+    // Explicit ID requested, try to create a window with the ID
+    if (id >= 0) {
+        if (activeWindows<T_Window>()->contains(id)) // ID already exists, do nothing
+            return;
+        _windows.push_back(std::unique_ptr<gui::Window>(new T_Window(activeWindows<T_Window>(), id)));
+        _windows.back()->update(&_guiState);
+        if (config != nullptr)
+            _windows.back()->applyConfig(*config);
+        return;
+    }
+
+    // Try to find first available slot (nullptr) in the _windows vector and reuse it
     for (auto& w : _windows) {
         if (!w) {
             w.reset(new T_Window(activeWindows<T_Window>()));
             w->update(&_guiState);
+            if (config != nullptr)
+                w->applyConfig(*config);
             return;
         }
     }
+
+    // No free slots, create a completely new window
     _windows.push_back(std::unique_ptr<gui::Window>(new T_Window(activeWindows<T_Window>())));
     _windows.back()->update(&_guiState);
+    if (config != nullptr)
+        _windows.back()->applyConfig(*config);
 }
 
 template<typename T_Window>
