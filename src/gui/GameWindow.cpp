@@ -39,3 +39,12 @@ void gui::GameWindow::render(Trainer* trainer, Model* model, gui::State* guiStat
     else
         ImGui::End();
 }
+
+void gui::GameWindow::applyConfig(const nlohmann::json& config)
+{
+}
+
+nlohmann::json gui::GameWindow::getConfig() const
+{
+    return {};
+}

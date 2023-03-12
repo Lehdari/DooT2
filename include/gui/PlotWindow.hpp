@@ -21,12 +21,14 @@ namespace gui {
 
 class PlotWindow : public Window {
 public:
-    PlotWindow(std::set<int>* activeIds) :
-        Window(activeIds)
+    PlotWindow(std::set<int>* activeIds, int id = -1) :
+        Window(this, activeIds, id)
     {}
 
-    virtual void update(gui::State* guiState) override;
-    virtual void render(Trainer* trainer, Model* model, gui::State* guiState) override;
+    void update(gui::State* guiState) override;
+    void render(Trainer* trainer, Model* model, gui::State* guiState) override;
+    void applyConfig(const nlohmann::json& config) override;
+    nlohmann::json getConfig() const override;
 
 private:
     using ActiveSeriesMap = std::map<std::string, std::map<std::string, bool>>;

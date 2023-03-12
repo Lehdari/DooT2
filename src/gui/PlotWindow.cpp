@@ -124,3 +124,35 @@ void gui::PlotWindow::render(Trainer* trainer, Model* model, gui::State* guiStat
     else
         ImGui::End();
 }
+
+void gui::PlotWindow::applyConfig(const nlohmann::json& config)
+{
+    for (auto& [sourceName, timeSeriesSource] : config["activeSeries"].items()) {
+        for (auto& [name, active] : timeSeriesSource.items()) {
+            _activeSeries[sourceName][name] = active;
+        }
+    }
+    _activeSource = config["activeSource"].get<std::string>();
+    if (!_activeSeries.contains(_activeSource))
+        _activeSource = _activeSeries.begin()->first;
+    _lossPlotAutoFit = config["lossPlotAutoFit"].get<bool>();
+    _lossPlotTimeMode = config["lossPlotTimeMode"].get<bool>();
+}
+
+nlohmann::json gui::PlotWindow::getConfig() const
+{
+    nlohmann::json config;
+    nlohmann::json activeSeriesConfig;
+    for (auto& [sourceName, timeSeriesSource] : _activeSeries) {
+        nlohmann::json timeSeriesSourceConfig;
+        for (auto& [seriesName, active] : timeSeriesSource) {
+            timeSeriesSourceConfig[seriesName] = active;
+        }
+        activeSeriesConfig[sourceName] = timeSeriesSourceConfig;
+    }
+    config["activeSeries"] = activeSeriesConfig;
+    config["activeSource"] = _activeSource;
+    config["lossPlotAutoFit"] = _lossPlotAutoFit;
+    config["lossPlotTimeMode"] = _lossPlotTimeMode;
+    return config;
+}
