@@ -15,8 +15,8 @@
 #include "DoorTraversalActionModule.hpp"
 #include "HeatmapActionModule.hpp"
 #include "SequenceStorage.hpp"
+#include "SingleBuffer.hpp"
 
-#include <opencv2/core/mat.hpp>
 #include "gvizdoom/Action.hpp"
 
 #include <atomic>
@@ -37,22 +37,25 @@ public:
 
     void loop();
     void quit();
+
+    const SingleBuffer<Image<uint8_t>>::ReadHandle getFrameReadHandle();
 private:
     using Rnd = std::default_random_engine;
-    Rnd                         _rnd;
-    std::atomic_bool            _quit;
-    ActionManager               _actionManager;
-    HeatmapActionModule         _heatmapActionModule;
-    DoorTraversalActionModule   _doorTraversalActionModule;
-    SequenceStorage             _sequenceStorage;
-    cv::Mat                     _positionPlot;
-    Vec2f                       _initPlayerPos;
+    Rnd                             _rnd;
+    std::atomic_bool                _quit;
+    ActionManager                   _actionManager;
+    HeatmapActionModule             _heatmapActionModule;
+    DoorTraversalActionModule       _doorTraversalActionModule;
+    SequenceStorage                 _sequenceStorage;
+    cv::Mat                         _positionPlot;
+    Vec2f                           _initPlayerPos;
+    SingleBuffer<Image<uint8_t>>    _frame;
 
-    size_t                      _frameId;
-    size_t                      _batchEntryId;
-    bool                        _newPatchReady;
+    size_t                          _frameId;
+    size_t                          _batchEntryId;
+    bool                            _newPatchReady;
 
-    Model*                      _model;
-    
+    Model*                          _model;
+
     void nextMap(); // proceed to next map
 };

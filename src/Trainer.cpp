@@ -32,6 +32,10 @@ Trainer::Trainer(Model* model, uint32_t batchSizeIn, size_t sequenceLengthIn) :
                                     doot2::encodingLength}),
     _positionPlot               (1024, 1024, CV_32FC3, cv::Scalar(0.0f)),
     _initPlayerPos              (0.0f, 0.0f),
+    _frame                      (Image<uint8_t>(
+                                    DoomGame::instance().getScreenWidth(),
+                                    DoomGame::instance().getScreenHeight(),
+                                    ImageFormat::BGRA)),
     _frameId                    (0),
     _batchEntryId               (0),
     _newPatchReady              (false),
@@ -57,12 +61,6 @@ Trainer::Trainer(Model* model, uint32_t batchSizeIn, size_t sequenceLengthIn) :
 
 Trainer::~Trainer()
 {
-}
-
-void Trainer::quit()
-{
-    _quit = true;
-    _model->abortTraining();
 }
 
 void Trainer::loop()
@@ -91,6 +89,12 @@ void Trainer::loop()
             continue;
         }
 
+        // Copy the DoomGame frame to local storage
+        {
+            auto frameHandle = _frame.write();
+            frameHandle->copyFrom(doomGame.getPixelsBGRA());
+        }
+
         // Player position is undefined before the first update, so _initPlayerPos has to be
         // defined here. Also apply the exit position priori to the heatmap action module.
         if (_frameId == 0) {
@@ -106,9 +110,10 @@ void Trainer::loop()
             auto recordFrameId = _frameId - recordBeginFrameId;
             auto batch = _sequenceStorage[recordFrameId];
             batch.actions[_batchEntryId] = action;
-            Image<uint8_t> frame(doomGame.getScreenWidth(), doomGame.getScreenHeight(), ImageFormat::BGRA);
-            frame.copyFrom(doomGame.getPixelsBGRA());
-            convertImage(frame, batch.frames[_batchEntryId], ImageFormat::YUV);
+            {   // convert the frame
+                auto frameHandle = _frame.read();
+                convertImage(*frameHandle, batch.frames[_batchEntryId], ImageFormat::YUV);
+            }
             batch.rewards[_batchEntryId] = 0.0; // TODO no rewards for now
         }
 
@@ -145,6 +150,17 @@ void Trainer::loop()
     }
 
     _model->waitForTrainingFinished();
+}
+
+void Trainer::quit()
+{
+    _quit = true;
+    _model->abortTraining();
+}
+
+const SingleBuffer<Image<uint8_t>>::ReadHandle Trainer::getFrameReadHandle()
+{
+    return _frame.read();
 }
 
 void Trainer::nextMap()

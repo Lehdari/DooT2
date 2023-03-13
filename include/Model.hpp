@@ -50,8 +50,10 @@ public:
     void abortTraining() noexcept;
 
     // Information about training
+    using ImageMap = std::unordered_map<std::string, SingleBuffer<Image<float>>>;
     DoubleBuffer<TrainingState> trainingState;
     SingleBuffer<TimeSeries>    timeSeries;
+    ImageMap                    images;
 
 private:
     std::mutex              _trainingMutex;

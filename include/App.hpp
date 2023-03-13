@@ -10,11 +10,9 @@
 
 #pragma once
 
-#include <SDL.h>
+#include "gui/Gui.hpp"
 
-#include "imgui.h"
-#include "backends/imgui_impl_opengl3.h"
-#include "backends/imgui_impl_sdl2.h"
+#include <SDL.h>
 
 
 class Trainer;
@@ -38,32 +36,8 @@ private:
     Trainer*        _trainer;
     Model*          _model;
 
-    inline void imGuiNewFrame() const;
-    inline void imGuiRender() const;
-
-    struct GuiState {
-        bool    _lossPlotAutoFit    {false};
-    };
-
-    GuiState        _guiState;
-
-    void gui();
+    gui::Gui        _gui;
 };
 
 
-void App::imGuiNewFrame() const
-{
-    // Initialize imgui frame
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplSDL2_NewFrame(_window);
-    ImGui::NewFrame();
-}
 
-void App::imGuiRender() const
-{
-    // Generate draw data
-    ImGui::Render();
-
-    // Render imgui
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-}

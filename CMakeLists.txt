@@ -6,11 +6,20 @@ project(DooT2)
 add_subdirectory(ext)
 
 find_package(SDL2 REQUIRED)
-find_package(Eigen3 REQUIRED)
+find_package(Eigen3 3.4 REQUIRED)
 find_package(OpenCV REQUIRED)
 
 # Source files
+set(DOOT2_GUI_SOURCES
+    src/gui/GameWindow.cpp
+    src/gui/Gui.cpp
+    src/gui/ImageRelay.cpp
+    src/gui/ImagesWindow.cpp
+    src/gui/PlotWindow.cpp
+    src/gui/Window.cpp
+)
 set(DOOT2_SOURCES
+    ${DOOT2_GUI_SOURCES}
     src/main.cpp
     src/ActionManager.cpp
     src/App.cpp

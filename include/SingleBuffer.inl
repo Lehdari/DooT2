@@ -41,6 +41,12 @@ const T_Data* SingleBuffer<T_Data>::ReadHandle::operator->() const noexcept
 }
 
 template<typename T_Data>
+const T_Data* SingleBuffer<T_Data>::ReadHandle::get() const noexcept
+{
+    return _data;
+}
+
+template<typename T_Data>
 SingleBuffer<T_Data>::WriteHandle::~WriteHandle()
 {
     *_handleActive = false;
@@ -68,6 +74,12 @@ T_Data& SingleBuffer<T_Data>::WriteHandle::operator*() noexcept
 
 template<typename T_Data>
 T_Data* SingleBuffer<T_Data>::WriteHandle::operator->() noexcept
+{
+    return _data;
+}
+
+template<typename T_Data>
+T_Data* SingleBuffer<T_Data>::WriteHandle::get() noexcept
 {
     return _data;
 }

@@ -20,6 +20,7 @@
 #include <atomic>
 #include <mutex>
 #include <thread>
+#include <chrono>
 
 
 class SequenceStorage;
@@ -36,6 +37,8 @@ public:
     void infer(const TensorVector& input, TensorVector& output) override;
 
 private:
+    using TimePoint = decltype(std::chrono::high_resolution_clock::now());
+
     FrameEncoder        _frameEncoder;
     FrameDecoder        _frameDecoder;
     FlowDecoder         _flowDecoder;
@@ -43,6 +46,7 @@ private:
     std::mutex          _trainingMutex;
     std::thread         _trainingThread;
     std::atomic_bool    _trainingFinished;
+    TimePoint           _trainingStartTime;
 
     void trainImpl(SequenceStorage& storage) override;
 };

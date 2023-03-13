@@ -15,10 +15,14 @@
 
 #include "gvizdoom/DoomGame.hpp"
 #include "glad/glad.h"
-#include "implot.h"
+
+#include <chrono>
+#include <filesystem>
 
 
 using namespace gvizdoom;
+using namespace doot2;
+namespace fs = std::filesystem;
 
 
 App::App(Trainer* trainer, Model* model) :
@@ -41,7 +45,7 @@ App::App(Trainer* trainer, Model* model) :
         SDL_WINDOWPOS_UNDEFINED,
         1920, // TODO settings
         1080, // TODO settings
-        SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL);
+        SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
     if (_window == nullptr) {
         printf("Error: SDL Window could not be created! SDL_Error: %s\n", SDL_GetError());
         return;
@@ -67,25 +71,24 @@ App::App(Trainer* trainer, Model* model) :
         return;
     }
 
-    // Initialize imgui
-    ImGui::CreateContext();
-    ImGui_ImplSDL2_InitForOpenGL(_window, _glContext);
-    ImGui_ImplOpenGL3_Init("#version 460");
-    ImPlot::CreateContext();
-
     // Initialize OpenGL
     glViewport(0, 0, 1920, 1080); // TODO settings
     glClearColor(0.2f, 0.2f, 0.2f, 1.f);
     glEnable(GL_DEPTH_TEST);
+
+    // Initialize gui
+    _gui.init(_window, &_glContext);
+    _gui.update(_model);
+    if (fs::exists(guiLayoutFilename))
+        _gui.loadLayout(guiLayoutFilename);
+    else
+        _gui.createDefaultLayout();
 }
 
 App::~App()
 {
-    // Destroy imgui
-    ImPlot::DestroyContext();
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplSDL2_Shutdown();
-    ImGui::DestroyContext();
+    // Save the GUI layout
+    _gui.saveLayout(guiLayoutFilename);
 
     // Destroy window and quit SDL subsystems
     if (_glContext != nullptr)
@@ -97,8 +100,14 @@ App::~App()
 
 void App::loop()
 {
+    using namespace std::chrono;
+
+    constexpr double framerate = 60.0; // TODO settings
+
     SDL_Event event;
     while (!_quit) {
+        auto frameBegin = high_resolution_clock::now();
+
         while(SDL_PollEvent(&event)) {
             ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_QUIT ||
@@ -112,35 +121,15 @@ void App::loop()
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        gui();
+        _gui.render(_window, _trainer, _model);
+
+        // Introduce delay to cap the framerate
+        auto frameEnd = high_resolution_clock::now();
+        auto frameTime = duration_cast<microseconds>(frameEnd - frameBegin).count();
+        int delayMs = std::max((int)std::floor((1000.0/framerate)-((double)frameTime*0.001)), 0);
+        SDL_Delay(delayMs);
 
         // Swap draw and display buffers
         SDL_GL_SwapWindow(_window);
-        SDL_Delay(10);
     }
-}
-
-void App::gui()
-{
-    imGuiNewFrame();
-
-    ImGui::Begin("Training");
-    ImGui::Checkbox("Autofit plot", &_guiState._lossPlotAutoFit);
-
-    if (ImPlot::BeginPlot("Loss")) {
-        if (_guiState._lossPlotAutoFit) {
-            ImPlot::SetupAxes("Training Step", "Loss",ImPlotAxisFlags_AutoFit,ImPlotAxisFlags_AutoFit);
-        }
-        else {
-            ImPlot::SetupAxes("Training Step", "Loss", ImPlotAxisFlags_None, ImPlotAxisFlags_None);
-        }
-        auto timeSeriesReadHandle = _model->timeSeries.read();
-        auto& lossVector = *timeSeriesReadHandle->getSeriesVector<double>("loss");
-        ImPlot::PlotLine("loss", lossVector.data(), (int)lossVector.size());
-        ImPlot::EndPlot();
-    }
-
-    ImGui::End();
-
-    imGuiRender();
 }

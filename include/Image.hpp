@@ -23,6 +23,7 @@ enum class ImageFormat : uint32_t {
     BGRA_GAMMA  = 1,            // sRGB gamma correction
     BGRA        = BGRA_GAMMA,
     YUV         = 2,
+    GRAY        = 3,
     UNCHANGED   = 0             // only allowed as an argument to convertImage
 };
 
