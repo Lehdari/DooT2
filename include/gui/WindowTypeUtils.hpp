@@ -10,69 +10,106 @@
 
 #pragma once
 
-#include "gui/Window.hpp"
-#include "gui/GameWindow.hpp"
-#include "gui/ImagesWindow.hpp"
-#include "gui/PlotWindow.hpp"
-
 #include <type_traits>
+#include <string>
+#include <stdexcept>
+
 
 // List all available window types in this macro
-#define GUI_WINDOW_TYPES            \
-    GUI_WINDOW_TYPE(GameWindow)     \
-    GUI_WINDOW_TYPE(ImagesWindow)   \
-    GUI_WINDOW_TYPE(PlotWindow)
+// First argument: window type
+// Second argument: window label in the "New window" menu
+#define GUI_WINDOW_TYPES                          \
+    GUI_WINDOW_TYPE(GameWindow,     "Game"      ) \
+    GUI_WINDOW_TYPE(ImagesWindow,   "Images"    ) \
+    GUI_WINDOW_TYPE(PlotWindow,     "Plotting"  )
 
 
 namespace gui {
 
-template <typename T_Window, typename T>
-using EnableIfWindowType = typename std::enable_if_t<std::is_base_of_v<Window, T_Window>, T>;
+class GameWindow;
+class ImagesWindow;
+class PlotWindow;
 
+// Generate the type counter for IDs
+namespace detail {
 
-// In case you get "use of deleted function" error from the following function template,
-// you most probably forgot to add it to the GUI_WINDOW_TYPES macro in the beginning of
-// the file (remember to include the header too :))
+template <typename First, typename... Rest>
+struct TypeCounter {
+    template<typename T, typename U> struct IsSame : std::false_type {};
+    template<typename T> struct IsSame<T, T> : std::true_type {};
+
+    template <typename T>
+    static consteval int Id() {
+        if constexpr(IsSame<T, First>::value)
+            return 0;
+        else
+            return TypeCounter<Rest...>::template Id<T>() + 1;
+    }
+};
+
+#define GUI_WINDOW_TYPE(WINDOW, LABEL) WINDOW,
+using WindowTypeCounter = TypeCounter<GUI_WINDOW_TYPES void>;
+#undef GUI_WINDOW_TYPE
+
+} // namespace detail
+
+// Type info structs (mapping from window type to parameters)
 template <typename T_Window>
-constexpr EnableIfWindowType<T_Window, const char*> windowTypeName() = delete;
+struct WindowTypeInfo {};
 
-#define GUI_WINDOW_TYPE(WINDOW)                \
-template <>                                    \
-constexpr const char* windowTypeName<WINDOW>() \
-{                                              \
-    return #WINDOW;                            \
-}
+#define GUI_WINDOW_TYPE(WINDOW, LABEL)                                         \
+template <>                                                                    \
+struct WindowTypeInfo<WINDOW> {                                                \
+    static constexpr int    id      {detail::WindowTypeCounter::Id<WINDOW>()}; \
+    static constexpr char   name[]  {#WINDOW};                                 \
+    static constexpr char   label[] {LABEL};                                   \
+};
 GUI_WINDOW_TYPES
 #undef GUI_WINDOW_TYPE
 
-std::string windowTypeName(int typeId)
+inline std::string windowTypeName(int windowTypeId)
 {
-    #define GUI_WINDOW_TYPE(WINDOW) \
-    if (typeId == Window::typeId<WINDOW>()) \
-        return windowTypeName<WINDOW>();
-    GUI_WINDOW_TYPES
-    #undef GUI_WINDOW_TYPE
+    switch (windowTypeId) {
+        #define GUI_WINDOW_TYPE(WINDOW, LABEL)   \
+        case WindowTypeInfo<WINDOW>::id:         \
+            return WindowTypeInfo<WINDOW>::name;
+        GUI_WINDOW_TYPES
+        #undef GUI_WINDOW_TYPE
+        default: break;
+    }
+    throw std::runtime_error("Invalid window type id: " + std::to_string(windowTypeId) +
+        " - have all window types been listed in WindowTypeUtils.hpp?");
 }
 
 // Callbacks for fetching window type using type name or ID,
 // intended to be used with a generic (templated) lambda:
 // windowTypeCallback(windowTypeName, []<typename T>(){ /* T is the window type here */ });
 template <typename F>
-void windowTypeCallback(const std::string& typeName, F&& f)
+void windowTypeNameCallback(const std::string& typeName, F&& f)
 {
-    #define GUI_WINDOW_TYPE(WINDOW) \
-    if (typeName == windowTypeName<WINDOW>()) \
+    #define GUI_WINDOW_TYPE(WINDOW, LABEL) \
+    if (typeName == WindowTypeInfo<WINDOW>::name) \
         return f.template operator()<WINDOW>();
     GUI_WINDOW_TYPES
     #undef GUI_WINDOW_TYPE
 }
 
 template <typename F>
-void windowTypeCallback(int typeId, F&& f)
+void windowTypeIdCallback(int typeId, F&& f)
 {
-    #define GUI_WINDOW_TYPE(WINDOW) \
-    if (typeId == Window::typeId<WINDOW>()) \
+    #define GUI_WINDOW_TYPE(WINDOW, LABEL) \
+    if (typeId == WindowTypeInfo<WINDOW>::id) \
         return f.template operator()<WINDOW>();
+    GUI_WINDOW_TYPES
+    #undef GUI_WINDOW_TYPE
+}
+
+// similar to the functions above, but this function calls the callback for each window type
+template <typename F>
+void windowForEachTypeCallback(F&& f)
+{
+    #define GUI_WINDOW_TYPE(WINDOW, LABEL) \
+    f.template operator()<WINDOW>();
     GUI_WINDOW_TYPES
     #undef GUI_WINDOW_TYPE
 }
@@ -80,4 +117,3 @@ void windowTypeCallback(int typeId, F&& f)
 } // namespace gui
 
 #undef GUI_WINDOW_TYPES
-#undef GUI_ADD_WINDOW_TYPE_NAME
