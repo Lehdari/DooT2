@@ -10,6 +10,8 @@
 
 #pragma once
 
+#include "WindowTypeUtils.hpp"
+
 #include "nlohmann/json.hpp"
 
 #include <set>
@@ -52,9 +54,6 @@ public:
     int getId() const noexcept;
     int getTypeId() const noexcept;
 
-    template <typename T_Window>
-    inline static int typeId() noexcept;
-
 protected:
     std::set<int>*  _activeIds;
     int             _id;
@@ -62,9 +61,6 @@ protected:
     bool            _open   {true}; // set to false to close the window
 
     int findFreeId();
-
-private:
-    static int      _nTypeIds;
 };
 
 
@@ -72,18 +68,11 @@ template <typename T_Window>
 Window::Window(T_Window* window, std::set<int>* activeIds, int id) :
     _activeIds  (activeIds),
     _id         (id < 0 ? findFreeId() : id),
-    _typeId     (typeId<T_Window>())
+    _typeId     (WindowTypeInfo<T_Window>::id)
 {
     if (_activeIds->contains(id))
         throw std::runtime_error("Window id " + std::to_string(id) + " already in use");
     _activeIds->emplace(_id);
-}
-
-template<typename T_Window>
-int Window::typeId() noexcept
-{
-    static int typeId = _nTypeIds++;
-    return typeId;
 }
 
 } // namespace gui

@@ -10,11 +10,6 @@
 
 #include "gui/Window.hpp"
 
-#include <stdexcept>
-
-
-int gui::Window::_nTypeIds = 0;
-
 
 gui::Window::~Window()
 {

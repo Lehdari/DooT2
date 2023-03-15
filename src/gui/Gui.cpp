@@ -10,6 +10,9 @@
 
 #include "gui/Gui.hpp"
 #include "gui/WindowTypeUtils.hpp"
+#include "gui/GameWindow.hpp"
+#include "gui/ImagesWindow.hpp"
+#include "gui/PlotWindow.hpp"
 #include "Model.hpp"
 #include "Trainer.hpp"
 
@@ -82,8 +85,8 @@ void Gui::loadLayout(const std::filesystem::path& layoutFilename)
             config = nullptr;
 
         // Create a window: the lambda callback fetches the correct window type
-        windowTypeCallback(w["type"].get<std::string>(), [&]<typename T>() {
-            createWindow<T>(w["id"], config);
+        windowTypeNameCallback(w["type"].get<std::string>(), [&]<typename T_Window>() {
+            createWindow<T_Window>(w["id"], config);
         });
     }
 }
@@ -113,12 +116,10 @@ void Gui::render(SDL_Window* window, Trainer* trainer, Model* model)
     // Menu bar
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("New window")) {
-            if (ImGui::MenuItem("Game", nullptr))
-                createWindow<gui::GameWindow>();
-            if (ImGui::MenuItem("Plotting", nullptr))
-                createWindow<gui::PlotWindow>();
-            if (ImGui::MenuItem("Images", nullptr))
-                createWindow<gui::ImagesWindow>();
+            windowForEachTypeCallback([&]<typename T_Window>() {
+                if (ImGui::MenuItem(WindowTypeInfo<T_Window>::label, nullptr))
+                    createWindow<T_Window>();
+            });
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
