@@ -8,7 +8,7 @@
 // with this source code package.
 //
 
-#include "SequenceStorage.hpp"
+#include "util/SequenceStorage.hpp"
 
 #include <cassert>
 

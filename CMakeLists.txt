@@ -27,16 +27,19 @@ set(DOOT2_ML_SOURCES
     src/ml/modules/FrameEncoder.cpp
     src/ml/modules/ResNeXtModule.cpp
 )
+set(DOOT2_UTIL_SOURCES
+    src/util/SequenceStorage.cpp
+    src/util/TimeSeries.cpp
+)
 set(DOOT2_SOURCES
     ${DOOT2_GUI_SOURCES}
     ${DOOT2_ML_SOURCES}
+    ${DOOT2_UTIL_SOURCES}
     src/main.cpp
     src/ActionManager.cpp
     src/App.cpp
     src/DoorTraversalActionModule.cpp
     src/HeatmapActionModule.cpp
-    src/SequenceStorage.cpp
-    src/TimeSeries.cpp
 )
 
 
@@ -69,7 +72,7 @@ set_target_properties(doot2 PROPERTIES
 
 # Add tests
 set(DOOT2_TEST_SOURCES
-    src/TimeSeries.cpp
+    src/util/TimeSeries.cpp
     src/tests/TestTimeSeries.cpp
 )
 

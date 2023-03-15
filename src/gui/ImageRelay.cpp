@@ -9,7 +9,7 @@
 //
 
 #include "gui/ImageRelay.hpp"
-#include "SingleBuffer.hpp"
+#include "util/SingleBuffer.hpp"
 
 #include "imgui.h"
 

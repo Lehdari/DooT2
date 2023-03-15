@@ -11,7 +11,7 @@
 #pragma once
 
 #include "ActionManager.hpp"
-#include "MathTypes.hpp"
+#include "util/MathTypes.hpp"
 
 #include <opencv2/core/mat.hpp>
 

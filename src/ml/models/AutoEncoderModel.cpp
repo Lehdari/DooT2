@@ -9,7 +9,7 @@
 //
 
 #include "ml/models/AutoEncoderModel.hpp"
-#include "SequenceStorage.hpp"
+#include "util/SequenceStorage.hpp"
 #include "Constants.hpp"
 
 #include <gvizdoom/DoomGame.hpp>

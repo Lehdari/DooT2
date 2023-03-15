@@ -2,7 +2,7 @@
 #include "Constants.hpp"
 #include "CLI/CLI.hpp"
 #include "ml/Trainer.hpp"
-#include "Utils.hpp"
+#include "util/Utils.hpp"
 #include "ml/models/AutoEncoderModel.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
