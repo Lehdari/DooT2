@@ -13,7 +13,7 @@
 #include "gui/Window.hpp"
 #include "gui/ImageRelay.hpp"
 #include "gui/State.hpp"
-#include "TimeSeries.hpp"
+#include "util/TimeSeries.hpp"
 
 #include "gut_opengl/Texture.hpp"
 #include "imgui.h"

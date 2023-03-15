@@ -12,11 +12,11 @@
 
 #include "nlohmann/json.hpp"
 
-#include "Types.hpp"
-#include "SequenceStorage.hpp"
-#include "DoubleBuffer.hpp"
-#include "SingleBuffer.hpp"
-#include "TimeSeries.hpp"
+#include "util/Types.hpp"
+#include "util/SequenceStorage.hpp"
+#include "util/DoubleBuffer.hpp"
+#include "util/SingleBuffer.hpp"
+#include "util/TimeSeries.hpp"
 
 #include <thread>
 #include <mutex>

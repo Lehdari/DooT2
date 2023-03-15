@@ -10,7 +10,7 @@
 
 #include <gtest/gtest.h>
 
-#include "TimeSeries.hpp"
+#include "util/TimeSeries.hpp"
 
 
 TEST(TestTimeSeries, TestFundamentals)

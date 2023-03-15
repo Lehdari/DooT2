@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include "Image.hpp"
+#include "util/Image.hpp"
 
 #include "gut_opengl/Texture.hpp"
 

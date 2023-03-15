@@ -12,7 +12,7 @@
 
 
 #include "ActionConverter.hpp"
-#include "MathTypes.hpp"
+#include "util/MathTypes.hpp"
 
 #include <random>
 #include <functional>

@@ -14,8 +14,8 @@
 #include "ActionManager.hpp"
 #include "DoorTraversalActionModule.hpp"
 #include "HeatmapActionModule.hpp"
-#include "SequenceStorage.hpp"
-#include "SingleBuffer.hpp"
+#include "util/SequenceStorage.hpp"
+#include "util/SingleBuffer.hpp"
 
 #include "gvizdoom/Action.hpp"
 
