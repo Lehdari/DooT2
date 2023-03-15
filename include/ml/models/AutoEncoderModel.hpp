@@ -10,10 +10,10 @@
 
 #pragma once
 
-#include "Model.hpp"
-#include "FrameEncoder.hpp"
-#include "FrameDecoder.hpp"
-#include "FlowDecoder.hpp"
+#include "ml/Model.hpp"
+#include "ml/modules/FrameEncoder.hpp"
+#include "ml/modules/FrameDecoder.hpp"
+#include "ml/modules/FlowDecoder.hpp"
 
 #include <vector>
 #include <memory>
@@ -25,6 +25,8 @@
 
 class SequenceStorage;
 
+
+namespace ml {
 
 class AutoEncoderModel final : public Model {
 public:
@@ -50,3 +52,5 @@ private:
 
     void trainImpl(SequenceStorage& storage) override;
 };
+
+} // namespace ml

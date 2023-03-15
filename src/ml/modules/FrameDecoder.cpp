@@ -8,9 +8,10 @@
 // with this source code package.
 //
 
-#include "FrameDecoder.hpp"
+#include "ml/modules/FrameDecoder.hpp"
 
 
+using namespace ml;
 using namespace torch;
 
 

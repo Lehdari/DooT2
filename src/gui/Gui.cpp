@@ -13,8 +13,8 @@
 #include "gui/GameWindow.hpp"
 #include "gui/ImagesWindow.hpp"
 #include "gui/PlotWindow.hpp"
-#include "Model.hpp"
-#include "Trainer.hpp"
+#include "ml/Model.hpp"
+#include "ml/Trainer.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
 #include "implot.h"
@@ -48,7 +48,7 @@ void Gui::init(SDL_Window* window, SDL_GLContext* glContext)
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 }
 
-void Gui::update(Model* model)
+void Gui::update(ml::Model* model)
 {
     _guiState._timeSeries["training"] = &model->timeSeries;
 
@@ -107,7 +107,7 @@ void Gui::saveLayout(const std::filesystem::path& layoutFilename) const
     layoutFile << std::setw(4) << layout << std::endl;
 }
 
-void Gui::render(SDL_Window* window, Trainer* trainer, Model* model)
+void Gui::render(SDL_Window* window, ml::Trainer* trainer, ml::Model* model)
 {
     auto& doomGame = gvizdoom::DoomGame::instance();
 

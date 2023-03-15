@@ -1,9 +1,9 @@
 #include "App.hpp"
 #include "Constants.hpp"
 #include "CLI/CLI.hpp"
-#include "Trainer.hpp"
+#include "ml/Trainer.hpp"
 #include "Utils.hpp"
-#include "AutoEncoderModel.hpp"
+#include "ml/models/AutoEncoderModel.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
 
@@ -31,12 +31,12 @@ int main()
     doomGame.init(config);
 
 
-    AutoEncoderModel model;
+    ml::AutoEncoderModel model;
 
-    Trainer trainer(&model, cliBatchSize, cliSequenceLength);
+    ml::Trainer trainer(&model, cliBatchSize, cliSequenceLength);
     App app(&trainer, &model);
 
-    std::thread trainerThread(&Trainer::loop, &trainer);
+    std::thread trainerThread(&ml::Trainer::loop, &trainer);
     app.loop();
     trainer.quit();
     trainerThread.join();

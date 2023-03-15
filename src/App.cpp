@@ -10,8 +10,8 @@
 
 #include "App.hpp"
 #include "Constants.hpp"
-#include "Trainer.hpp"
-#include "Model.hpp"
+#include "ml/Trainer.hpp"
+#include "ml/Model.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
 #include "glad/glad.h"
@@ -20,6 +20,7 @@
 #include <filesystem>
 
 
+using namespace ml;
 using namespace gvizdoom;
 using namespace doot2;
 namespace fs = std::filesystem;

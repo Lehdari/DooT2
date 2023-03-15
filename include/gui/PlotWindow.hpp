@@ -26,7 +26,7 @@ public:
     {}
 
     void update(gui::State* guiState) override;
-    void render(Trainer* trainer, Model* model, gui::State* guiState) override;
+    void render(ml::Trainer* trainer, ml::Model* model, gui::State* guiState) override;
     void applyConfig(const nlohmann::json& config) override;
     nlohmann::json getConfig() const override;
 

@@ -13,6 +13,8 @@
 #include <torch/torch.h>
 
 
+namespace ml {
+
 class FrameEncoderImpl : public torch::nn::Module {
 public:
     FrameEncoderImpl();
@@ -37,3 +39,5 @@ private:
     torch::nn::Conv2d           _conv8;
 };
 TORCH_MODULE(FrameEncoder);
+
+} // namespace ml

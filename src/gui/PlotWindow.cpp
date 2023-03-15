@@ -10,7 +10,7 @@
 
 #include "gui/PlotWindow.hpp"
 #include "gui/State.hpp"
-#include "Model.hpp"
+#include "ml/Model.hpp"
 
 #include "implot.h"
 
@@ -43,7 +43,7 @@ void gui::PlotWindow::update(gui::State* guiState)
     }
 }
 
-void gui::PlotWindow::render(Trainer* trainer, Model* model, gui::State* guiState)
+void gui::PlotWindow::render(ml::Trainer* trainer, ml::Model* model, gui::State* guiState)
 {
     if (!_open) return;
     if (ImGui::Begin(("Plotting " + std::to_string(_id)).c_str(), &_open)) {

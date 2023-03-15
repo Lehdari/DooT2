@@ -23,6 +23,9 @@
 #include <random>
 
 
+
+namespace ml {
+
 class Model;
 
 
@@ -59,3 +62,5 @@ private:
 
     void nextMap(); // proceed to next map
 };
+
+} // namespace ml

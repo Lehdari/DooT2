@@ -8,7 +8,10 @@
 // with this source code package.
 //
 
-#include "Model.hpp"
+#include "ml/Model.hpp"
+
+
+using namespace ml;
 
 
 Model::Model() :

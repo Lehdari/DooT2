@@ -8,7 +8,7 @@
 // with this source code package.
 //
 
-#include "AutoEncoderModel.hpp"
+#include "ml/models/AutoEncoderModel.hpp"
 #include "SequenceStorage.hpp"
 #include "Constants.hpp"
 
@@ -22,6 +22,7 @@ static constexpr double     learningRate            = 1.0e-3; // TODO
 static constexpr int64_t    nTrainingIterations     = 4*64;
 
 
+using namespace ml;
 using namespace torch;
 namespace tf = torch::nn::functional;
 namespace fs = std::filesystem;

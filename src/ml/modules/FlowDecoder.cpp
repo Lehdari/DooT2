@@ -8,9 +8,10 @@
 // with this source code package.
 //
 
-#include "FlowDecoder.hpp"
+#include "ml/modules/FlowDecoder.hpp"
 
 
+using namespace ml;
 using namespace torch;
 
 
