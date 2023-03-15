@@ -24,7 +24,7 @@ void gui::ImagesWindow::update(gui::State* guiState)
 {
 }
 
-void gui::ImagesWindow::render(Trainer* trainer, Model* model, gui::State* guiState)
+void gui::ImagesWindow::render(ml::Trainer* trainer, ml::Model* model, gui::State* guiState)
 {
     if (!_open) return;
     if (ImGui::Begin(("Images " + std::to_string(_id)).c_str(), &_open)) {

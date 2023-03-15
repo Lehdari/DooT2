@@ -23,6 +23,8 @@
 #include <condition_variable>
 
 
+namespace ml {
+
 using TrainingState = nlohmann::json;
 
 
@@ -68,3 +70,5 @@ protected:
 
     virtual void trainImpl(SequenceStorage& storage) = 0;
 };
+
+} // namespace ml

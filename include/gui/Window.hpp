@@ -17,8 +17,12 @@
 #include <set>
 
 
+namespace ml {
+
 class Trainer;
 class Model;
+
+} // namespace ml
 
 
 namespace gui {
@@ -42,7 +46,7 @@ public:
     virtual void update(gui::State* guiState) = 0;
 
     // Called every frame in intent to render the window to screen
-    virtual void render(Trainer* trainer, Model* model, gui::State* guiState) = 0;
+    virtual void render(ml::Trainer* trainer, ml::Model* model, gui::State* guiState) = 0;
 
     // Apply window state defined in a configuration JSON object
     virtual void applyConfig(const nlohmann::json& config) = 0;

@@ -12,8 +12,10 @@
 
 #include <torch/torch.h>
 
-#include "ResNeXtModule.hpp"
+#include "ml/modules/ResNeXtModule.hpp"
 
+
+namespace ml {
 
 class FrameDecoderImpl : public torch::nn::Module {
 public:
@@ -49,3 +51,5 @@ private:
     torch::nn::ConvTranspose2d  _convTranspose7_UV;
 };
 TORCH_MODULE(FrameDecoder);
+
+} // namespace ml

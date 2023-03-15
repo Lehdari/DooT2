@@ -10,17 +10,20 @@
 
 #include "gui/GameWindow.hpp"
 #include "gui/State.hpp"
-#include "Trainer.hpp"
+#include "ml/Trainer.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
 #include "imgui.h"
+
+
+using namespace ml;
 
 
 void gui::GameWindow::update(gui::State* guiState)
 {
 }
 
-void gui::GameWindow::render(Trainer* trainer, Model* model, gui::State* guiState)
+void gui::GameWindow::render(ml::Trainer* trainer, ml::Model* model, gui::State* guiState)
 {
     if (!_open) return;
 

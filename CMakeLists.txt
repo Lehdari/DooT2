@@ -18,22 +18,25 @@ set(DOOT2_GUI_SOURCES
     src/gui/PlotWindow.cpp
     src/gui/Window.cpp
 )
+set(DOOT2_ML_SOURCES
+    src/ml/Model.cpp
+    src/ml/Trainer.cpp
+    src/ml/models/AutoEncoderModel.cpp
+    src/ml/modules/FlowDecoder.cpp
+    src/ml/modules/FrameDecoder.cpp
+    src/ml/modules/FrameEncoder.cpp
+    src/ml/modules/ResNeXtModule.cpp
+)
 set(DOOT2_SOURCES
     ${DOOT2_GUI_SOURCES}
+    ${DOOT2_ML_SOURCES}
     src/main.cpp
     src/ActionManager.cpp
     src/App.cpp
-    src/AutoEncoderModel.cpp
     src/DoorTraversalActionModule.cpp
-    src/FlowDecoder.cpp
-    src/FrameDecoder.cpp
-    src/FrameEncoder.cpp
     src/HeatmapActionModule.cpp
-    src/Model.cpp
-    src/ResNeXtModule.cpp
     src/SequenceStorage.cpp
     src/TimeSeries.cpp
-    src/Trainer.cpp
 )
 
 

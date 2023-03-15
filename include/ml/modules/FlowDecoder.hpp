@@ -13,6 +13,8 @@
 #include <torch/torch.h>
 
 
+namespace ml {
+
 class FlowDecoderImpl : public torch::nn::Module {
 public:
     FlowDecoderImpl();
@@ -33,3 +35,5 @@ private:
     torch::nn::ConvTranspose2d  _convTranspose6;
 };
 TORCH_MODULE(FlowDecoder);
+
+} // namespace ml

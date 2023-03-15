@@ -24,8 +24,13 @@
 #include <set>
 
 
+namespace ml {
+
 class Trainer;
 class Model;
+
+} // namespace ml
+
 struct SDL_Window;
 typedef void *SDL_GLContext;
 
@@ -40,12 +45,12 @@ public:
     ~Gui();
 
     void init(SDL_Window* window, SDL_GLContext* glContext);
-    void update(Model* model);
+    void update(ml::Model* model);
     void createDefaultLayout();
     void loadLayout(const std::filesystem::path& layoutFilename);
     void saveLayout(const std::filesystem::path& layoutFilename) const;
 
-    void render(SDL_Window* window, Trainer* trainer, Model* model);
+    void render(SDL_Window* window, ml::Trainer* trainer, ml::Model* model);
 
 private:
     State                                   _guiState;

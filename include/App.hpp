@@ -15,13 +15,17 @@
 #include <SDL.h>
 
 
+namespace ml {
+
 class Trainer;
 class Model;
+
+} // namespace ml
 
 
 class App {
 public:
-    App(Trainer* trainer, Model* model);
+    App(ml::Trainer* trainer, ml::Model* model);
     // TODO RO5
     ~App();
 
@@ -33,8 +37,8 @@ private:
 
     bool            _quit;
 
-    Trainer*        _trainer;
-    Model*          _model;
+    ml::Trainer*    _trainer;
+    ml::Model*      _model;
 
     gui::Gui        _gui;
 };

@@ -13,6 +13,8 @@
 #include <torch/torch.h>
 
 
+namespace ml {
+
 class ResNeXtModuleImpl : public torch::nn::Module {
 public:
     ResNeXtModuleImpl(int nInputChannels, int nGroupChannels, int nGroups, int nOutputChannels);
@@ -31,3 +33,5 @@ private:
     std::vector<torch::Tensor>          _groupOutputs;
 };
 TORCH_MODULE(ResNeXtModule);
+
+} // namespace ml

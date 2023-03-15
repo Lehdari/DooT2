@@ -8,9 +8,10 @@
 // with this source code package.
 //
 
-#include "ResNeXtModule.hpp"
+#include "ml/modules/ResNeXtModule.hpp"
 
 
+using namespace ml;
 using namespace torch;
 
 

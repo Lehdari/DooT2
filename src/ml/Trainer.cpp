@@ -8,15 +8,16 @@
 // with this source code package.
 //
 
-#include "Trainer.hpp"
+#include "ml/Trainer.hpp"
 #include "Constants.hpp"
-#include "Model.hpp"
+#include "ml/Model.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
 
 #include <opencv2/highgui.hpp>
 
 
+using namespace ml;
 using namespace gvizdoom;
 namespace fs = std::filesystem;
 
