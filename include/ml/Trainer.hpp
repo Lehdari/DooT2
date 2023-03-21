@@ -41,6 +41,7 @@ public:
         Model* encoderModel = nullptr,
         uint32_t batchSizeIn = doot2::batchSize,
         size_t sequenceLengthIn = doot2::sequenceLength);
+    // Trainer(Model* modelEnc, Model* modelAc, uint32_t batchSizeIn, size_t sequenceLengthIn);
     ~Trainer();
     Trainer(const Trainer&) = delete;
     Trainer(Trainer&&) noexcept = delete;
@@ -66,6 +67,9 @@ private:
     Model*                          _model;
     Model*                          _agentModel;
     Model*                          _encoderModel;
+
+    // Model*                          _modelEnc;
+    // Model*                          _modelAc;
 
     void nextMap(); // proceed to next map
 };

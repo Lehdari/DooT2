@@ -1,2 +1,11 @@
 .idea/
 cmake-build-*/
+src/gitinfo.h
+gzdoom.pk3
+*.pk3
+ext/json
+*.md
+*.code-workspace
+.venv/
+build*
+models*

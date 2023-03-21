@@ -41,8 +41,11 @@ Trainer::Trainer(
     _model                      (model),
     _agentModel                 (agentModel),
     _encoderModel               (encoderModel)
-{
-    if (_model == nullptr)
+    // _modelEnc                   (modelEnc),
+    // _modelAc                    (modelAc)
+{    
+    if (_agentModel == nullptr or _model == nullptr)
+    {
         throw std::runtime_error("model must not be nullptr");
 
     // Setup sequence storage
@@ -68,6 +71,7 @@ Trainer::Trainer(
             printf("Could not create the directory for models. Expect a crash upon training\n");
         }
     }
+
 }
 
 Trainer::~Trainer()
@@ -167,7 +171,6 @@ void Trainer::loop()
 void Trainer::quit()
 {
     _quit = true;
-    _model->abortTraining();
 }
 
 const SingleBuffer<Image<uint8_t>>::ReadHandle Trainer::getFrameReadHandle()

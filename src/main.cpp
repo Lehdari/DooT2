@@ -5,6 +5,8 @@
 #include "util/Utils.hpp"
 #include "ml/models/AutoEncoderModel.hpp"
 #include "ml/models/RandomWalkerModel.hpp"
+#include "ml/models/ActorCriticModel.hpp"
+
 
 #include "CLI/CLI.hpp"
 #include "gvizdoom/DoomGame.hpp"
@@ -33,16 +35,24 @@ int main()
     doomGame.init(config);
     doomGame.update(gvizdoom::Action());
 
+
     // Initialize models
-    ml::AutoEncoderModel model; // model to be trained
+    ml::AutoEncoderModel modelEncoder;
+
     Heatmap randomWalkerHeatmap({512, 32.0f,
         doomGame.getGameState<gvizdoom::GameState::PlayerPos>().block<2,1>(0,0)});
     ml::RandomWalkerModel agentModel(&randomWalkerHeatmap); // model used for agent
 
-    ml::Trainer trainer(&model, &agentModel, nullptr, cliBatchSize, cliSequenceLength);
-    App app(&trainer, &model);
+    ml::ActorCriticModel modelAc;   // Assume we want to train this from scratch or continue training from a checkpoint
 
+    ml::Trainer trainer(&modelAc,
+        &agentModel, &modelEncoder,
+        cliBatchSize, cliSequenceLength);
+    
+    App app(&trainer, &modelAc);
+    
     std::thread trainerThread(&ml::Trainer::loop, &trainer);
+
     app.loop();
     trainer.quit();
     trainerThread.join();
