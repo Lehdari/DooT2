@@ -4,6 +4,7 @@
 #include "ml/Trainer.hpp"
 #include "util/Utils.hpp"
 #include "ml/models/AutoEncoderModel.hpp"
+#include "ml/models/RandomWalkerModel.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
 
@@ -32,8 +33,9 @@ int main()
 
 
     ml::AutoEncoderModel model;
+    ml::RandomWalkerModel agentModel;
 
-    ml::Trainer trainer(&model, cliBatchSize, cliSequenceLength);
+    ml::Trainer trainer(&model, &agentModel, cliBatchSize, cliSequenceLength);
     App app(&trainer, &model);
 
     std::thread trainerThread(&ml::Trainer::loop, &trainer);
