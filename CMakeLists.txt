@@ -22,6 +22,7 @@ set(DOOT2_ML_SOURCES
     src/ml/Model.cpp
     src/ml/Trainer.cpp
     src/ml/models/AutoEncoderModel.cpp
+    src/ml/models/EncoderModel.cpp
     src/ml/models/RandomWalkerModel.cpp
     src/ml/modules/FlowDecoder.cpp
     src/ml/modules/FrameDecoder.cpp
