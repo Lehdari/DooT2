@@ -16,6 +16,7 @@
 #include <algorithm>
 
 #include "gvizdoom/Action.hpp"
+#include <torch/torch.h>
 
 
 template <typename T_Scalar>
@@ -30,7 +31,9 @@ public:
     void setAngleIndex(size_t id);
 
     // Convert a scalar-valued action vector to a gvizdoom Action
+    gvizdoom::Action operator()(const T_Scalar* actionData, size_t length) const noexcept;
     gvizdoom::Action operator()(const std::vector<T_Scalar>& actionVector) const noexcept;
+    gvizdoom::Action operator()(const torch::Tensor& actionTensor) const noexcept;
 
     // Convert a gvizdoom Action to a scalar-valued action vector
     std::vector<T_Scalar> operator()(const gvizdoom::Action& action,
@@ -70,13 +73,13 @@ void ActionConverter<T_Scalar>::setAngleIndex(size_t id)
 }
 
 template<typename T_Scalar>
-gvizdoom::Action ActionConverter<T_Scalar>::operator()(const std::vector<T_Scalar>& actionVector) const noexcept
+gvizdoom::Action ActionConverter<T_Scalar>::operator()(const T_Scalar* actionData, size_t length) const noexcept
 {
     T_Scalar middle = (_min+_max) / 2;
 
     gvizdoom::Action action;
-    for (size_t i=0; i<actionVector.size(); ++i) {
-        auto& v = actionVector[i];
+    for (size_t i=0; i<length; ++i) {
+        auto& v = actionData[i];
         if (_keyMap.contains(i) && v >= middle) {
             action.set(_keyMap.at(i));
         }
@@ -87,6 +90,18 @@ gvizdoom::Action ActionConverter<T_Scalar>::operator()(const std::vector<T_Scala
     }
 
     return action;
+}
+
+template<typename T_Scalar>
+gvizdoom::Action ActionConverter<T_Scalar>::operator()(const std::vector<T_Scalar>& actionVector) const noexcept
+{
+    return operator()(actionVector.data(), actionVector.size());
+}
+
+template<typename T_Scalar>
+gvizdoom::Action ActionConverter<T_Scalar>::operator()(const torch::Tensor& actionTensor) const noexcept
+{
+    return operator()(reinterpret_cast<T_Scalar*>(actionTensor.data_ptr()), actionTensor.numel());
 }
 
 template<typename T_Scalar>
