@@ -64,7 +64,15 @@ Image<T_Data>& Image<T_Data>::operator=(const Image<T_Data>& other)
     if (this == &other)
         return *this;
 
-    copyParamsFrom(other);
+    _width = other._width;
+    _height = other._height;
+    _format = other._format;
+    if (_nElements != other._nElements) { // reuse the current buffer in case it's right size
+        _nElements = other._nElements;
+        _buffer.resize(_nElements);
+        _data = _buffer.data();
+    }
+    memcpy(_data, other._data, _nElements*sizeof(T_Data)); // make a copy of the pixel data
 
     return *this;
 }
