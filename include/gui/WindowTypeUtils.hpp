@@ -26,9 +26,9 @@
 
 namespace gui {
 
-class GameWindow;
-class ImagesWindow;
-class PlotWindow;
+#define GUI_WINDOW_TYPE(WINDOW, LABEL) class WINDOW;
+GUI_WINDOW_TYPES
+#undef GUI_WINDOW_TYPE
 
 // Generate the type counter for IDs
 namespace detail {
