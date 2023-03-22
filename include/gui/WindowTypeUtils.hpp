@@ -14,6 +14,8 @@
 #include <string>
 #include <stdexcept>
 
+#include "util/TypeCounter.hpp"
+
 
 // List all available window types in this macro
 // First argument: window type
@@ -30,28 +32,22 @@ namespace gui {
 GUI_WINDOW_TYPES
 #undef GUI_WINDOW_TYPE
 
-// Generate the type counter for IDs
+} // namespace gui
+
 namespace detail {
 
-template <typename First, typename... Rest>
-struct TypeCounter {
-    template<typename T, typename U> struct IsSame : std::false_type {};
-    template<typename T> struct IsSame<T, T> : std::true_type {};
-
-    template <typename T>
-    static consteval int Id() {
-        if constexpr(IsSame<T, First>::value)
-            return 0;
-        else
-            return TypeCounter<Rest...>::template Id<T>() + 1;
-    }
-};
-
-#define GUI_WINDOW_TYPE(WINDOW, LABEL) WINDOW,
+// Generate the type counter for IDs
+#define GUI_WINDOW_TYPE(WINDOW, LABEL) gui::WINDOW,
 using WindowTypeCounter = TypeCounter<GUI_WINDOW_TYPES void>;
 #undef GUI_WINDOW_TYPE
 
 } // namespace detail
+
+namespace gui {
+
+#define GUI_WINDOW_TYPE(WINDOW, LABEL) class WINDOW;
+GUI_WINDOW_TYPES
+#undef GUI_WINDOW_TYPE
 
 // Type info structs (mapping from window type to parameters)
 template <typename T_Window>
