@@ -11,9 +11,7 @@
 #pragma once
 
 
-#include "ActionManager.hpp"
-#include "DoorTraversalActionModule.hpp"
-#include "HeatmapActionModule.hpp"
+#include "ActionConverter.hpp"
 #include "util/SequenceStorage.hpp"
 #include "util/SingleBuffer.hpp"
 
@@ -31,7 +29,7 @@ class Model;
 
 class Trainer {
 public:
-    Trainer(Model* model, uint32_t batchSizeIn, size_t sequenceLengthIn);
+    Trainer(Model* model, Model* agentModel, uint32_t batchSizeIn, size_t sequenceLengthIn);
     ~Trainer();
     Trainer(const Trainer&) = delete;
     Trainer(Trainer&&) noexcept = delete;
@@ -46,12 +44,8 @@ private:
     using Rnd = std::default_random_engine;
     Rnd                             _rnd;
     std::atomic_bool                _quit;
-    ActionManager                   _actionManager;
-    HeatmapActionModule             _heatmapActionModule;
-    DoorTraversalActionModule       _doorTraversalActionModule;
+    ActionConverter<float>          _actionConverter;
     SequenceStorage                 _sequenceStorage;
-    cv::Mat                         _positionPlot;
-    Vec2f                           _initPlayerPos;
     SingleBuffer<Image<uint8_t>>    _frame;
 
     size_t                          _frameId;
@@ -59,6 +53,7 @@ private:
     bool                            _newPatchReady;
 
     Model*                          _model;
+    Model*                          _agentModel;
 
     void nextMap(); // proceed to next map
 };
