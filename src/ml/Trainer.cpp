@@ -9,7 +9,6 @@
 //
 
 #include "ml/Trainer.hpp"
-#include "Constants.hpp"
 #include "ml/Model.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
@@ -22,7 +21,13 @@ using namespace gvizdoom;
 namespace fs = std::filesystem;
 
 
-Trainer::Trainer(Model* model, Model* agentModel, uint32_t batchSizeIn, size_t sequenceLengthIn) :
+Trainer::Trainer(
+    Model* model,
+    Model* agentModel,
+    Model* encoderModel,
+    uint32_t batchSizeIn,
+    size_t sequenceLengthIn
+) :
     _rnd                        (1507715517),
     _quit                       (false),
     _sequenceStorage            (SequenceStorage::Settings{batchSizeIn, sequenceLengthIn,
@@ -37,7 +42,8 @@ Trainer::Trainer(Model* model, Model* agentModel, uint32_t batchSizeIn, size_t s
     _batchEntryId               (0),
     _newPatchReady              (false),
     _model                      (model),
-    _agentModel                 (agentModel)
+    _agentModel                 (agentModel),
+    _encoderModel               (encoderModel)
 {
     if (_model == nullptr)
         throw std::runtime_error("model must not be nullptr");
@@ -72,13 +78,41 @@ void Trainer::loop()
     size_t recordBeginFrameId = 768+_rnd()%512;
     size_t recordEndFrameId = recordBeginFrameId + _sequenceStorage.settings().length;
 
-    TensorVector dummyAgentInput; // TODO replace with actual agent input
-    TensorVector agentOutput;
+    // Setup YUV frame
+    std::vector<float> frameYUVData(doot2::frameWidth*doot2::frameHeight*
+        getImageFormatNChannels(ImageFormat::YUV)); // external buffer to allow mapping to tensor
+    Image<float> frameYUV(doot2::frameWidth, doot2::frameHeight, ImageFormat::YUV, frameYUVData.data());
+    {   // Copy and convert the first frame
+        auto frameHandle = _frame.write();
+        frameHandle->copyFrom(doomGame.getPixelsBGRA());
+        convertImage(*frameHandle, frameYUV, ImageFormat::YUV);
+    }
+
+    // Setup model I/O tensor vectors
+    TensorVector frameTV(1); // just hosts the converted input frame
+    TensorVector encodingTV(1); // frame converted into an encoding (output of the encoding model)
+    TensorVector actionTV(1); // action output produced by the agent model
 
     while (!_quit) {
-        // Action for this timestep
-        _agentModel->infer(dummyAgentInput, agentOutput);
-        auto action = _actionConverter(agentOutput[0]);
+        // Map the frame into a tensor
+        frameTV[0] = torch::from_blob(frameYUVData.data(),
+            { 1 /*batch size*/, doot2::frameWidth, doot2::frameHeight,
+            getImageFormatNChannels(ImageFormat::YUV) },
+            torch::TensorOptions().device(torch::kCPU)
+        );
+
+        // Run encoder and agent model inference
+        if (_encoderModel == nullptr) {
+            // no encoder model in use, input raw frames to the model
+            _agentModel->infer(frameTV, actionTV);
+        }
+        else {
+            _encoderModel->infer(frameTV, encodingTV);
+            _agentModel->infer(encodingTV, actionTV);
+        }
+
+        // Convert agent model output to an action for this timestep
+        auto action = _actionConverter(actionTV[0]);
 
         // Update the game state, restart if required
         if (_frameId >= recordEndFrameId || doomGame.update(action)) {
@@ -102,6 +136,7 @@ void Trainer::loop()
             {   // convert the frame
                 auto frameHandle = _frame.read();
                 convertImage(*frameHandle, batch.frames[_batchEntryId], ImageFormat::YUV);
+                frameYUV = batch.frames[_batchEntryId];
             }
             batch.rewards[_batchEntryId] = 0.0; // TODO no rewards for now
         }

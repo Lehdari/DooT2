@@ -14,6 +14,7 @@
 #include "ActionConverter.hpp"
 #include "util/SequenceStorage.hpp"
 #include "util/SingleBuffer.hpp"
+#include "Constants.hpp"
 
 #include "gvizdoom/Action.hpp"
 
@@ -29,7 +30,16 @@ class Model;
 
 class Trainer {
 public:
-    Trainer(Model* model, Model* agentModel, uint32_t batchSizeIn, size_t sequenceLengthIn);
+    // model:           model to be trained
+    // agentModel:      model to be used for the agent
+    // encoderModel:    model used for encoding the frames (if nullptr, raw frames will be stored
+    //                  into the sequence storage instead)
+    Trainer(
+        Model* model,
+        Model* agentModel,
+        Model* encoderModel = nullptr,
+        uint32_t batchSizeIn = doot2::batchSize,
+        size_t sequenceLengthIn = doot2::sequenceLength);
     ~Trainer();
     Trainer(const Trainer&) = delete;
     Trainer(Trainer&&) noexcept = delete;
@@ -54,6 +64,7 @@ private:
 
     Model*                          _model;
     Model*                          _agentModel;
+    Model*                          _encoderModel;
 
     void nextMap(); // proceed to next map
 };

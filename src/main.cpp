@@ -35,7 +35,7 @@ int main()
     ml::AutoEncoderModel model;
     ml::RandomWalkerModel agentModel;
 
-    ml::Trainer trainer(&model, &agentModel, cliBatchSize, cliSequenceLength);
+    ml::Trainer trainer(&model, &agentModel, nullptr, cliBatchSize, cliSequenceLength);
     App app(&trainer, &model);
 
     std::thread trainerThread(&ml::Trainer::loop, &trainer);
