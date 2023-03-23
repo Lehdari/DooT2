@@ -135,8 +135,8 @@ void Trainer::loop()
             batch.actions[_batchEntryId] = action;
             {   // convert the frame
                 auto frameHandle = _frame.read();
-                convertImage(*frameHandle, batch.frames[_batchEntryId], ImageFormat::YUV);
-                frameYUV = batch.frames[_batchEntryId];
+                convertImage(*frameHandle, frameYUV, ImageFormat::YUV);
+                batch.frames[_batchEntryId] = frameYUV;
             }
             batch.rewards[_batchEntryId] = 0.0; // TODO no rewards for now
         }
