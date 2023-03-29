@@ -41,7 +41,7 @@ set(DOOT2_SOURCES
     src/ActionManager.cpp
     src/App.cpp
     src/DoorTraversalActionModule.cpp
-    src/HeatmapActionModule.cpp
+    src/Heatmap.cpp
 )
 
 

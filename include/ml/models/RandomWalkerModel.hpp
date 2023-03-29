@@ -12,20 +12,33 @@
 
 #include "ml/Model.hpp"
 
+#include <torch/torch.h>
+
+
+class Heatmap;
+
 
 namespace ml {
 
 class RandomWalkerModel final : public Model {
 public:
-    RandomWalkerModel();
+    RandomWalkerModel(Heatmap* heatmap=nullptr);
     RandomWalkerModel(const RandomWalkerModel&) = delete;
     RandomWalkerModel(RandomWalkerModel&&) = delete;
     RandomWalkerModel& operator=(const RandomWalkerModel&) = delete;
     RandomWalkerModel& operator=(RandomWalkerModel&&) = delete;
 
+    void reset() override;
     void infer(const TensorVector& input, TensorVector& output) override;
 
 private:
+    Heatmap*        _heatmap;
+    torch::Tensor   _actionPrev;
+    float           _heatmapValuePrev;
+    float           _heatmapValueAbsMovingAverage;
+    Vec2f           _playerPosPrev;
+    float           _playerVelocityMovingAverage;
+
     void trainImpl(SequenceStorage& storage) override;
 };
 

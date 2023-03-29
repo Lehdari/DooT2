@@ -10,7 +10,7 @@
 
 #include "ActionManager.hpp"
 #include "Constants.hpp"
-#include "HeatmapActionModule.hpp"
+#include "Heatmap.hpp"
 
 using namespace doot2;
 using namespace gvizdoom;

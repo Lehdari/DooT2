@@ -30,10 +30,13 @@ using TrainingState = nlohmann::json;
 
 // Interface class for models
 // It provides facilities for synchronous and asynchronous (threaded) training
-// Implement pure virtual functions trainImpl and infer in the derived class
+// Implement pure virtual functions reset, infer and trainImpl in the derived class
 class Model {
 public:
     Model();
+
+    // Reset the model - will be called in start of each sequence
+    virtual void reset() = 0;
 
     // Train the model
     void train(SequenceStorage& storage);

@@ -36,6 +36,7 @@ public:
     AutoEncoderModel& operator=(const AutoEncoderModel&) = delete;
     AutoEncoderModel& operator=(AutoEncoderModel&&) = delete;
 
+    void reset() override;
     void infer(const TensorVector& input, TensorVector& output) override;
 
 private:
