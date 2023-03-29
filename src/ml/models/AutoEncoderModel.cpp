@@ -417,6 +417,11 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
     _trainingFinished = true;
 }
 
+void AutoEncoderModel::reset()
+{
+
+}
+
 void AutoEncoderModel::infer(const TensorVector& input, TensorVector& output)
 {
     // TODO

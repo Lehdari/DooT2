@@ -8,7 +8,7 @@
 // with this source code package.
 //
 
-#include "HeatmapActionModule.hpp"
+#include "Heatmap.hpp"
 
 #include <gvizdoom/DoomGame.hpp>
 
@@ -18,7 +18,7 @@
 using namespace gvizdoom;
 
 
-HeatmapActionModule::HeatmapActionModule(const HeatmapActionModule::Settings &settings) :
+Heatmap::Heatmap(const Heatmap::Settings &settings) :
     _settings           (settings),
     _heatmap            (settings.resolution, settings.resolution, CV_32FC1, 0.0f),
     _heatmapMaxValue    (0.0f),
@@ -26,14 +26,14 @@ HeatmapActionModule::HeatmapActionModule(const HeatmapActionModule::Settings &se
 {
 }
 
-void HeatmapActionModule::applyExitPositionPriori(Vec2f exitPos, float scale)
+void Heatmap::applyExitPositionPriori(const Vec2f& exitPos, float scale)
 {
     // transform world coords to heatmap coords
-    exitPos = exitPos/_settings.cellSize + Vec2f(_settings.resolution/2.0f, _settings.resolution/2.0f);
+    Vec2f exitPosHeatmap = toHeatmapCoords(exitPos);
     for (int j=0; j<_settings.resolution; ++j) {
         auto* p = _heatmap.ptr<float>(j);
         for (int i=0; i<_settings.resolution; ++i) {
-            p[i] = (Vec2f(i+0.5f, j+0.5f) - exitPos).norm() * scale;
+            p[i] = (Vec2f(i+0.5f, j+0.5f) - exitPosHeatmap).norm() * scale;
             if (p[i] > _heatmapMaxValue)
                 _heatmapMaxValue = p[i];
         }
@@ -42,26 +42,25 @@ void HeatmapActionModule::applyExitPositionPriori(Vec2f exitPos, float scale)
     refreshNormalization();
 }
 
-void HeatmapActionModule::addSample(const Vec2f& playerPos, float s)
+void Heatmap::addSample(const Vec2f& playerPos, float s)
 {
-    int heatmapMiddle = _settings.resolution / 2;
-    Vec2f playerPosMap = playerPos / _settings.cellSize + Vec2f(heatmapMiddle, heatmapMiddle);
+    Vec2f playerPosHeatmap = toHeatmapCoords(playerPos);
 
-    int px = playerPosMap(0);
-    int py = playerPosMap(1);
-    Vec2f frac(playerPosMap(0)-px, playerPosMap(1)-py);
+    auto px = (int)playerPosHeatmap(0);
+    auto py = (int)playerPosHeatmap(1);
+    Vec2f frac(playerPosHeatmap(0)-px, playerPosHeatmap(1)-py);
     addSubSample(px, py, s*(1.0f-frac(0))*(1.0f-frac(1)));
     addSubSample(px+1, py, s*frac(0)*(1.0f-frac(1)));
     addSubSample(px, py+1, s*(1.0f-frac(0))*frac(1));
     addSubSample(px+1, py+1, s*frac(0)*frac(1));
 
-    float h = sample(playerPosMap);
+    float h = sampleInternal(playerPosHeatmap);
     if (h > _heatmapMaxValue) {
         _heatmapMaxValue = h;
     }
 }
 
-void HeatmapActionModule::addGaussianSample(const Vec2f& playerPos, float s, float sigma)
+void Heatmap::addGaussianSample(const Vec2f& playerPos, float s, float sigma)
 {
     float nSigma = sigma / _settings.cellSize;
     int r = std::ceil(nSigma*3.0f);
@@ -81,42 +80,15 @@ void HeatmapActionModule::addGaussianSample(const Vec2f& playerPos, float s, flo
     }
 }
 
-void HeatmapActionModule::refreshNormalization()
+void Heatmap::refreshNormalization()
 {
     _heatmapNormalized = _heatmap / _heatmapMaxValue;
 }
 
-void HeatmapActionModule::reset()
+void Heatmap::reset(const Vec2f& playerInitPos)
 {
     _heatmap = cv::Mat(_settings.resolution, _settings.resolution, CV_32FC1, 0.0f);
     _heatmapNormalized = cv::Mat(_settings.resolution, _settings.resolution, CV_32FC1, 0.0f);
     _heatmapMaxValue = 0.0f;
-    state = State();
-}
-
-void HeatmapActionModule::operator()(
-    const ActionManager::CallParams& callParams,
-    ActionManager::UpdateParams& updateParams,
-    ActionManager& actionManager
-) {
-    float heatmapSample = sample(callParams.playerPos, true);
-    state.diff = heatmapSample-state.samplePrev;
-    state.samplePrev = heatmapSample;
-
-    // action vector already overwritten, skip further modifications
-    if (!updateParams.actionVectorOverwrite.empty())
-        return;
-
-    auto& actionVector = actionManager.getActionVector();
-    if (state.diff > 0.15f) {
-        // invert action in case heatmap value grows rapidly (we're approaching region
-        // that has been visited often)
-        updateParams.actionVectorOverwrite.resize(actionVector.size());
-        for (int i=0; i<actionVector.size(); ++i)
-            updateParams.actionVectorOverwrite[i] = -1.0f*actionVector[i];
-    }
-    else if (state.diff < 0.0f) {
-        // duplicate actions if heatmap value is decreasing
-        updateParams.actionVectorOverwrite = actionVector;
-    }
+    _settings.playerInitPos = playerInitPos;
 }

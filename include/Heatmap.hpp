@@ -16,41 +16,26 @@
 #include <opencv2/core/mat.hpp>
 
 
-// Heatmap is an ActionManager module implementing exploration of less-visited areas
-class HeatmapActionModule {
+class Heatmap {
 public:
     struct Settings {
-        int     resolution; // width and height of the exploration heatmap
-        float   cellSize;   // exploration heatmap cell size
+        int     resolution;     // width and height of the exploration heatmap
+        float   cellSize;       // exploration heatmap cell size
+        Vec2f   playerInitPos;  // location where player starts the map (will be used as the heatmap center)
     };
 
-    struct State {
-        float   samplePrev  {0.0f};
-        float   diff        {0.0f};
-    };
+    Heatmap(const Settings& settings);
 
-    HeatmapActionModule(const Settings& settings);
-
-    void applyExitPositionPriori(Vec2f exitPos, float scale=0.25f);
+    void applyExitPositionPriori(const Vec2f& exitPos, float scale=0.25f);
 
     void addSample(const Vec2f& playerPos, float s=1.0f);
     void addGaussianSample(const Vec2f& playerPos, float s, float sigma);
     void refreshNormalization();
 
-    inline float sample(Vec2f p, bool worldCoords=false) const noexcept;
-    inline float normalizedSample(Vec2f p, bool worldCoords=false) const noexcept;
+    inline float sample(Vec2f p) const noexcept;
+    inline float normalizedSample(Vec2f p) const noexcept;
 
-    void reset();
-
-    void operator()(
-        const ActionManager::CallParams& callParams,
-        ActionManager::UpdateParams& updateParams,
-        ActionManager& actionManager);
-
-    State   state;
-
-    // TODO temp
-    float getDiff() const { return state.diff; }
+    void reset(const Vec2f& playerInitPos);
 
 private:
     Settings    _settings;
@@ -59,14 +44,26 @@ private:
     float       _heatmapMaxValue;
     cv::Mat     _heatmapNormalized;
 
+    // Convert point in world coordinates to heatmap coordinates
+    inline float sampleInternal(Vec2f p) const noexcept;
+    inline float normalizedSampleInternal(Vec2f p) const noexcept;
+    inline Vec2f toHeatmapCoords(const Vec2f& p) const;
     inline void addSubSample(int x, int y, float s);
 };
 
 
-float HeatmapActionModule::sample(Vec2f p, bool worldCoords) const noexcept
+float Heatmap::sample(Vec2f p) const noexcept
 {
-    if (worldCoords)
-        p = p/_settings.cellSize + Vec2f(_settings.resolution/2.0f, _settings.resolution/2.0f);
+    return sampleInternal(toHeatmapCoords(p));
+}
+
+float Heatmap::normalizedSample(Vec2f p) const noexcept
+{
+    return normalizedSampleInternal(toHeatmapCoords(p));;
+}
+
+float Heatmap::sampleInternal(Vec2f p) const noexcept
+{
     int px = p(0);
     int py = p(1);
     Vec2f frac(p(0)-px, p(1)-py);
@@ -76,10 +73,8 @@ float HeatmapActionModule::sample(Vec2f p, bool worldCoords) const noexcept
            frac(0)*frac(1)*_heatmap.at<float>(py+1, px+1);
 }
 
-float HeatmapActionModule::normalizedSample(Vec2f p, bool worldCoords) const noexcept
+float Heatmap::normalizedSampleInternal(Vec2f p) const noexcept
 {
-    if (worldCoords)
-        p = p/_settings.cellSize + Vec2f(_settings.resolution/2.0f, _settings.resolution/2.0f);
     int px = p(0);
     int py = p(1);
     Vec2f frac(p(0)-px, p(1)-py);
@@ -89,7 +84,13 @@ float HeatmapActionModule::normalizedSample(Vec2f p, bool worldCoords) const noe
            frac(0)*frac(1)*_heatmapNormalized.at<float>(py+1, px+1);
 }
 
-void HeatmapActionModule::addSubSample(int x, int y, float s)
+Vec2f Heatmap::toHeatmapCoords(const Vec2f& p) const
+{
+    return (p-_settings.playerInitPos)/_settings.cellSize +
+        Vec2f(_settings.resolution/2.0f, _settings.resolution/2.0f);
+}
+
+void Heatmap::addSubSample(int x, int y, float s)
 {
     _heatmap.at<float>(y, x) += s;
 }

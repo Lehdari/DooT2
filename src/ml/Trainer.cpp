@@ -181,6 +181,10 @@ void Trainer::nextMap()
 
     gvizdoom::GameConfig newGameConfig = doomGame.getGameConfig();
     newGameConfig.map = _rnd()%29 + 1;
-
     doomGame.restart(newGameConfig);
+
+    _model->reset();
+    _agentModel->reset();
+    if (_encoderModel != nullptr)
+        _encoderModel->reset();
 }
