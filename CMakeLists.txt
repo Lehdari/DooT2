@@ -76,6 +76,7 @@ set_target_properties(doot2 PROPERTIES
 set(DOOT2_TEST_SOURCES
     src/util/TimeSeries.cpp
     src/tests/TestTimeSeries.cpp
+    src/tests/TestSequence.cpp
 )
 
 include(GoogleTest)
@@ -92,6 +93,10 @@ target_link_libraries(doot2_tests
     PUBLIC  gtest
     PUBLIC  pthread
     PUBLIC  nlohmann_json
+    PUBLIC  torch_interface
+)
+target_compile_definitions(doot2_tests
+    PUBLIC  ASSETS_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/assets\"
 )
 gtest_add_tests(TARGET doot2_tests
     TEST_SUFFIX .noArgs
