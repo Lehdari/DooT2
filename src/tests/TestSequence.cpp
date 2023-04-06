@@ -51,10 +51,10 @@ TEST(TestSequence, TestBasics)
     ASSERT_TRUE((map1.sizes() == std::vector<int64_t>{3,2,1,2,3}));
 
     // Test batch addition failures
-    ASSERT_DEATH({
+    ASSERT_THROW({
         torch::Tensor t3 = torch::zeros({1,1,2,3}, torch::kFloat32); // wrong shape
         s1.addBatch(t3);
-    }, "");
+    }, std::runtime_error);
     ASSERT_DEATH({
         torch::Tensor t3 = torch::zeros({2,1,2,3}, torch::kFloat64); // wrong type
         s1.addBatch(t3);

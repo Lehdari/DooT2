@@ -2,7 +2,7 @@
 // Project: DooT2
 // File: SequenceStorage.hpp
 //
-// Copyright (c) 2022 Miika 'Lehdari' Lehtimäki
+// Copyright (c) 2023 Miika 'Lehdari' Lehtimäki
 // You may use, distribute and modify this code under the terms
 // of the licence specified in file LICENSE which is distributed
 // with this source code package.
@@ -10,126 +10,174 @@
 
 #pragma once
 
-#include "Image.hpp"
-#include "TensorUtils.hpp"
+#include "util/Sequence.hpp"
 
-#include <gvizdoom/Action.hpp>
+#include <vector>
+#include <unordered_map>
+#include <cassert>
 
 
 class SequenceStorage {
 public:
-    struct Settings {
-        uint32_t    batchSize;
-        std::size_t length;     // max sequence length
-
-        bool        hasFrames       {true};     // Does the storage contain frames?
-        bool        hasEncodings    {false};    // Does the storage contain frame encodings?
-
-        uint32_t    frameWidth;
-        uint32_t    frameHeight;
-        ImageFormat frameFormat;
-        uint32_t    encodingLength;
-    };
-
-    class BatchHandle {
-    public:
-        gvizdoom::Action* const actions;
-        Image<float>* const     frames;
-        float* const* const     encodings; // const ptr to const ptr to mutable float
-        double* const           rewards;
-
-        // Map pixel data to a torch tensor (BHWC)
-        const torch::Tensor mapPixelData();
-
-        // Map encoding data to a torch tensor (BW)
-        const torch::Tensor mapEncodingData();
-
-        friend class SequenceStorage;
-
-    private:
-        BatchHandle(
-            gvizdoom::Action* actions,
-            Image<float>* frames,
-            float** encodings,
-            double* rewards,
-            float* frameData,
-            float* encodingData,
-            const SequenceStorage::Settings& settings);
-
-        float* const                        _frameData;
-        float* const                        _encodingData;
-        const SequenceStorage::Settings&    _settings;
-    };
-
-    class ConstBatchHandle {
-    public:
-        const gvizdoom::Action* const   actions;
-        const Image<float>* const       frames;
-        const float* const* const       encodings; // const ptr to const ptr to const float
-        const double* const             rewards;
-
-        friend class SequenceStorage;
-
-    private:
-        ConstBatchHandle(
-            const gvizdoom::Action* actions,
-            const Image<float>* frames,
-            const float* const* encodings,
-            const double* rewards);
-    };
-
-
-    SequenceStorage(const Settings& settings);
+    SequenceStorage(int64_t batchSize);
+    ~SequenceStorage();
     SequenceStorage(const SequenceStorage& other);
     SequenceStorage(SequenceStorage&& other) noexcept;
     SequenceStorage& operator=(const SequenceStorage& other);
     SequenceStorage& operator=(SequenceStorage&& other) noexcept;
 
-    // Access a batch
-    BatchHandle operator[](std::size_t id);
-    ConstBatchHandle operator[](std::size_t id) const noexcept;
+    // Add new sequence, initializes the sequence vector to size of the sequence (.size()),
+    // filled with defaultValue.
+    template <typename T_Data, typename T_DefaultEntry>
+    void addSequence(
+        const std::string& sequenceName,
+        const T_DefaultEntry& defaultValue,
+        const std::vector<int64_t>& shape = {1});
+    // Same as above but shape is deduced from the tensor
+    template <typename T_Data>
+    void addSequence(
+        const std::string& sequenceName,
+        const torch::Tensor& defaultValue);
 
-    // Map pixel data to a torch tensor (LBHWC)
-    const torch::Tensor mapPixelData();
+    // Add entry to a sequence (similar to push_back), if one with specified name does not exist,
+    // std::runtime_error gets thrown
+    // Note: All sequence in a SequenceStorage instance will always have equal length, meaning
+    //       an entry will be added to each sequence vector using their respective defaultValues.
+    //       In case this is undesired, see addEntries
+    template <typename T_Data>
+    void addEntry(const std::string& sequenceName, const T_Data& entry);
+    void addEntry(const std::string& sequenceName, const torch::Tensor& entry);
 
-    // Map encoding data to a torch tensor (LBW)
-    const torch::Tensor mapEncodingData();
+    // Add multiple entries, arguments must be alternating sequence of std::string (sequence name)
+    // followed T_Data (type of the sequence). For example:
+    // addEntries("timestamp", 83745622, "value", 0.2533);
+    // This function also adds new sequence in case the ones with the names specified do not exist
+    template <typename... T_NamesAndEntries>
+    void addEntries(const T_NamesAndEntries&... namesAndEntries);
 
-    const Settings& settings() const noexcept;
+    void resize(size_t newLength);
+
+    // Get pointer to a sequence. Returns nullptr in case a sequence with
+    // name sequenceName does not exist.
+    template <typename T_Data>
+    const Sequence<T_Data>* getSequence(const std::string& sequenceName) const;
+
+    // Get handle to a batch at step t
+    template <typename T_Data>
+    Sequence<T_Data>::BatchHandle getBatch(const std::string& sequenceName, size_t t);
+
+    // List all sequence names
+    std::vector<std::string> getSequenceNames() const;
+
+    // Get number of sequences (matches length of the vector returned from getSequenceNames)
+    size_t getNumSequences() const noexcept;
+
+    // Get SequenceStorage length (size() of sequence vectors)
+    size_t length() const noexcept;
+
+    int64_t batchSize() const noexcept;
+
+    // Get total number of SequenceStorage instances
+    static size_t getNumInstances();
 
 private:
-    Settings                        _settings;
-    uint64_t                        _frameSize;     // size of a frame in elements
+    size_t  _size;
+    int64_t _batchSize;
 
-    // Sequence data vectors
-    std::vector<gvizdoom::Action>   _actions;
-    std::vector<Image<float>>       _frames;
-    std::vector<float>              _frameData;     // pixel data storage for _frames
-    std::vector<float*>             _encodings;     // pointers to starting points of each encoding in the _encodingData vector
-    std::vector<float>              _encodingData;  // frame encodings in one long vector, similar to _frameData
-    std::vector<double>             _rewards;
+    template<typename T_FirstEntry, typename... T_NamesAndEntries>
+    void addEntriesRecursive(const std::string& sequenceName, const T_FirstEntry& firstEntry,
+        const T_NamesAndEntries&... namesAndEntries);
 
-    inline void initializeFrames(std::size_t size);
-    inline void initializeEncodings(std::size_t size);
+    void addEntriesRecursive();
+
+    // A simple wrapper for sequence data vector that provides deletion / copying
+    // functionality with type hiding
+    class SequenceWrapper {
+        using Adder         = size_t (SequenceWrapper::*)(const void*);
+        using AdderTensor   = size_t (SequenceWrapper::*)(const torch::Tensor&);
+        using Deleter       = void (SequenceWrapper::*)();
+        using DataCopier    = void* (SequenceWrapper::*)() const;
+        using DefaultCopier = const void* (SequenceWrapper::*)() const;
+        using Resizer       = void (SequenceWrapper::*)(size_t);
+
+        void*           _data;                  // the sequence data vector, pointer to std::vector<T_Data>
+        const void*     _defaultValue;          // default value, pointer to T_DefaultEntry
+        uint32_t        _dataTypeId;            // type ID for safety checking
+        uint32_t        _defaultValueTypeId;    // type ID for safety checking
+        Adder           _adder;                 // adder function pointer that remembers the T_Data type
+        AdderTensor     _adderTensor;           // adder function for tensors that remembers the T_Data type
+        Deleter         _deleter;               // deleter function pointer that remembers the T_Data type
+        DataCopier      _dataCopier;            // data copier function pointer that remembers the T_Data type
+        DefaultCopier   _defaultCopier;         // default value copier function pointer that remembers the T_Data type
+        Resizer         _resizer;               // data vector resizer function pointer that remembers the T_Data type
+
+        // Function used to store in _deleter function pointers
+        template <typename T_Data, typename T_DefaultEntry>
+        size_t adder(const void* entry);
+
+        template <typename T_Data>
+        size_t adderTensor(const torch::Tensor& tensor);
+
+        // Function used to store in _deleter function pointers
+        template<typename T_Data, typename T_DefaultEntry>
+        void deleter();
+
+        // Function used to store in _dataCopier function pointers
+        template <typename T_Data>
+        void* dataCopier() const;
+
+        // Function used to store in _defaultCopier function pointers
+        template <typename T_DefaultEntry>
+        const void* defaultCopier() const;
+
+        // Function used to store in _resizer function pointers
+        template <typename T_Data, typename T_DefaultEntry>
+        void resizer(size_t size);
+
+    public:
+        template <typename T_Data, typename T_DefaultEntry>
+        SequenceWrapper(
+            T_Data* dummy,
+            int64_t batchSize,
+            const T_DefaultEntry& defaultValue,
+            const std::vector<int64_t>& shape);
+        SequenceWrapper(const SequenceWrapper& other);
+        SequenceWrapper(SequenceWrapper&& other) noexcept;
+        SequenceWrapper& operator=(const SequenceWrapper& other);
+        SequenceWrapper& operator=(SequenceWrapper&& other) noexcept;
+        ~SequenceWrapper();
+
+        // Add entry, returns the new sequence vector size
+        size_t addEntry(const void* entry = nullptr); // nullptr: use the stored default value
+        size_t addEntry(const torch::Tensor& entry); // nullptr: use the stored default value
+        void resize(size_t size);
+        uint32_t getTypeId() const noexcept;
+
+        template <typename T_Data>
+        Sequence<T_Data>& getSequence();
+    };
+
+    // Map from SequenceStorage instances (or rather pointers to them) to vectors
+    // containing all the typed data. The actual type handling is done inside the
+    // utility functions below.
+    // SequenceStorage ptr -> sequence name -> type -> sequence data
+    using Storage = std::unordered_map<const SequenceStorage*, std::unordered_map<std::string, SequenceWrapper>>;
+
+    static Storage  storage;
+    static uint32_t typeIdCounter;
+
+    // Access the underlying sequence container, create one if necessary
+    template <typename T_Data, typename T_DefaultEntry>
+    SequenceWrapper& getSequenceWrapper(
+        const std::string& sequenceName,
+        int64_t batchSize,
+        const T_DefaultEntry& defaultValue,
+        const std::vector<int64_t>& shape);
+
+    // Function for generating distinct IDs for each T_Data type
+    template <typename T_Data>
+    static uint32_t typeId();
 };
 
 
-void SequenceStorage::initializeFrames(std::size_t size)
-{
-    _frames.clear();
-    _frames.reserve(size);
-    for (std::size_t i=0; i<size; ++i) {
-        // Initialize images with pixel data stored in _frameData
-        _frames.emplace_back(_settings.frameWidth, _settings.frameHeight, _settings.frameFormat,
-            &_frameData[i*_frameSize]);
-    }
-}
-
-void SequenceStorage::initializeEncodings(std::size_t size)
-{
-    _encodings.resize(size);
-    for (std::size_t i=0; i<size; ++i) {
-        // point to start of each encoding in _encodingData
-        _encodings[i] = &_encodingData[i*_settings.encodingLength];
-    }
-}
+#include "SequenceStorage.inl"

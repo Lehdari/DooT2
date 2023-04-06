@@ -12,6 +12,7 @@
 
 
 #include "ActionConverter.hpp"
+#include "util/Image.hpp"
 #include "util/SequenceStorage.hpp"
 #include "util/SingleBuffer.hpp"
 #include "Constants.hpp"
