@@ -14,6 +14,7 @@
 
 #include <array>
 #include <vector>
+#include <type_traits>
 #include <torch/torch.h>
 
 
@@ -40,6 +41,19 @@ template <> struct ToScalarType<torch::kInt32> { using Type = int32_t; };
 template <> struct ToScalarType<torch::kInt64> { using Type = int64_t; };
 template <> struct ToScalarType<torch::kUInt8> { using Type = uint8_t; };
 
+namespace detail {
+    template<typename T, typename = void>
+    struct has_Type : std::false_type { };
+
+    template<typename T>
+    struct has_Type<T, decltype(std::declval<T>().Type, void())> : std::true_type { };
+} // namespace detail
+
+template <typename Type>
+constexpr bool isTensorScalarType()
+{
+    return detail::has_Type<ToTorchType<Type>>::value;
+}
 
 // Utility functions for copying data from torch tensors to data structures in main memory
 
