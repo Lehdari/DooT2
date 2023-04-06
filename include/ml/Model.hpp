@@ -13,6 +13,7 @@
 #include "nlohmann/json.hpp"
 
 #include "util/Types.hpp"
+#include "util/Image.hpp"
 #include "util/SequenceStorage.hpp"
 #include "util/DoubleBuffer.hpp"
 #include "util/SingleBuffer.hpp"

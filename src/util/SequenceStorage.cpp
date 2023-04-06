@@ -2,7 +2,7 @@
 // Project: DooT2
 // File: SequenceStorage.cpp
 //
-// Copyright (c) 2022 Miika 'Lehdari' Lehtimäki
+// Copyright (c) 2023 Miika 'Lehdari' Lehtimäki
 // You may use, distribute and modify this code under the terms
 // of the licence specified in file LICENSE which is distributed
 // with this source code package.
@@ -10,206 +10,245 @@
 
 #include "util/SequenceStorage.hpp"
 
-#include <cassert>
+
+// static members
+uint32_t                    SequenceStorage::typeIdCounter {0};
+SequenceStorage::Storage   SequenceStorage::storage;
 
 
-SequenceStorage::BatchHandle::BatchHandle(
-    gvizdoom::Action* actions,
-    Image<float>* frames,
-    float** encodings,
-    double* rewards,
-    float* frameData,
-    float* encodingData,
-    const SequenceStorage::Settings& settings
-) :
-    actions         (actions),
-    frames          (frames),
-    encodings       (encodings),
-    rewards         (rewards),
-    _frameData      (frameData),
-    _encodingData   (encodingData),
-    _settings       (settings)
+SequenceStorage::SequenceStorage(int64_t batchSize) :
+    _size       (0),
+    _batchSize  (batchSize)
 {
+    storage[this];
 }
 
-const torch::Tensor SequenceStorage::BatchHandle::mapPixelData()
+SequenceStorage::~SequenceStorage()
 {
-    if (_settings.hasFrames) {
-        return torch::from_blob(
-            _frameData,
-            { _settings.batchSize, _settings.frameHeight, _settings.frameWidth,
-            getImageFormatNChannels(_settings.frameFormat) },
-            torch::TensorOptions().device(torch::kCPU)
-        );
-    }
-    else {
-        return torch::empty({}, torch::TensorOptions().device(torch::kCPU));
-    }
-}
-
-const torch::Tensor SequenceStorage::BatchHandle::mapEncodingData()
-{
-    if (_settings.hasEncodings) {
-        return torch::from_blob(
-            _encodingData,
-            { _settings.batchSize, _settings.encodingLength },
-            torch::TensorOptions().device(torch::kCPU)
-        );
-    }
-    else {
-        return torch::empty({}, torch::TensorOptions().device(torch::kCPU));
-    }
-}
-
-SequenceStorage::ConstBatchHandle::ConstBatchHandle(
-    const gvizdoom::Action* actions,
-    const Image<float>* frames,
-    const float* const* encodings,
-    const double* rewards
-) :
-    actions     (actions),
-    frames      (frames),
-    encodings   (encodings),
-    rewards     (rewards)
-{
-}
-
-SequenceStorage::SequenceStorage(const Settings& settings) :
-    _settings       (settings),
-    _frameSize      (_settings.frameWidth*_settings.frameHeight*getImageFormatNChannels(_settings.frameFormat)),
-    _actions        (_settings.hasFrames ? _settings.length*_settings.batchSize : 0),
-    _frameData      (_settings.hasFrames ? _settings.length*_settings.batchSize*_frameSize : 0),
-    _encodings      (_settings.hasEncodings ? _settings.length*_settings.batchSize : 0),
-    _encodingData   (_settings.hasEncodings ? _settings.length*_settings.batchSize*_settings.encodingLength : 0),
-    _rewards        (_settings.length*_settings.batchSize)
-{
-    std::size_t size = _settings.length*_settings.batchSize;
-    if (_settings.hasFrames)
-        initializeFrames(size);
-    if (_settings.hasEncodings)
-        initializeEncodings(size);
+    // remove the data for this instance from the storage
+    storage.erase(this);
 }
 
 SequenceStorage::SequenceStorage(const SequenceStorage& other) :
-    _settings       (other._settings),
-    _frameSize      (other._frameSize),
-    _actions        (other._actions),
-    _frameData      (other._frameData),
-    _encodingData   (other._encodingData),
-    _rewards        (other._rewards)
+    _size       (other._size),
+    _batchSize  (other._batchSize)
 {
-    if (_settings.hasFrames)
-        initializeFrames(other._frames.size());
-    if (_settings.hasEncodings)
-        initializeEncodings(other._encodings.size());
+    storage[this] = storage[&other];
 }
 
 SequenceStorage::SequenceStorage(SequenceStorage&& other) noexcept :
-    _settings       (std::move(other._settings)),
-    _frameSize      (std::move(other._frameSize)),
-    _actions        (std::move(other._actions)),
-    _frameData      (std::move(other._frameData)),
-    _encodingData   (std::move(other._encodingData)),
-    _rewards        (std::move(other._rewards))
+    _size       (other._size),
+    _batchSize  (other._batchSize)
 {
-    if (_settings.hasFrames)
-        initializeFrames(other._frames.size());
-    if (_settings.hasEncodings)
-        initializeEncodings(other._encodings.size());
+    other._size = 0;
+    other._batchSize = 0;
+
+    // change the storage key (pointer to the host object) from &other to this
+    auto data = storage.extract(&other);
+    data.key() = this;
+    storage.insert(std::move(data));
 }
 
 SequenceStorage& SequenceStorage::operator=(const SequenceStorage& other)
 {
-    _settings = other._settings;
-    _frameSize = other._frameSize;
-    _actions = other._actions;
-    _frameData = other._frameData;
-    _encodingData = other._encodingData;
-    _rewards = other._rewards;
+    if (this == &other)
+        return *this;
 
-    if (_settings.hasFrames)
-        initializeFrames(other._frames.size());
-    if (_settings.hasEncodings)
-        initializeEncodings(other._encodings.size());
+    _size = other._size;
+    _batchSize = other._batchSize;
+    storage[this] = storage[&other];
 
     return *this;
 }
 
 SequenceStorage& SequenceStorage::operator=(SequenceStorage&& other) noexcept
 {
-    _settings = std::move(other._settings);
-    _frameSize = std::move(other._frameSize);
-    _actions = std::move(other._actions);
-    _frameData = std::move(other._frameData);
-    _encodingData = std::move(other._encodingData);
-    _rewards = std::move(other._rewards);
+    if (this == &other)
+        return *this;
 
-    if (_settings.hasFrames)
-        initializeFrames(other._frames.size());
-    if (_settings.hasEncodings)
-        initializeEncodings(other._encodings.size());
+    _size = other._size;
+    _batchSize = other._batchSize;
+    other._size = 0;
+    other._batchSize = 0;
+
+    // remove the existing data dedicated for this instance
+    assert(storage.contains(this));
+    storage.erase(this);
+
+    // change the storage key (pointer to the host object) from &other to this
+    auto data = storage.extract(&other);
+    data.key() = this;
+    storage.insert(std::move(data));
 
     return *this;
 }
 
-SequenceStorage::BatchHandle SequenceStorage::operator[](std::size_t id)
+void SequenceStorage::addEntry(const std::string& sequenceName, const torch::Tensor& entry)
 {
-    assert(id < _settings.length);
+    auto& instanceStorage = storage[this];
 
-    return {
-        &_actions[id*_settings.batchSize],
-        _settings.hasFrames ? &_frames[id*_settings.batchSize] : nullptr,
-        _settings.hasEncodings ? &_encodings[id*_settings.batchSize] : nullptr,
-        &_rewards[id*_settings.batchSize],
-        _settings.hasFrames ? &_frameData[id*_settings.batchSize*_frameSize] : nullptr,
-        _settings.hasEncodings ? &_encodingData[id*_settings.batchSize*_settings.encodingLength] : nullptr,
-        _settings
-    };
+    if (!instanceStorage.contains(sequenceName))
+        throw std::runtime_error("No sequence with name \"" + sequenceName + "\"");
+
+    for (auto& [name, sequence] : instanceStorage) {
+        size_t sequenceSize = 0;
+        if (name == sequenceName) {
+            sequenceSize = sequence.addEntry(entry);
+        }
+        else {
+            sequenceSize = sequence.addEntry(); // add default value to all other sequence except the one specified
+        }
+        assert(sequenceSize == _size+1); // indicates a bug in SequenceStorage implementation (some of the sequence has a differing length)
+    }
+
+    ++_size;
 }
 
-SequenceStorage::ConstBatchHandle SequenceStorage::operator[](std::size_t id) const noexcept
+void SequenceStorage::resize(size_t newLength)
 {
-    assert(id < _settings.length);
+    auto& instanceStorage = storage[this];
 
-    return {
-        &_actions[id*_settings.batchSize],
-        _settings.hasFrames ? &_frames[id*_settings.batchSize] : nullptr,
-        _settings.hasEncodings ? &_encodings[id * _settings.batchSize] : nullptr,
-        &_rewards[id*_settings.batchSize]
-    };
+    for (auto& [name, sequence] : instanceStorage) {
+        sequence.resize(newLength);
+    }
+
+    _size = newLength;
 }
 
-const torch::Tensor SequenceStorage::mapPixelData()
+std::vector<std::string> SequenceStorage::getSequenceNames() const
 {
-    if (_settings.hasFrames) {
-        return torch::from_blob(
-            _frameData.data(),
-            { (long)_settings.length, _settings.batchSize,
-                _settings.frameHeight, _settings.frameWidth,
-                getImageFormatNChannels(_settings.frameFormat) },
-            torch::TensorOptions().device(torch::kCPU)
-        );
-    }
-    else {
-        return torch::empty({}, torch::TensorOptions().device(torch::kCPU));
-    }
+    auto& instanceStorage = storage[this];
+    std::vector<std::string> names;
+    names.reserve(instanceStorage.size());
+    for (auto& [name, series] : instanceStorage)
+        names.emplace_back(name);
+    return names;
 }
 
-const torch::Tensor SequenceStorage::mapEncodingData()
+size_t SequenceStorage::getNumSequences() const noexcept
 {
-    if (_settings.hasEncodings) {
-        return torch::from_blob(
-            _encodingData.data(),
-            { (long)_settings.length, _settings.batchSize, _settings.encodingLength },
-            torch::TensorOptions().device(torch::kCPU)
-        );
-    }
-    else {
-        return torch::empty({}, torch::TensorOptions().device(torch::kCPU));
-    }
+    auto& instanceStorage = storage[this];
+    return instanceStorage.size();
 }
 
-const SequenceStorage::Settings& SequenceStorage::settings() const noexcept
+size_t SequenceStorage::length() const noexcept
 {
-    return _settings;
+    return _size;
+}
+
+int64_t SequenceStorage::batchSize() const noexcept
+{
+    return _batchSize;
+}
+
+size_t SequenceStorage::getNumInstances()
+{
+    return storage.size();
+}
+
+void SequenceStorage::addEntriesRecursive()
+{
+    // dummy function for ending tail recursion
+}
+
+SequenceStorage::SequenceWrapper::SequenceWrapper(const SequenceStorage::SequenceWrapper& other) :
+    _data               ((other.*other._dataCopier)()), // my favourite syntax
+    _defaultValue       ((other.*other._defaultCopier)()),
+    _dataTypeId         (other._dataTypeId),
+    _defaultValueTypeId (other._defaultValueTypeId),
+    _adder              (other._adder),
+    _adderTensor        (other._adderTensor),
+    _deleter            (other._deleter),
+    _dataCopier         (other._dataCopier),
+    _defaultCopier      (other._defaultCopier),
+    _resizer            (other._resizer)
+{
+}
+
+
+SequenceStorage::SequenceWrapper::SequenceWrapper(SequenceStorage::SequenceWrapper&& other) noexcept :
+    _data               (other._data),
+    _defaultValue       (other._defaultValue),
+    _dataTypeId         (other._dataTypeId),
+    _defaultValueTypeId (other._defaultValueTypeId),
+    _adder              (other._adder),
+    _adderTensor        (other._adderTensor),
+    _deleter            (other._deleter),
+    _dataCopier         (other._dataCopier),
+    _defaultCopier      (other._defaultCopier),
+    _resizer            (other._resizer)
+{
+    other._data = nullptr;
+    other._defaultValue = nullptr;
+    other._deleter = nullptr;
+}
+
+SequenceStorage::SequenceWrapper& SequenceStorage::SequenceWrapper::operator=(
+    const SequenceStorage::SequenceWrapper& other)
+{
+    if (this == &other)
+        return *this;
+
+    assert(_dataTypeId == other._dataTypeId);
+    assert(_defaultValueTypeId == other._defaultValueTypeId);
+
+    // replace the data
+    (this->*_deleter)();
+    _data = (other.*other._dataCopier)();
+    _defaultValue = (other.*other._defaultCopier)();
+
+    return *this;
+}
+
+SequenceStorage::SequenceWrapper& SequenceStorage::SequenceWrapper::operator=(
+    SequenceStorage::SequenceWrapper&& other) noexcept
+{
+    if (this == &other)
+        return *this;
+
+    assert(_dataTypeId == other._dataTypeId);
+    assert(_defaultValueTypeId == other._defaultValueTypeId);
+
+    _data               = other._data;
+    _defaultValue       = other._defaultValue;
+    _dataTypeId         = other._dataTypeId;
+    _defaultValueTypeId = other._defaultValueTypeId;
+    _adder              = other._adder;
+    _adderTensor        = other._adderTensor;
+    _deleter            = other._deleter;
+    _dataCopier         = other._dataCopier;
+    _defaultCopier      = other._defaultCopier;
+    _resizer            = other._resizer;
+
+    other._data = nullptr;
+    other._defaultValue = nullptr;
+    other._deleter = nullptr;
+
+    return *this;
+}
+
+SequenceStorage::SequenceWrapper::~SequenceWrapper()
+{
+    if (this->_deleter != nullptr)
+        (this->*_deleter)();
+}
+
+size_t SequenceStorage::SequenceWrapper::addEntry(const void* entry)
+{
+    return (this->*_adder)(entry);
+}
+
+size_t SequenceStorage::SequenceWrapper::addEntry(const torch::Tensor& entry)
+{
+    return (this->*_adderTensor)(entry);
+}
+
+void SequenceStorage::SequenceWrapper::resize(size_t size)
+{
+    (this->*_resizer)(size);
+}
+
+uint32_t SequenceStorage::SequenceWrapper::getTypeId() const noexcept
+{
+    return _dataTypeId;
 }

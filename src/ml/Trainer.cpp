@@ -30,10 +30,7 @@ Trainer::Trainer(
 ) :
     _rnd                        (1507715517),
     _quit                       (false),
-    _sequenceStorage            (SequenceStorage::Settings{batchSizeIn, sequenceLengthIn,
-                                    true, false,
-                                    doot2::frameWidth, doot2::frameHeight, ImageFormat::YUV,
-                                    doot2::encodingLength}),
+    _sequenceStorage            (batchSizeIn),
     _frame                      (Image<uint8_t>(
                                     DoomGame::instance().getScreenWidth(),
                                     DoomGame::instance().getScreenHeight(),
@@ -48,7 +45,13 @@ Trainer::Trainer(
     if (_model == nullptr)
         throw std::runtime_error("model must not be nullptr");
 
-    auto& doomGame = DoomGame::instance();
+    // Setup sequence storage
+    _sequenceStorage.addSequence<Action>("action", Action(Action::ACTION_NONE, 0));
+    _sequenceStorage.addSequence<float>("frame", torch::zeros({
+        doot2::frameHeight, doot2::frameWidth, getImageFormatNChannels(ImageFormat::YUV)}));
+//    _sequenceStorage.addSequence<float>("encoding");
+    _sequenceStorage.addSequence<double>("reward", 0.0);
+    _sequenceStorage.resize(sequenceLengthIn);
 
     // Setup action converter
     _actionConverter.setAngleIndex(0);
@@ -76,12 +79,14 @@ void Trainer::loop()
     auto& doomGame = DoomGame::instance();
 
     size_t recordBeginFrameId = 768+_rnd()%512;
-    size_t recordEndFrameId = recordBeginFrameId + _sequenceStorage.settings().length;
+    size_t recordEndFrameId = recordBeginFrameId + _sequenceStorage.length();
 
     // Setup YUV frame
     std::vector<float> frameYUVData(doot2::frameWidth*doot2::frameHeight*
         getImageFormatNChannels(ImageFormat::YUV)); // external buffer to allow mapping to tensor
     Image<float> frameYUV(doot2::frameWidth, doot2::frameHeight, ImageFormat::YUV, frameYUVData.data());
+    std::vector<int64_t> frameShape{doot2::frameHeight, doot2::frameWidth,
+        getImageFormatNChannels(ImageFormat::YUV)};
     {   // Copy and convert the first frame
         auto frameHandle = _frame.write();
         frameHandle->copyFrom(doomGame.getPixelsBGRA());
@@ -118,7 +123,7 @@ void Trainer::loop()
         if (_frameId >= recordEndFrameId || doomGame.update(action)) {
             nextMap();
             recordBeginFrameId = 768+_rnd()%512;
-            recordEndFrameId = recordBeginFrameId + _sequenceStorage.settings().length;
+            recordEndFrameId = recordBeginFrameId + _sequenceStorage.length();
             continue;
         }
 
@@ -131,14 +136,15 @@ void Trainer::loop()
         // Record
         if (_frameId >= recordBeginFrameId) {
             auto recordFrameId = _frameId - recordBeginFrameId;
-            auto batch = _sequenceStorage[recordFrameId];
-            batch.actions[_batchEntryId] = action;
+            _sequenceStorage.getBatch<Action>("action", recordFrameId)[_batchEntryId] = action;
             {   // convert the frame
                 auto frameHandle = _frame.read();
                 convertImage(*frameHandle, frameYUV, ImageFormat::YUV);
-                batch.frames[_batchEntryId] = frameYUV;
+                _sequenceStorage.getBatch<float>("frame", recordFrameId)[_batchEntryId] = torch::from_blob(
+                    frameYUVData.data(), frameShape, torch::TensorOptions().device(torch::kCPU)
+                );
             }
-            batch.rewards[_batchEntryId] = 0.0; // TODO no rewards for now
+            _sequenceStorage.getBatch<double>("reward", recordFrameId)[_batchEntryId] = 0.0; // TODO no rewards for now
         }
 
         // Train
@@ -174,7 +180,7 @@ void Trainer::nextMap()
     auto& doomGame = DoomGame::instance();
 
     _frameId = 0;
-    if (++_batchEntryId >= _sequenceStorage.settings().batchSize) {
+    if (++_batchEntryId >= _sequenceStorage.batchSize()) {
         _newPatchReady = true;
         _batchEntryId = 0;
     }

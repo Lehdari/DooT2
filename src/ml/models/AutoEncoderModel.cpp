@@ -172,30 +172,31 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
     _flowDecoder->to(device);
 
     // Load the whole storage's pixel data to the GPU
-    torch::Tensor pixelDataIn_ = storage.mapPixelData();
-    torch::Tensor pixelDataIn = pixelDataIn_.to(device);
+    auto* storageFrames = storage.getSequence<float>("frame");
+    assert(storageFrames != nullptr);
+    torch::Tensor pixelDataIn = storageFrames->tensor().to(device);
     pixelDataIn = pixelDataIn.permute({0, 1, 4, 2, 3});
 
     Tensor flowBase = tf::affine_grid(torch::tensor({{1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
-        TensorOptions().device(device)).broadcast_to({storage.settings().batchSize, 2, 3}),
-        {storage.settings().batchSize, 2, 480, 640});
+        TensorOptions().device(device)).broadcast_to({storage.batchSize(), 2, 3}),
+        {storage.batchSize(), 2, 480, 640});
 
     // Required for latent space normalization
-    torch::Tensor encodingZeros = torch::zeros({storage.settings().encodingLength}, TensorOptions().device(device));
-    torch::Tensor encodingOnes = torch::ones({storage.settings().encodingLength}, TensorOptions().device(device));
+    torch::Tensor encodingZeros = torch::zeros({doot2::encodingLength}, TensorOptions().device(device));
+    torch::Tensor encodingOnes = torch::ones({doot2::encodingLength}, TensorOptions().device(device));
 
     _frameEncoder->zero_grad();
     _frameDecoder->zero_grad();
     _flowDecoder->zero_grad();
 
-    const auto sequenceLength = storage.settings().length;
+    const auto sequenceLength = storage.length();
     const int64_t optimizationInterval = 8; // for this many frames gradients will be accumulated before update
     for (int64_t ti=0; ti<nTrainingIterations; ++ti) {
         // frame (time point) to use this iteration
         int64_t t = rnd() % (sequenceLength-1);
 
         // Pick random sequence to display
-        size_t displaySeqId = rnd() % storage.settings().batchSize;
+        size_t displaySeqId = rnd() % storage.batchSize();
 
         // ID of the frame (in sequence) to be used in the training batch
         torch::Tensor batchIn1 = pixelDataIn.index({(int)t});

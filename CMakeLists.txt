@@ -75,8 +75,10 @@ set_target_properties(doot2 PROPERTIES
 # Add tests
 set(DOOT2_TEST_SOURCES
     src/util/TimeSeries.cpp
+    src/util/SequenceStorage.cpp
     src/tests/TestTimeSeries.cpp
     src/tests/TestSequence.cpp
+    src/tests/TestSequenceStorage.cpp
 )
 
 include(GoogleTest)
