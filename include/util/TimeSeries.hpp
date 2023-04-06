@@ -122,9 +122,9 @@ private:
         template <typename T_Entry>
         Series(const T_Entry& defaultValue);
         Series(const Series& other);
-        Series(Series&& other) = default;
+        Series(Series&& other) noexcept;
         Series& operator=(const Series& other);
-        Series& operator=(Series&& other) = default;
+        Series& operator=(Series&& other) noexcept;
         ~Series();
 
         // Add entry, returns the new series vector size

@@ -123,7 +123,7 @@ const void* TimeSeries::Series::defaultCopier() const
 {
     assert(_typeId == TimeSeries::typeId<T_Entry>());
     // copy construct a new default type
-    return new T_Entry(*static_cast<T_Entry*>(_data));
+    return new T_Entry(*static_cast<const T_Entry*>(_defaultValue));
 }
 
 template<typename T_Entry>
