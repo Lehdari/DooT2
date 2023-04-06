@@ -133,6 +133,22 @@ TimeSeries::Series::Series(const TimeSeries::Series& other) :
 {
 }
 
+TimeSeries::Series::Series(TimeSeries::Series&& other) noexcept :
+    _data           (other._data),
+    _defaultValue   (other._defaultValue),
+    _typeId         (other._typeId),
+    _adder          (other._adder),
+    _deleter        (other._deleter),
+    _dataCopier     (other._dataCopier),
+    _defaultCopier  (other._defaultCopier),
+    _resizer        (other._resizer),
+    _serializer     (other._serializer)
+{
+    other._data = nullptr;
+    other._defaultValue = nullptr;
+    other._deleter = nullptr;
+}
+
 TimeSeries::Series& TimeSeries::Series::operator=(const TimeSeries::Series& other)
 {
     if (this == &other)
@@ -148,9 +164,34 @@ TimeSeries::Series& TimeSeries::Series::operator=(const TimeSeries::Series& othe
     return *this;
 }
 
+TimeSeries::Series& TimeSeries::Series::operator=(TimeSeries::Series&& other) noexcept
+{
+    if (this == &other)
+        return *this;
+
+    assert(_typeId == other._typeId);
+
+    _data           = other._data;
+    _defaultValue   = other._defaultValue;
+    _typeId         = other._typeId;
+    _adder          = other._adder;
+    _deleter        = other._deleter;
+    _dataCopier     = other._dataCopier;
+    _defaultCopier  = other._defaultCopier;
+    _resizer        = other._resizer;
+    _serializer     = other._serializer;
+
+    other._data = nullptr;
+    other._defaultValue = nullptr;
+    other._deleter = nullptr;
+
+    return *this;
+}
+
 TimeSeries::Series::~Series()
 {
-    (this->*_deleter)();
+    if (this->_deleter != nullptr)
+        (this->*_deleter)();
 }
 
 size_t TimeSeries::Series::addEntry(const void* entry)
