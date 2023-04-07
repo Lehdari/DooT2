@@ -73,7 +73,7 @@ private:
     Model*                          _agentModel;
     Model*                          _encoderModel;
 
-    void nextMap(); // proceed to next map
+    void nextMap(size_t newBatchEntryId = 0); // proceed to next map
 };
 
 } // namespace ml

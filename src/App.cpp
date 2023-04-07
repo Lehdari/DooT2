@@ -119,9 +119,12 @@ void App::loop()
             }
         }
 
+        // Render gui
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
         _gui.render(_window, _trainer);
+
+        // Start / pause / stop training
+        trainingControl();
 
         // Introduce delay to cap the framerate
         auto frameEnd = high_resolution_clock::now();
@@ -131,5 +134,32 @@ void App::loop()
 
         // Swap draw and display buffers
         SDL_GL_SwapWindow(_window);
+    }
+
+    // Quit trainer thread in case it's running
+    if (_trainerThread.joinable()) {
+        _trainer->quit();
+        _trainerThread.join();
+    }
+}
+
+void App::trainingControl()
+{
+    switch (_gui.getState().trainingStatus) {
+        case gui::State::TrainingStatus::STOPPED: {
+            if (_trainerThread.joinable()) {
+                _trainer->quit();
+                _trainerThread.join();
+            }
+        }   break;
+        case gui::State::TrainingStatus::ONGOING: {
+            if (_trainerThread.joinable()) // thread running, continue business as usual
+                break;
+            // no trainer thread running, launch it
+            _trainerThread = std::thread(&ml::Trainer::loop, _trainer);
+        }   break;
+        case gui::State::TrainingStatus::PAUSED: {
+            // TODO, requires pausing interface for Model
+        }   break;
     }
 }

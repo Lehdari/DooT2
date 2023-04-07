@@ -106,6 +106,7 @@ void Trainer::loop()
     TensorVector encodingTV(1); // frame converted into an encoding (output of the encoding model)
     TensorVector actionTV(1); // action output produced by the agent model
 
+    _quit = false;
     while (!_quit) {
         // Map the frame into a tensor
         frameTV[0] = torch::from_blob(frameYUVData.data(),
@@ -129,7 +130,7 @@ void Trainer::loop()
 
         // Update the game state, restart if required
         if (_frameId >= recordEndFrameId || doomGame.update(action)) {
-            nextMap();
+            nextMap(_batchEntryId+1);
             recordBeginFrameId = 768+_rnd()%512;
             recordEndFrameId = recordBeginFrameId + _sequenceStorage.length();
             continue;
@@ -170,6 +171,7 @@ void Trainer::loop()
     }
 
     _model->waitForTrainingFinished();
+    nextMap();
 }
 
 void Trainer::quit()
@@ -193,12 +195,14 @@ const SingleBuffer<Image<uint8_t>>::ReadHandle Trainer::getFrameReadHandle()
     return _frame.read();
 }
 
-void Trainer::nextMap()
+void Trainer::nextMap(size_t newBatchEntryId)
 {
     auto& doomGame = DoomGame::instance();
 
     _frameId = 0;
-    if (++_batchEntryId >= _sequenceStorage.batchSize()) {
+    _newPatchReady = false;
+    _batchEntryId = newBatchEntryId;
+    if (_batchEntryId >= _sequenceStorage.batchSize()) {
         _newPatchReady = true;
         _batchEntryId = 0;
     }

@@ -9,10 +9,8 @@
 //
 
 #include "gui/Gui.hpp"
+#include "gui/Windows.hpp"
 #include "gui/WindowTypeUtils.hpp"
-#include "gui/GameWindow.hpp"
-#include "gui/ImagesWindow.hpp"
-#include "gui/PlotWindow.hpp"
 #include "ml/Model.hpp"
 #include "ml/TrainingInfo.hpp"
 #include "ml/Trainer.hpp"
@@ -38,7 +36,7 @@ void Gui::init(SDL_Window* window, SDL_GLContext* glContext)
 {
     auto& doomGame = gvizdoom::DoomGame::instance();
 
-    _guiState._frameTexture.create(doomGame.getScreenWidth(), doomGame.getScreenHeight(),
+    _guiState.frameTexture.create(doomGame.getScreenWidth(), doomGame.getScreenHeight(),
         GL_TEXTURE_2D, GL_RGBA, GL_UNSIGNED_BYTE);
 
     // Initialize imgui
@@ -51,17 +49,17 @@ void Gui::init(SDL_Window* window, SDL_GLContext* glContext)
 
 void Gui::update(ml::TrainingInfo* trainingInfo)
 {
-    _guiState._timeSeries["training"] = &trainingInfo->timeSeries;
+    _guiState.timeSeries["training"] = &trainingInfo->timeSeries;
 
     // Update the model image relays map
-    _guiState._modelImageRelays.clear();
+    _guiState.modelImageRelays.clear();
     for (auto& [name, imageBuffer] : trainingInfo->images) {
-        _guiState._modelImageRelays.emplace(name, &imageBuffer);
+        _guiState.modelImageRelays.emplace(name, &imageBuffer);
     }
 
     // Update all the windows
     for (auto& w : _windows) {
-        w->update(&_guiState);
+        w->update();
     }
 }
 
@@ -134,7 +132,7 @@ void Gui::render(SDL_Window* window, ml::Trainer* trainer)
         if (!w)
             continue;
 
-        w->render(trainer, &_guiState);
+        w->render(trainer);
 
         // Check if window has been closed
         if (w->isClosed())
@@ -142,4 +140,9 @@ void Gui::render(SDL_Window* window, ml::Trainer* trainer)
     }
 
     imGuiRender();
+}
+
+const State& Gui::getState() const noexcept
+{
+    return _guiState;
 }

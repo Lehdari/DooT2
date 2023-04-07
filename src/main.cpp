@@ -9,8 +9,6 @@
 #include "CLI/CLI.hpp"
 #include "gvizdoom/DoomGame.hpp"
 
-#include <thread>
-
 int main()
 {
     CLI::App cliApp{"DooT2 Machine Learning Research Platform"};
@@ -42,9 +40,7 @@ int main()
     ml::Trainer trainer(&model, &agentModel, nullptr, cliBatchSize, cliSequenceLength);
     App app(&trainer);
 
-    std::thread trainerThread(&ml::Trainer::loop, &trainer);
     app.loop();
-    trainer.quit();
-    trainerThread.join();
+
     return 0;
 }

@@ -28,13 +28,22 @@ struct State {
     using ImageRelayMap = std::map<std::string, gui::ImageRelay>;
 
     // Sources for time series data
-    TimeSeriesMap   _timeSeries;
+    TimeSeriesMap   timeSeries;
 
     // Game window state
-    gut::Texture    _frameTexture;
+    gut::Texture    frameTexture;
 
     // Training Images frame
-    ImageRelayMap   _modelImageRelays;
+    ImageRelayMap   modelImageRelays;
+
+    // Training status
+    enum class TrainingStatus : int32_t {
+        STOPPED = 0,
+        ONGOING = 1,
+        PAUSED  = 2
+    }               trainingStatus      {TrainingStatus::STOPPED};
+
+    std::string     modelTypeName       {"AutoEncoderModel"}; // type name of the model to be trained
 };
 
 } // namespace gui

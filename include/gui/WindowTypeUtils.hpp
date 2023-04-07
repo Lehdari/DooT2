@@ -23,8 +23,8 @@
 #define GUI_WINDOW_TYPES                          \
     GUI_WINDOW_TYPE(GameWindow,     "Game"      ) \
     GUI_WINDOW_TYPE(ImagesWindow,   "Images"    ) \
-    GUI_WINDOW_TYPE(PlotWindow,     "Plotting"  )
-
+    GUI_WINDOW_TYPE(PlotWindow,     "Plotting"  ) \
+    GUI_WINDOW_TYPE(TrainingWindow, "Training"  )
 
 namespace gui {
 
@@ -88,6 +88,7 @@ void windowTypeNameCallback(const std::string& typeName, F&& f)
         return f.template operator()<WINDOW>();
     GUI_WINDOW_TYPES
     #undef GUI_WINDOW_TYPE
+    throw std::runtime_error("No type name match for \"" + typeName + "\" found");
 }
 
 template <typename F>
@@ -98,6 +99,7 @@ void windowTypeIdCallback(int typeId, F&& f)
         return f.template operator()<WINDOW>();
     GUI_WINDOW_TYPES
     #undef GUI_WINDOW_TYPE
+    throw std::runtime_error("No type name match for " + std::to_string(typeId) + " found");
 }
 
 // similar to the functions above, but this function calls the callback for each window type

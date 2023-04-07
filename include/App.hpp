@@ -14,6 +14,8 @@
 
 #include <SDL.h>
 
+#include <thread>
+
 
 namespace ml {
 
@@ -37,8 +39,10 @@ private:
     bool            _quit;
 
     ml::Trainer*    _trainer;
-
+    std::thread     _trainerThread;
     gui::Gui        _gui;
+
+    void trainingControl();
 };
 
 

@@ -38,15 +38,15 @@ public:
     // This will fail and throw an exception in case the ID is already in use.
     // When id < 0, an unique ID will be dynamically assigned.
     template <typename T_Window>
-    Window(T_Window* window, std::set<int>* activeIds, int id = -1);
+    Window(T_Window* window, State* guiState, std::set<int>* activeIds, int id = -1);
     virtual ~Window();
 
     // Called when there's changes in gui state that might require synchronization between
     // it and the window's internal state
-    virtual void update(gui::State* guiState) = 0;
+    virtual void update() = 0;
 
     // Called every frame in intent to render the window to screen
-    virtual void render(ml::Trainer* trainer, gui::State* guiState) = 0;
+    virtual void render(ml::Trainer* trainer) = 0;
 
     // Apply window state defined in a configuration JSON object
     virtual void applyConfig(const nlohmann::json& config) = 0;
@@ -59,20 +59,22 @@ public:
     int getTypeId() const noexcept;
 
 protected:
+    gui::State*     _guiState;
     std::set<int>*  _activeIds;
     int             _id;
     int             _typeId;
-    bool            _open   {true}; // set to false to close the window
+    bool            _open       {true}; // set to false to close the window
 
     int findFreeId();
 };
 
 
 template <typename T_Window>
-Window::Window(T_Window* window, std::set<int>* activeIds, int id) :
+Window::Window(T_Window* window, State* guiState, std::set<int>* activeIds, int id) :
+    _guiState   (guiState),
     _activeIds  (activeIds),
     _id         (id < 0 ? findFreeId() : id),
-    _typeId     (WindowTypeInfo<T_Window>::id)
+    _typeId     (WindowTypeInfo<T_Window>::id) // If you added a new window type and get a compilation error here, remember to add it to the WindowTypeUtils.hpp and include the header in Windows.hpp
 {
     if (_activeIds->contains(id))
         throw std::runtime_error("Window id " + std::to_string(id) + " already in use");

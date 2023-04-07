@@ -19,11 +19,11 @@
 using namespace ml;
 
 
-void gui::GameWindow::update(gui::State* guiState)
+void gui::GameWindow::update()
 {
 }
 
-void gui::GameWindow::render(ml::Trainer* trainer, gui::State* guiState)
+void gui::GameWindow::render(ml::Trainer* trainer)
 {
     if (!_open) return;
 
@@ -32,9 +32,9 @@ void gui::GameWindow::render(ml::Trainer* trainer, gui::State* guiState)
     if (ImGui::Begin(("Game " + std::to_string(_id)).c_str(), &_open)) {
         {
             auto frameHandle = trainer->getFrameReadHandle();
-            guiState->_frameTexture.updateFromBuffer(frameHandle->data(), GL_BGRA);
+            _guiState->frameTexture.updateFromBuffer(frameHandle->data(), GL_BGRA);
         }
-        ImGui::Image((void*)(intptr_t)guiState->_frameTexture.id(),
+        ImGui::Image((void*)(intptr_t)_guiState->frameTexture.id(),
             ImVec2(doomGame.getScreenWidth(), doomGame.getScreenHeight()),
             ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
         ImGui::End();

@@ -15,11 +15,11 @@
 #include "implot.h"
 
 
-void gui::PlotWindow::update(gui::State* guiState)
+void gui::PlotWindow::update()
 {
     // Update the available time series
     ActiveSeriesMap newActiveSeries;
-    for (auto& [sourceName, timeSeries] : guiState->_timeSeries) {
+    for (auto& [sourceName, timeSeries] : _guiState->timeSeries) {
         auto timeSeriesHandle = timeSeries->read();
         auto seriesNames = timeSeriesHandle->getSeriesNames();
         for (auto& seriesName : seriesNames) {
@@ -43,7 +43,7 @@ void gui::PlotWindow::update(gui::State* guiState)
     }
 }
 
-void gui::PlotWindow::render(ml::Trainer* trainer, gui::State* guiState)
+void gui::PlotWindow::render(ml::Trainer* trainer)
 {
     if (!_open) return;
     if (ImGui::Begin(("Plotting " + std::to_string(_id)).c_str(), &_open)) {
@@ -102,16 +102,19 @@ void gui::PlotWindow::render(ml::Trainer* trainer, gui::State* guiState)
                 lossPlotAxisFlags, lossPlotAxisFlags);
 
             for (auto& [sourceName, timeSeriesSource] : _activeSeries) {
-                auto timeSeriesHandle = guiState->_timeSeries[sourceName]->read();
-                auto& timeVector = *timeSeriesHandle->getSeriesVector<double>("time");
+                auto timeSeriesHandle = _guiState->timeSeries[sourceName]->read();
+                auto* timeVector = timeSeriesHandle->getSeriesVector<double>("time");
+                if (timeVector == nullptr)
+                    break;
                 for (auto& [seriesName, active] : timeSeriesSource) {
                     if (active) {
-                        auto& seriesVector = *timeSeriesHandle->getSeriesVector<double>(seriesName);
+                        auto* seriesVector = timeSeriesHandle->getSeriesVector<double>(seriesName);
+                        assert(seriesVector != nullptr);
                         if (_lossPlotTimeMode) {
-                            ImPlot::PlotLine(seriesName.c_str(), timeVector.data(), seriesVector.data(),
-                                (int)seriesVector.size());
+                            ImPlot::PlotLine(seriesName.c_str(), timeVector->data(), seriesVector->data(),
+                                (int)seriesVector->size());
                         } else {
-                            ImPlot::PlotLine(seriesName.c_str(), seriesVector.data(), (int)seriesVector.size());
+                            ImPlot::PlotLine(seriesName.c_str(), seriesVector->data(), (int)seriesVector->size());
                         }
                     }
                 }

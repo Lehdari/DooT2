@@ -21,12 +21,12 @@ namespace gui {
 
 class PlotWindow : public Window {
 public:
-    PlotWindow(std::set<int>* activeIds, int id = -1) :
-        Window(this, activeIds, id)
+    PlotWindow(std::set<int>* activeIds, State* guiState, int id = -1) :
+        Window(this, guiState, activeIds, id)
     {}
 
-    void update(gui::State* guiState) override;
-    void render(ml::Trainer* trainer, gui::State* guiState) override;
+    void update() override;
+    void render(ml::Trainer* trainer) override;
     void applyConfig(const nlohmann::json& config) override;
     nlohmann::json getConfig() const override;
 

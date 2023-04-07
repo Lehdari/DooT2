@@ -14,23 +14,23 @@
 #include "imgui.h"
 
 
-gui::ImagesWindow::ImagesWindow(std::set<int>* activeIds, int id) :
-    Window          (this, activeIds, id),
+gui::ImagesWindow::ImagesWindow(std::set<int>* activeIds, State* guiState, int id) :
+    Window(this, guiState, activeIds, id),
     _activeImage    ("")
 {
 }
 
-void gui::ImagesWindow::update(gui::State* guiState)
+void gui::ImagesWindow::update()
 {
 }
 
-void gui::ImagesWindow::render(ml::Trainer* trainer, gui::State* guiState)
+void gui::ImagesWindow::render(ml::Trainer* trainer)
 {
     if (!_open) return;
     if (ImGui::Begin(("Images " + std::to_string(_id)).c_str(), &_open)) {
         if (ImGui::BeginCombo("##combo", _activeImage.c_str())) // The second parameter is the label previewed before opening the combo.
         {
-            for (auto& [name, imageRelay] : guiState->_modelImageRelays) {
+            for (auto& [name, imageRelay] : _guiState->modelImageRelays) {
                 bool isSelected = (_activeImage == name);
                 if (ImGui::Selectable(name.c_str(), isSelected))
                     _activeImage = name;
@@ -40,8 +40,8 @@ void gui::ImagesWindow::render(ml::Trainer* trainer, gui::State* guiState)
             ImGui::EndCombo();
         }
 
-        if (!_activeImage.empty())
-            guiState->_modelImageRelays[_activeImage].render();
+        if (!_activeImage.empty() && _guiState->modelImageRelays.contains(_activeImage))
+            _guiState->modelImageRelays[_activeImage].render();
 
         ImGui::End();
     }

@@ -31,6 +31,7 @@ void Model::train(SequenceStorage& storage)
     std::unique_lock<std::mutex> lock(_trainingMutex);
     _trainingCv.wait(lock, [&]{ return _trainingFinished; });
     _trainingFinished = false;
+    _abortTraining = false;
 
     trainImpl(storage);
 

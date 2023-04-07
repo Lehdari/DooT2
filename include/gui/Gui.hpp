@@ -53,6 +53,8 @@ public:
 
     void render(SDL_Window* window, ml::Trainer* trainer);
 
+    const State& getState() const noexcept;
+
 private:
     State                                   _guiState;
     std::vector<std::unique_ptr<Window>>    _windows;
@@ -94,8 +96,8 @@ void Gui::createWindow(int id, const nlohmann::json* config)
     if (id >= 0) {
         if (activeWindows<T_Window>()->contains(id)) // ID already exists, do nothing
             return;
-        _windows.push_back(std::unique_ptr<gui::Window>(new T_Window(activeWindows<T_Window>(), id)));
-        _windows.back()->update(&_guiState);
+        _windows.push_back(std::unique_ptr<gui::Window>(new T_Window(activeWindows<T_Window>(), &_guiState, id)));
+        _windows.back()->update();
         if (config != nullptr)
             _windows.back()->applyConfig(*config);
         return;
@@ -104,8 +106,8 @@ void Gui::createWindow(int id, const nlohmann::json* config)
     // Try to find first available slot (nullptr) in the _windows vector and reuse it
     for (auto& w : _windows) {
         if (!w) {
-            w.reset(new T_Window(activeWindows<T_Window>()));
-            w->update(&_guiState);
+            w.reset(new T_Window(activeWindows<T_Window>(), &_guiState));
+            w->update();
             if (config != nullptr)
                 w->applyConfig(*config);
             return;
@@ -113,8 +115,8 @@ void Gui::createWindow(int id, const nlohmann::json* config)
     }
 
     // No free slots, create a completely new window
-    _windows.push_back(std::unique_ptr<gui::Window>(new T_Window(activeWindows<T_Window>())));
-    _windows.back()->update(&_guiState);
+    _windows.push_back(std::unique_ptr<gui::Window>(new T_Window(activeWindows<T_Window>(), &_guiState)));
+    _windows.back()->update();
     if (config != nullptr)
         _windows.back()->applyConfig(*config);
 }
