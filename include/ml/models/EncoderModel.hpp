@@ -24,6 +24,7 @@ namespace ml {
         EncoderModel& operator=(const EncoderModel&) = delete;
         EncoderModel& operator=(EncoderModel&&) = delete;
 
+        void reset() override;
         void infer(const TensorVector& input, TensorVector& output) override;
 
     private:

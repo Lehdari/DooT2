@@ -10,8 +10,10 @@
 
 #include "App.hpp"
 #include "Constants.hpp"
-#include "ml/Trainer.hpp"
 #include "ml/Model.hpp"
+#include "ml/Models.hpp"
+#include "ml/ModelTypeUtils.hpp"
+#include "ml/Trainer.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
 #include "glad/glad.h"
@@ -155,11 +157,27 @@ void App::trainingControl()
         case gui::State::TrainingStatus::ONGOING: {
             if (_trainerThread.joinable()) // thread running, continue business as usual
                 break;
-            // no trainer thread running, launch it
+
+            // no trainer thread running, instantiate new model and launch the training
+            resetModel();
             _trainerThread = std::thread(&ml::Trainer::loop, _trainer);
         }   break;
         case gui::State::TrainingStatus::PAUSED: {
             // TODO, requires pausing interface for Model
         }   break;
     }
+}
+
+void App::resetModel()
+{
+    // delete the previous model
+    _model.reset();
+
+    // instantiate new model of desired type
+    ml::modelTypeNameCallback(_gui.getState().modelTypeName, [&]<typename T_Model>(){
+        _model = std::make_unique<T_Model>();
+    });
+
+    _trainer->setModel(_model.get());
+    _gui.update(_trainer->getTrainingInfo());
 }

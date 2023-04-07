@@ -18,8 +18,7 @@
 
 
 // List all available model types in this macro
-// First argument: model type
-// Second argument: model label in the "New model" menu
+// Remember to add the include in Models.hpp too!
 #define ML_MODEL_TYPES               \
     ML_MODEL_TYPE(AutoEncoderModel)  \
     ML_MODEL_TYPE(EncoderModel)      \
@@ -84,6 +83,7 @@ void modelTypeNameCallback(const std::string& typeName, F&& f)
         return f.template operator()<MODEL>();
     ML_MODEL_TYPES
     #undef ML_MODEL_TYPE
+    throw std::runtime_error("No type name match for \"" + typeName + "\" found");
 }
 
 template <typename F>
@@ -94,6 +94,7 @@ void modelTypeIdCallback(int typeId, F&& f)
         return f.template operator()<MODEL>();
     ML_MODEL_TYPES
     #undef ML_MODEL_TYPE
+    throw std::runtime_error("No type name match for " + std::to_string(typeId) + " found");
 }
 
 // similar to the functions above, but this function calls the callback for each model type

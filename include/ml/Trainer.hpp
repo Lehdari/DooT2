@@ -37,7 +37,6 @@ public:
     // encoderModel:    model used for encoding the frames (if nullptr, raw frames will be stored
     //                  into the sequence storage instead)
     Trainer(
-        Model* model,
         Model* agentModel,
         Model* encoderModel = nullptr,
         uint32_t batchSizeIn = doot2::batchSize,
@@ -50,6 +49,8 @@ public:
 
     void loop();
     void quit();
+
+    void setModel(Model* model);
 
     // Access the model that is being trained
     Model* getModel();

@@ -3,7 +3,6 @@
 #include "Heatmap.hpp"
 #include "ml/Trainer.hpp"
 #include "util/Utils.hpp"
-#include "ml/models/AutoEncoderModel.hpp"
 #include "ml/models/RandomWalkerModel.hpp"
 
 #include "CLI/CLI.hpp"
@@ -32,12 +31,11 @@ int main()
     doomGame.update(gvizdoom::Action());
 
     // Initialize models
-    ml::AutoEncoderModel model; // model to be trained
     Heatmap randomWalkerHeatmap({512, 32.0f,
         doomGame.getGameState<gvizdoom::GameState::PlayerPos>().block<2,1>(0,0)});
     ml::RandomWalkerModel agentModel(&randomWalkerHeatmap); // model used for agent
 
-    ml::Trainer trainer(&model, &agentModel, nullptr, cliBatchSize, cliSequenceLength);
+    ml::Trainer trainer(&agentModel, nullptr, cliBatchSize, cliSequenceLength);
     App app(&trainer);
 
     app.loop();

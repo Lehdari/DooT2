@@ -20,6 +20,7 @@
 namespace ml {
 
 class Trainer;
+class Model;
 
 } // namespace ml
 
@@ -33,16 +34,18 @@ public:
     void loop();
 
 private:
-    SDL_Window*     _window;
-    SDL_GLContext   _glContext;
+    SDL_Window*                 _window;
+    SDL_GLContext               _glContext;
 
-    bool            _quit;
+    bool                        _quit;
 
-    ml::Trainer*    _trainer;
-    std::thread     _trainerThread;
-    gui::Gui        _gui;
+    ml::Trainer*                _trainer;
+    std::thread                 _trainerThread;
+    gui::Gui                    _gui;
+    std::unique_ptr<ml::Model>  _model; // model to be trained
 
     void trainingControl();
+    void resetModel(); // musn't be called when training thread is running
 };
 
 

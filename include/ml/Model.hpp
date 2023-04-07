@@ -34,6 +34,7 @@ struct TrainingInfo;
 class Model {
 public:
     Model();
+    virtual ~Model() = default;
 
     // Set pointer to training info
     virtual void setTrainingInfo(TrainingInfo* trainingInfo);

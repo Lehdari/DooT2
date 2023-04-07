@@ -22,7 +22,6 @@ namespace fs = std::filesystem;
 
 
 Trainer::Trainer(
-    Model* model,
     Model* agentModel,
     Model* encoderModel,
     uint32_t batchSizeIn,
@@ -38,12 +37,10 @@ Trainer::Trainer(
     _frameId                    (0),
     _batchEntryId               (0),
     _newPatchReady              (false),
-    _model                      (model),
+    _model                      (nullptr),
     _agentModel                 (agentModel),
     _encoderModel               (encoderModel)
 {
-    if (_model == nullptr)
-        throw std::runtime_error("Model to be trained must not be nullptr");
 
     // Setup sequence storage
     _sequenceStorage.addSequence<Action>("action", Action(Action::ACTION_NONE, 0));
@@ -68,9 +65,6 @@ Trainer::Trainer(
             printf("Could not create the directory for models. Expect a crash upon training\n");
         }
     }
-
-    // Setup models
-    _model->setTrainingInfo(&_trainingInfo);
 }
 
 Trainer::~Trainer()
@@ -178,6 +172,15 @@ void Trainer::quit()
 {
     _quit = true;
     _model->abortTraining();
+}
+
+void Trainer::setModel(Model* model)
+{
+    if (model == nullptr)
+        throw std::runtime_error("Model to be trained must not be nullptr");
+
+    _model = model;
+    _model->setTrainingInfo(&_trainingInfo);
 }
 
 Model* Trainer::getModel()

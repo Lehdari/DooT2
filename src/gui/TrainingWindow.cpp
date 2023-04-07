@@ -10,6 +10,8 @@
 
 #include "gui/TrainingWindow.hpp"
 #include "gui/State.hpp"
+#include "ml/Models.hpp"
+#include "ml/ModelTypeUtils.hpp"
 
 #include "imgui.h"
 
@@ -29,7 +31,21 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
     if (ImGui::Begin(("Training " + std::to_string(_id)).c_str(), &_open)) {
         float fontSize = ImGui::GetFontSize();
 
-        // TODO model select menus
+        // Model select
+        ImGui::BeginDisabled(_guiState->trainingStatus != State::TrainingStatus::STOPPED); // only available when training's not in progress
+        if (ImGui::BeginCombo("##ModelSelector", _guiState->modelTypeName.c_str())) {
+            ml::modelForEachTypeCallback([&]<typename T_Model>() {
+                constexpr auto name = ml::ModelTypeInfo<T_Model>::name;
+                bool isSelected = (_guiState->modelTypeName == name);
+                if (ImGui::Selectable(name, isSelected))
+                    _guiState->modelTypeName = name;
+                if (isSelected)
+                    ImGui::SetItemDefaultFocus();
+            });
+
+            ImGui::EndCombo();
+        }
+        ImGui::EndDisabled();
 
         // Training controls
         ImGui::Text("Training:");
@@ -76,10 +92,13 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
 
 void gui::TrainingWindow::applyConfig(const nlohmann::json& config)
 {
+    if (config.contains("modelTypeName"))
+        _guiState->modelTypeName = config["modelTypeName"].get<std::string>();
 }
 
 nlohmann::json gui::TrainingWindow::getConfig() const
 {
     nlohmann::json config;
+    config["modelTypeName"] = _guiState->modelTypeName;
     return config;
 }

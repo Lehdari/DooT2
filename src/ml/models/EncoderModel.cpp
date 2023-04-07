@@ -18,6 +18,10 @@ EncoderModel::EncoderModel()
 {
 }
 
+void EncoderModel::reset()
+{
+}
+
 void EncoderModel::infer(const TensorVector& input, TensorVector& output)
 {
     output.resize(1);
