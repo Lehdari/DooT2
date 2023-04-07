@@ -26,12 +26,11 @@ using namespace doot2;
 namespace fs = std::filesystem;
 
 
-App::App(Trainer* trainer, Model* model) :
+App::App(Trainer* trainer) :
     _window     (nullptr),
     _glContext  (nullptr),
     _quit       (false),
-    _trainer    (trainer),
-    _model      (model)
+    _trainer    (trainer)
 {
     auto& doomGame = DoomGame::instance();
 
@@ -79,7 +78,7 @@ App::App(Trainer* trainer, Model* model) :
 
     // Initialize gui
     _gui.init(_window, &_glContext);
-    _gui.update(_model);
+    _gui.update(_trainer->getModel());
     if (fs::exists(guiLayoutFilename))
         _gui.loadLayout(guiLayoutFilename);
     else
@@ -122,7 +121,7 @@ void App::loop()
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        _gui.render(_window, _trainer, _model);
+        _gui.render(_window, _trainer);
 
         // Introduce delay to cap the framerate
         auto frameEnd = high_resolution_clock::now();

@@ -23,7 +23,7 @@ void gui::GameWindow::update(gui::State* guiState)
 {
 }
 
-void gui::GameWindow::render(ml::Trainer* trainer, ml::Model* model, gui::State* guiState)
+void gui::GameWindow::render(ml::Trainer* trainer, gui::State* guiState)
 {
     if (!_open) return;
 

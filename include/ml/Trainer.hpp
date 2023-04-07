@@ -50,6 +50,9 @@ public:
     void loop();
     void quit();
 
+    // Access the model that is being trained
+    Model* getModel();
+
     const SingleBuffer<Image<uint8_t>>::ReadHandle getFrameReadHandle();
 private:
     using Rnd = std::default_random_engine;

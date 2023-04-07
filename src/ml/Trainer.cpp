@@ -170,6 +170,11 @@ void Trainer::quit()
     _model->abortTraining();
 }
 
+Model* Trainer::getModel()
+{
+    return _model;
+}
+
 const SingleBuffer<Image<uint8_t>>::ReadHandle Trainer::getFrameReadHandle()
 {
     return _frame.read();

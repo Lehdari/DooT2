@@ -40,7 +40,7 @@ int main()
     ml::RandomWalkerModel agentModel(&randomWalkerHeatmap); // model used for agent
 
     ml::Trainer trainer(&model, &agentModel, nullptr, cliBatchSize, cliSequenceLength);
-    App app(&trainer, &model);
+    App app(&trainer);
 
     std::thread trainerThread(&ml::Trainer::loop, &trainer);
     app.loop();

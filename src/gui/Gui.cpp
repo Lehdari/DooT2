@@ -107,7 +107,7 @@ void Gui::saveLayout(const std::filesystem::path& layoutFilename) const
     layoutFile << std::setw(4) << layout << std::endl;
 }
 
-void Gui::render(SDL_Window* window, ml::Trainer* trainer, ml::Model* model)
+void Gui::render(SDL_Window* window, ml::Trainer* trainer)
 {
     auto& doomGame = gvizdoom::DoomGame::instance();
 
@@ -133,7 +133,7 @@ void Gui::render(SDL_Window* window, ml::Trainer* trainer, ml::Model* model)
         if (!w)
             continue;
 
-        w->render(trainer, model, &_guiState);
+        w->render(trainer, &_guiState);
 
         // Check if window has been closed
         if (w->isClosed())

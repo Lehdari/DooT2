@@ -18,14 +18,13 @@
 namespace ml {
 
 class Trainer;
-class Model;
 
 } // namespace ml
 
 
 class App {
 public:
-    App(ml::Trainer* trainer, ml::Model* model);
+    App(ml::Trainer* trainer);
     // TODO RO5
     ~App();
 
@@ -38,7 +37,6 @@ private:
     bool            _quit;
 
     ml::Trainer*    _trainer;
-    ml::Model*      _model;
 
     gui::Gui        _gui;
 };

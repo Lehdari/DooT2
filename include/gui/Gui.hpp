@@ -50,7 +50,7 @@ public:
     void loadLayout(const std::filesystem::path& layoutFilename);
     void saveLayout(const std::filesystem::path& layoutFilename) const;
 
-    void render(SDL_Window* window, ml::Trainer* trainer, ml::Model* model);
+    void render(SDL_Window* window, ml::Trainer* trainer);
 
 private:
     State                                   _guiState;

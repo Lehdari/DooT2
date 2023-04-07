@@ -43,7 +43,7 @@ void gui::PlotWindow::update(gui::State* guiState)
     }
 }
 
-void gui::PlotWindow::render(ml::Trainer* trainer, ml::Model* model, gui::State* guiState)
+void gui::PlotWindow::render(ml::Trainer* trainer, gui::State* guiState)
 {
     if (!_open) return;
     if (ImGui::Begin(("Plotting " + std::to_string(_id)).c_str(), &_open)) {
