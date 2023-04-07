@@ -28,6 +28,9 @@ class SequenceStorage;
 
 namespace ml {
 
+struct TrainingInfo;
+
+
 class AutoEncoderModel final : public Model {
 public:
     AutoEncoderModel();
@@ -36,6 +39,7 @@ public:
     AutoEncoderModel& operator=(const AutoEncoderModel&) = delete;
     AutoEncoderModel& operator=(AutoEncoderModel&&) = delete;
 
+    void setTrainingInfo(TrainingInfo* trainingInfo) override;
     void reset() override;
     void infer(const TensorVector& input, TensorVector& output) override;
 

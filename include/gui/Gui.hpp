@@ -28,6 +28,7 @@ namespace ml {
 
 class Trainer;
 class Model;
+struct TrainingInfo;
 
 } // namespace ml
 
@@ -45,7 +46,7 @@ public:
     ~Gui();
 
     void init(SDL_Window* window, SDL_GLContext* glContext);
-    void update(ml::Model* model);
+    void update(ml::TrainingInfo* trainingInfo);
     void createDefaultLayout();
     void loadLayout(const std::filesystem::path& layoutFilename);
     void saveLayout(const std::filesystem::path& layoutFilename) const;

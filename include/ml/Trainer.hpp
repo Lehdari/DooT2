@@ -12,6 +12,7 @@
 
 
 #include "ActionConverter.hpp"
+#include "ml/TrainingInfo.hpp"
 #include "util/Image.hpp"
 #include "util/SequenceStorage.hpp"
 #include "util/SingleBuffer.hpp"
@@ -52,6 +53,7 @@ public:
 
     // Access the model that is being trained
     Model* getModel();
+    TrainingInfo* getTrainingInfo();
 
     const SingleBuffer<Image<uint8_t>>::ReadHandle getFrameReadHandle();
 private:
@@ -61,6 +63,7 @@ private:
     ActionConverter<float>          _actionConverter;
     SequenceStorage                 _sequenceStorage;
     SingleBuffer<Image<uint8_t>>    _frame;
+    TrainingInfo                    _trainingInfo;
 
     size_t                          _frameId;
     size_t                          _batchEntryId;

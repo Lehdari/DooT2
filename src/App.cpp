@@ -78,7 +78,7 @@ App::App(Trainer* trainer) :
 
     // Initialize gui
     _gui.init(_window, &_glContext);
-    _gui.update(_trainer->getModel());
+    _gui.update(_trainer->getTrainingInfo());
     if (fs::exists(guiLayoutFilename))
         _gui.loadLayout(guiLayoutFilename);
     else

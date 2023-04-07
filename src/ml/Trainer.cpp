@@ -43,7 +43,7 @@ Trainer::Trainer(
     _encoderModel               (encoderModel)
 {
     if (_model == nullptr)
-        throw std::runtime_error("model must not be nullptr");
+        throw std::runtime_error("Model to be trained must not be nullptr");
 
     // Setup sequence storage
     _sequenceStorage.addSequence<Action>("action", Action(Action::ACTION_NONE, 0));
@@ -68,6 +68,9 @@ Trainer::Trainer(
             printf("Could not create the directory for models. Expect a crash upon training\n");
         }
     }
+
+    // Setup models
+    _model->setTrainingInfo(&_trainingInfo);
 }
 
 Trainer::~Trainer()
@@ -76,6 +79,11 @@ Trainer::~Trainer()
 
 void Trainer::loop()
 {
+    if (_model == nullptr)
+        throw std::runtime_error("Model to be trained must not be nullptr");
+    if (_agentModel == nullptr)
+        throw std::runtime_error("Agent model must not be nullptr");
+
     auto& doomGame = DoomGame::instance();
 
     size_t recordBeginFrameId = 768+_rnd()%512;
@@ -173,6 +181,11 @@ void Trainer::quit()
 Model* Trainer::getModel()
 {
     return _model;
+}
+
+TrainingInfo* Trainer::getTrainingInfo()
+{
+    return &_trainingInfo;
 }
 
 const SingleBuffer<Image<uint8_t>>::ReadHandle Trainer::getFrameReadHandle()

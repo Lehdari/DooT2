@@ -9,6 +9,7 @@
 //
 
 #include "ml/models/AutoEncoderModel.hpp"
+#include "ml/TrainingInfo.hpp"
 #include "util/SequenceStorage.hpp"
 #include "Constants.hpp"
 
@@ -80,38 +81,6 @@ AutoEncoderModel::AutoEncoderModel() :
 {
     using namespace doot2;
 
-    auto& doomGame = gvizdoom::DoomGame::instance();
-
-    {   // Initialize the time series
-        auto timeSeriesWriteHandle = timeSeries.write();
-        timeSeriesWriteHandle->addSeries<double>("time", 0.0);
-        timeSeriesWriteHandle->addSeries<double>("loss", 0.0);
-        timeSeriesWriteHandle->addSeries<double>("frameLoss", 0.0);
-        timeSeriesWriteHandle->addSeries<double>("flowForwardLoss", 0.0);
-        timeSeriesWriteHandle->addSeries<double>("flowBackwardLoss", 0.0);
-        timeSeriesWriteHandle->addSeries<double>("frameLossDoubleEdec", 0.0);
-        timeSeriesWriteHandle->addSeries<double>("doubleEncodingLoss", 0.0);
-    }
-    // Initialize images
-    {
-        auto width = doomGame.getScreenWidth();
-        auto height = doomGame.getScreenHeight();
-        *images["input_1"].write() = Image<float>(width, height, ImageFormat::YUV);
-        *images["input_1_scaled_1"].write() = Image<float>(width/2, height/2, ImageFormat::YUV);
-        *images["input_1_scaled_2"].write() = Image<float>(width/4, height/4, ImageFormat::YUV);
-        *images["input_2"].write() = Image<float>(width, height, ImageFormat::YUV);
-        *images["prediction_1"].write() = Image<float>(width, height, ImageFormat::YUV);
-        *images["prediction_1_scaled_1"].write() = Image<float>(width/2, height/2, ImageFormat::YUV);
-        *images["prediction_1_scaled_2"].write() = Image<float>(width/4, height/4, ImageFormat::YUV);
-        *images["prediction_1_double_edec"].write() = Image<float>(width, height, ImageFormat::YUV);
-        *images["flow_forward"].write() = Image<float>(width, height, ImageFormat::BGRA);
-        *images["flow_forward_mapped"].write() = Image<float>(width, height, ImageFormat::YUV);
-        *images["flow_forward_diff"].write() = Image<float>(width, height, ImageFormat::GRAY);
-        *images["flow_backward"].write() = Image<float>(width, height, ImageFormat::BGRA);
-        *images["flow_backward_mapped"].write() = Image<float>(width, height, ImageFormat::YUV);
-        *images["flow_backward_diff"].write() = Image<float>(width, height, ImageFormat::GRAY);
-    }
-
     // Load frame encoder
     if (fs::exists(frameEncoderFilename)) {
         printf("Loading frame encoder model from %s\n", frameEncoderFilename.c_str()); // TODO logging
@@ -146,10 +115,51 @@ AutoEncoderModel::AutoEncoderModel() :
     }
 }
 
+void AutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
+{
+    auto& doomGame = gvizdoom::DoomGame::instance();
+
+    _trainingInfo = trainingInfo;
+    assert(_trainingInfo != nullptr);
+
+    {   // Initialize the time series
+        auto timeSeriesWriteHandle = _trainingInfo->timeSeries.write();
+        timeSeriesWriteHandle->addSeries<double>("time", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("loss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("frameLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("flowForwardLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("flowBackwardLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("frameLossDoubleEdec", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("doubleEncodingLoss", 0.0);
+    }
+    // Initialize images
+    {
+        auto width = doomGame.getScreenWidth();
+        auto height = doomGame.getScreenHeight();
+        *(_trainingInfo->images)["input_1"].write() = Image<float>(width, height, ImageFormat::YUV);
+        *(_trainingInfo->images)["input_1_scaled_1"].write() = Image<float>(width/2, height/2, ImageFormat::YUV);
+        *(_trainingInfo->images)["input_1_scaled_2"].write() = Image<float>(width/4, height/4, ImageFormat::YUV);
+        *(_trainingInfo->images)["input_2"].write() = Image<float>(width, height, ImageFormat::YUV);
+        *(_trainingInfo->images)["prediction_1"].write() = Image<float>(width, height, ImageFormat::YUV);
+        *(_trainingInfo->images)["prediction_1_scaled_1"].write() = Image<float>(width/2, height/2, ImageFormat::YUV);
+        *(_trainingInfo->images)["prediction_1_scaled_2"].write() = Image<float>(width/4, height/4, ImageFormat::YUV);
+        *(_trainingInfo->images)["prediction_1_double_edec"].write() = Image<float>(width, height, ImageFormat::YUV);
+        *(_trainingInfo->images)["flow_forward"].write() = Image<float>(width, height, ImageFormat::BGRA);
+        *(_trainingInfo->images)["flow_forward_mapped"].write() = Image<float>(width, height, ImageFormat::YUV);
+        *(_trainingInfo->images)["flow_forward_diff"].write() = Image<float>(width, height, ImageFormat::GRAY);
+        *(_trainingInfo->images)["flow_backward"].write() = Image<float>(width, height, ImageFormat::BGRA);
+        *(_trainingInfo->images)["flow_backward_mapped"].write() = Image<float>(width, height, ImageFormat::YUV);
+        *(_trainingInfo->images)["flow_backward_diff"].write() = Image<float>(width, height, ImageFormat::GRAY);
+    }
+}
+
 void AutoEncoderModel::trainImpl(SequenceStorage& storage)
 {
     using namespace torch::indexing;
     static std::default_random_engine rnd(1507715517);
+
+    // This model is used solely for training, trainingInfo must never be nullptr
+    assert(_trainingInfo != nullptr);
 
     // Return immediately in case there's previous training by another thread already running
     if (!_trainingFinished)
@@ -328,20 +338,20 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
             torch::Tensor batchOutScaled1CPU = batchOutScaled1.index({(int)displaySeqId, "..."}).to(torch::kCPU);
             torch::Tensor batchOutScaled2CPU = batchOutScaled2.index({(int)displaySeqId, "..."}).to(torch::kCPU);
 
-            images["input_1"].write()->copyFrom(batchIn1CPU.data_ptr<float>());
-            images["input_1_scaled_1"].write()->copyFrom(batchIn1Scaled1CPU.data_ptr<float>());
-            images["input_1_scaled_2"].write()->copyFrom(batchIn1Scaled2CPU.data_ptr<float>());
-            images["input_2"].write()->copyFrom(batchIn2CPU.data_ptr<float>());
-            images["prediction_1"].write()->copyFrom(outputCPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
-            images["prediction_1_scaled_1"].write()->copyFrom(batchOutScaled1CPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
-            images["prediction_1_scaled_2"].write()->copyFrom(batchOutScaled2CPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
-            images["prediction_1_double_edec"].write()->copyFrom(output2CPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
-            images["flow_forward"].write()->copyFrom(flowForwardCPU.data_ptr<float>());
-            images["flow_forward_mapped"].write()->copyFrom(flowFrameForwardCPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
-            images["flow_forward_diff"].write()->copyFrom(flowForwardDiffCPU.data_ptr<float>());
-            images["flow_backward"].write()->copyFrom(flowBackwardCPU.data_ptr<float>());
-            images["flow_backward_mapped"].write()->copyFrom(flowFrameBackwardCPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
-            images["flow_backward_diff"].write()->copyFrom(flowBackwardDiffCPU.data_ptr<float>());
+            _trainingInfo->images["input_1"].write()->copyFrom(batchIn1CPU.data_ptr<float>());
+            _trainingInfo->images["input_1_scaled_1"].write()->copyFrom(batchIn1Scaled1CPU.data_ptr<float>());
+            _trainingInfo->images["input_1_scaled_2"].write()->copyFrom(batchIn1Scaled2CPU.data_ptr<float>());
+            _trainingInfo->images["input_2"].write()->copyFrom(batchIn2CPU.data_ptr<float>());
+            _trainingInfo->images["prediction_1"].write()->copyFrom(outputCPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
+            _trainingInfo->images["prediction_1_scaled_1"].write()->copyFrom(batchOutScaled1CPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
+            _trainingInfo->images["prediction_1_scaled_2"].write()->copyFrom(batchOutScaled2CPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
+            _trainingInfo->images["prediction_1_double_edec"].write()->copyFrom(output2CPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
+            _trainingInfo->images["flow_forward"].write()->copyFrom(flowForwardCPU.data_ptr<float>());
+            _trainingInfo->images["flow_forward_mapped"].write()->copyFrom(flowFrameForwardCPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
+            _trainingInfo->images["flow_forward_diff"].write()->copyFrom(flowForwardDiffCPU.data_ptr<float>());
+            _trainingInfo->images["flow_backward"].write()->copyFrom(flowBackwardCPU.data_ptr<float>());
+            _trainingInfo->images["flow_backward_mapped"].write()->copyFrom(flowFrameBackwardCPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
+            _trainingInfo->images["flow_backward_diff"].write()->copyFrom(flowBackwardDiffCPU.data_ptr<float>());
         }
 
         // Print loss
@@ -363,13 +373,8 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
             encodingVar.min().item<float>(), encodingVar.max().item<float>());
         fflush(stdout);
 
-        {   // Write the state
-            auto stateWriteHandle = trainingState.write();
-            (*stateWriteHandle)["loss"] = loss.item<double>();
-        }
-
         {   // Write the time series
-            auto timeSeriesWriteHandle = timeSeries.write();
+            auto timeSeriesWriteHandle = _trainingInfo->timeSeries.write();
             auto currentTime = high_resolution_clock::now();
 
             timeSeriesWriteHandle->addEntries(

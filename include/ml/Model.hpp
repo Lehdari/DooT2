@@ -10,8 +10,6 @@
 
 #pragma once
 
-#include "nlohmann/json.hpp"
-
 #include "util/Types.hpp"
 #include "util/Image.hpp"
 #include "util/SequenceStorage.hpp"
@@ -26,15 +24,19 @@
 
 namespace ml {
 
-using TrainingState = nlohmann::json;
+struct TrainingInfo;
 
 
-// Interface class for models
-// It provides facilities for synchronous and asynchronous (threaded) training
-// Implement pure virtual functions reset, infer and trainImpl in the derived class
+// Interface class for models, which provides facilities for synchronous and
+// asynchronous (threaded) training.
+// Implement pure virtual functions reset, infer and trainImpl in the derived class.
+// Optionally, the default functionality of setTrainingInfo can be overridden.
 class Model {
 public:
     Model();
+
+    // Set pointer to training info
+    virtual void setTrainingInfo(TrainingInfo* trainingInfo);
 
     // Reset the model - will be called in start of each sequence
     virtual void reset() = 0;
@@ -55,18 +57,14 @@ public:
 
     void abortTraining() noexcept;
 
-    // Information about training
-    using ImageMap = std::unordered_map<std::string, SingleBuffer<Image<float>>>;
-    DoubleBuffer<TrainingState> trainingState;
-    SingleBuffer<TimeSeries>    timeSeries;
-    ImageMap                    images;
-
 private:
     std::mutex              _trainingMutex;
     std::condition_variable _trainingCv;
     bool                    _trainingFinished;
 
 protected:
+    TrainingInfo*           _trainingInfo;
+
     std::atomic_bool        _abortTraining{false};
 
     // Required for storing the copy of the storage made in trainAsync

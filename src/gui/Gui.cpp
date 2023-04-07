@@ -14,6 +14,7 @@
 #include "gui/ImagesWindow.hpp"
 #include "gui/PlotWindow.hpp"
 #include "ml/Model.hpp"
+#include "ml/TrainingInfo.hpp"
 #include "ml/Trainer.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
@@ -48,13 +49,13 @@ void Gui::init(SDL_Window* window, SDL_GLContext* glContext)
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 }
 
-void Gui::update(ml::Model* model)
+void Gui::update(ml::TrainingInfo* trainingInfo)
 {
-    _guiState._timeSeries["training"] = &model->timeSeries;
+    _guiState._timeSeries["training"] = &trainingInfo->timeSeries;
 
     // Update the model image relays map
     _guiState._modelImageRelays.clear();
-    for (auto& [name, imageBuffer] : model->images) {
+    for (auto& [name, imageBuffer] : trainingInfo->images) {
         _guiState._modelImageRelays.emplace(name, &imageBuffer);
     }
 

@@ -9,14 +9,21 @@
 //
 
 #include "ml/Model.hpp"
+#include "ml/TrainingInfo.hpp"
 
 
 using namespace ml;
 
 
 Model::Model() :
-    _trainingFinished   (true)
+    _trainingFinished   (true),
+    _trainingInfo       (nullptr)
 {
+}
+
+void Model::setTrainingInfo(TrainingInfo* trainingInfo)
+{
+    _trainingInfo = trainingInfo;
 }
 
 void Model::train(SequenceStorage& storage)
