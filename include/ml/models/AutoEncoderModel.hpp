@@ -17,9 +17,6 @@
 
 #include <vector>
 #include <memory>
-#include <atomic>
-#include <mutex>
-#include <thread>
 #include <chrono>
 
 
@@ -50,9 +47,6 @@ private:
     FrameDecoder        _frameDecoder;
     FlowDecoder         _flowDecoder;
     torch::optim::AdamW _optimizer;
-    std::mutex          _trainingMutex;
-    std::thread         _trainingThread;
-    std::atomic_bool    _trainingFinished;
     TimePoint           _trainingStartTime;
 
     void trainImpl(SequenceStorage& storage) override;

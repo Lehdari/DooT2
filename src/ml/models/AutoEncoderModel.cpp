@@ -76,7 +76,6 @@ AutoEncoderModel::AutoEncoderModel() :
         _frameDecoder->parameters(),
         _flowDecoder->parameters()},
         torch::optim::AdamWOptions(learningRate).betas({0.9, 0.999}).weight_decay(0.001)),
-    _trainingFinished   (true),
     _trainingStartTime  (high_resolution_clock::now())
 {
     using namespace doot2;
@@ -160,13 +159,6 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
 
     // This model is used solely for training, trainingInfo must never be nullptr
     assert(_trainingInfo != nullptr);
-
-    // Return immediately in case there's previous training by another thread already running
-    if (!_trainingFinished)
-        return;
-
-    _trainingFinished = false;
-    std::lock_guard<std::mutex> lock(_trainingMutex);
 
     // Check CUDA availability
     torch::Device device{torch::kCPU};
@@ -299,10 +291,7 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
             + encodingVarLoss;
 
         if (_abortTraining)
-        {
-            _trainingFinished = true;
             return;
-        }
 
         // Backward pass
         loss.backward();
@@ -419,8 +408,6 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
     catch (const std::exception& e) {
         printf("Could not save the models: '%s'\n", e.what());
     }
-
-    _trainingFinished = true;
 }
 
 void AutoEncoderModel::reset()
