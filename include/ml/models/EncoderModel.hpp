@@ -13,18 +13,19 @@
 #include "ml/Model.hpp"
 #include "ml/modules/FrameEncoder.hpp"
 
+#include <nlohmann/json.hpp>
+
 
 namespace ml {
 
     class EncoderModel final : public Model {
     public:
-        EncoderModel();
+        EncoderModel(nlohmann::json* experimentConfig);
         EncoderModel(const EncoderModel&) = delete;
         EncoderModel(EncoderModel&&) = delete;
         EncoderModel& operator=(const EncoderModel&) = delete;
         EncoderModel& operator=(EncoderModel&&) = delete;
 
-        void reset() override;
         void infer(const TensorVector& input, TensorVector& output) override;
 
     private:

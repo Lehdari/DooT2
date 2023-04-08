@@ -17,6 +17,8 @@
 #include "util/SingleBuffer.hpp"
 #include "util/TimeSeries.hpp"
 
+#include <nlohmann/json.hpp>
+
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -29,18 +31,25 @@ struct TrainingInfo;
 
 // Interface class for models, which provides facilities for synchronous and
 // asynchronous (threaded) training.
-// Implement pure virtual functions reset, infer and trainImpl in the derived class.
-// Optionally, the default functionality of setTrainingInfo can be overridden.
+// Implement pure virtual functions infer() and trainImpl() in the derived class.
+// Optionally, the default functionalities of setTrainingInfo(), reset() and save() can be overridden.
 class Model {
 public:
-    Model();
+    // experimentConfig is a handle to the experiment configuration which is reinstantiated
+    // when starting a training process. Even though models have access to the entire
+    // experiment configuration object, only contents under the "model_config" subobject
+    // should be modified.
+    Model(nlohmann::json* experimentConfig);
     virtual ~Model() = default;
 
     // Set pointer to training info
     virtual void setTrainingInfo(TrainingInfo* trainingInfo);
 
     // Reset the model - will be called in start of each sequence
-    virtual void reset() = 0;
+    virtual void reset();
+
+    // Save the model
+    virtual void save();
 
     // Train the model
     void train(SequenceStorage& storage);
@@ -64,6 +73,7 @@ private:
     bool                    _trainingFinished;
 
 protected:
+    nlohmann::json*         _experimentConfig;
     TrainingInfo*           _trainingInfo;
 
     std::atomic_bool        _abortTraining{false};

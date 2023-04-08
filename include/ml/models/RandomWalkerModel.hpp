@@ -10,9 +10,10 @@
 
 #pragma once
 
-#include "ml/Model.hpp"
-
 #include <torch/torch.h>
+#include <nlohmann/json.hpp>
+
+#include "ml/Model.hpp"
 
 
 class Heatmap;
@@ -22,7 +23,7 @@ namespace ml {
 
 class RandomWalkerModel final : public Model {
 public:
-    RandomWalkerModel(Heatmap* heatmap=nullptr);
+    RandomWalkerModel(nlohmann::json* experimentConfig, Heatmap* heatmap=nullptr);
     RandomWalkerModel(const RandomWalkerModel&) = delete;
     RandomWalkerModel(RandomWalkerModel&&) = delete;
     RandomWalkerModel& operator=(const RandomWalkerModel&) = delete;

@@ -30,24 +30,28 @@ struct TrainingInfo;
 
 class AutoEncoderModel final : public Model {
 public:
-    AutoEncoderModel();
+    AutoEncoderModel(nlohmann::json* experimentConfig);
     AutoEncoderModel(const AutoEncoderModel&) = delete;
     AutoEncoderModel(AutoEncoderModel&&) = delete;
     AutoEncoderModel& operator=(const AutoEncoderModel&) = delete;
     AutoEncoderModel& operator=(AutoEncoderModel&&) = delete;
 
     void setTrainingInfo(TrainingInfo* trainingInfo) override;
-    void reset() override;
+    void save() override;
     void infer(const TensorVector& input, TensorVector& output) override;
 
 private:
     using TimePoint = decltype(std::chrono::high_resolution_clock::now());
 
-    FrameEncoder        _frameEncoder;
-    FrameDecoder        _frameDecoder;
-    FlowDecoder         _flowDecoder;
-    torch::optim::AdamW _optimizer;
-    TimePoint           _trainingStartTime;
+    std::filesystem::path   _frameEncoderFilename;
+    std::filesystem::path   _frameDecoderFilename;
+    std::filesystem::path   _flowDecoderFilename;
+
+    FrameEncoder            _frameEncoder;
+    FrameDecoder            _frameDecoder;
+    FlowDecoder             _flowDecoder;
+    torch::optim::AdamW     _optimizer;
+    TimePoint               _trainingStartTime;
 
     void trainImpl(SequenceStorage& storage) override;
 };

@@ -24,6 +24,10 @@
 #include <random>
 
 
+namespace gui {
+    struct State;
+} // namespace gui
+
 
 namespace ml {
 
@@ -51,10 +55,13 @@ public:
     void quit();
 
     void setModel(Model* model);
+    void configureExperiment(const gui::State& guiState);
+    void saveExperiment() const;
 
     // Access the model that is being trained
     Model* getModel();
     TrainingInfo* getTrainingInfo();
+    nlohmann::json* getExperimentConfig();
 
     const SingleBuffer<Image<uint8_t>>::ReadHandle getFrameReadHandle();
 private:
@@ -64,6 +71,7 @@ private:
     ActionConverter<float>          _actionConverter;
     SequenceStorage                 _sequenceStorage;
     SingleBuffer<Image<uint8_t>>    _frame;
+    nlohmann::json                  _experimentConfig;
     TrainingInfo                    _trainingInfo;
 
     size_t                          _frameId;
@@ -75,6 +83,7 @@ private:
     Model*                          _encoderModel;
 
     void nextMap(size_t newBatchEntryId = 0); // proceed to next map
+    void createExperimentDirectories() const;
 };
 
 } // namespace ml

@@ -70,7 +70,8 @@ namespace {
 }
 
 
-AutoEncoderModel::AutoEncoderModel() :
+AutoEncoderModel::AutoEncoderModel(nlohmann::json* experimentConfig) :
+    Model               (experimentConfig),
     _optimizer          ({
         _frameEncoder->parameters(),
         _frameDecoder->parameters(),
@@ -78,39 +79,59 @@ AutoEncoderModel::AutoEncoderModel() :
         torch::optim::AdamWOptions(learningRate).betas({0.9, 0.999}).weight_decay(0.001)),
     _trainingStartTime  (high_resolution_clock::now())
 {
-    using namespace doot2;
+    auto& modelConfig = (*_experimentConfig)["model_config"];
+    fs::path experimentRoot = doot2::experimentsDirectory / (*_experimentConfig)["experiment_root"].get<fs::path>();
+
+    // Load torch model file names from the model config
+    _frameEncoderFilename = experimentRoot / "frame_encoder.pt";
+    if (modelConfig.contains("frame_encoder_filename"))
+        _frameEncoderFilename = experimentRoot / modelConfig["frame_encoder_filename"].get<fs::path>();
+    else
+        modelConfig["frame_encoder_filename"] = "frame_encoder.pt";
+
+    _frameDecoderFilename = experimentRoot / "frame_decoder.pt";
+    if (modelConfig.contains("frame_decoder_filename"))
+        _frameDecoderFilename = experimentRoot / modelConfig["frame_decoder_filename"].get<fs::path>();
+    else
+        modelConfig["frame_decoder_filename"] = "frame_decoder.pt";
+
+    _flowDecoderFilename = experimentRoot / "flow_decoder.pt";
+    if (modelConfig.contains("flow_decoder_filename"))
+        _flowDecoderFilename = experimentRoot / modelConfig["flow_decoder_filename"].get<fs::path>();
+    else
+        modelConfig["flow_decoder_filename"] = "flow_decoder.pt";
 
     // Load frame encoder
-    if (fs::exists(frameEncoderFilename)) {
-        printf("Loading frame encoder model from %s\n", frameEncoderFilename.c_str()); // TODO logging
+    if (fs::exists(_frameEncoderFilename)) {
+        printf("Loading frame encoder model from %s\n", _frameEncoderFilename.c_str()); // TODO logging
         serialize::InputArchive inputArchive;
-        inputArchive.load_from(frameEncoderFilename);
+        inputArchive.load_from(_frameEncoderFilename);
         _frameEncoder->load(inputArchive);
     }
     else {
-        printf("No %s found. Initializing new frame encoder model.\n", frameEncoderFilename.c_str()); // TODO logging
+        printf("No %s found. Initializing new frame encoder model.\n", _frameEncoderFilename.c_str()); // TODO logging
     }
 
     // Load frame decoder
-    if (fs::exists(frameDecoderFilename)) {
-        printf("Loading frame decoder model from %s\n", frameDecoderFilename.c_str()); // TODO logging
+    if (fs::exists(_frameDecoderFilename)) {
+        printf("Loading frame decoder model from %s\n", _frameDecoderFilename.c_str()); // TODO logging
         serialize::InputArchive inputArchive;
-        inputArchive.load_from(frameDecoderFilename);
+        inputArchive.load_from(_frameDecoderFilename);
         _frameDecoder->load(inputArchive);
     }
     else {
-        printf("No %s found. Initializing new frame decoder model.\n", frameDecoderFilename.c_str()); // TODO logging
+        printf("No %s found. Initializing new frame decoder model.\n", _frameDecoderFilename.c_str()); // TODO logging
     }
 
     // Load flow decoder
-    if (fs::exists(flowDecoderFilename)) {
-        printf("Loading frame decoder model from %s\n", flowDecoderFilename.c_str()); // TODO logging
+    if (fs::exists(_flowDecoderFilename)) {
+        printf("Loading frame decoder model from %s\n", _flowDecoderFilename.c_str()); // TODO logging
         serialize::InputArchive inputArchive;
-        inputArchive.load_from(flowDecoderFilename);
+        inputArchive.load_from(_flowDecoderFilename);
         _flowDecoder->load(inputArchive);
     }
     else {
-        printf("No %s found. Initializing new flow decoder model.\n", flowDecoderFilename.c_str()); // TODO logging
+        printf("No %s found. Initializing new flow decoder model.\n", _flowDecoderFilename.c_str()); // TODO logging
     }
 }
 
@@ -382,37 +403,33 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
             break;
         }
     }
+}
 
-    // Save models
-    try
-    {
+void AutoEncoderModel::save()
+{
+    try {
         {
-            printf("Saving frame encoder model to %s\n", doot2::frameEncoderFilename.c_str());
+            printf("Saving frame encoder model to %s\n", _frameEncoderFilename.c_str());
             serialize::OutputArchive outputArchive;
             _frameEncoder->save(outputArchive);
-            outputArchive.save_to(doot2::frameEncoderFilename);
+            outputArchive.save_to(_frameEncoderFilename);
         }
         {
-            printf("Saving frame decoder model to %s\n", doot2::frameDecoderFilename.c_str());
+            printf("Saving frame decoder model to %s\n", _frameDecoderFilename.c_str());
             serialize::OutputArchive outputArchive;
             _frameDecoder->save(outputArchive);
-            outputArchive.save_to(doot2::frameDecoderFilename);
+            outputArchive.save_to(_frameDecoderFilename);
         }
         {
-            printf("Saving flow decoder model to %s\n", doot2::flowDecoderFilename.c_str());
+            printf("Saving flow decoder model to %s\n", _flowDecoderFilename.c_str());
             serialize::OutputArchive outputArchive;
             _flowDecoder->save(outputArchive);
-            outputArchive.save_to(doot2::flowDecoderFilename);
+            outputArchive.save_to(_flowDecoderFilename);
         }
     }
     catch (const std::exception& e) {
         printf("Could not save the models: '%s'\n", e.what());
     }
-}
-
-void AutoEncoderModel::reset()
-{
-
 }
 
 void AutoEncoderModel::infer(const TensorVector& input, TensorVector& output)

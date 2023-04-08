@@ -20,7 +20,8 @@ using namespace ml;
 using namespace gvizdoom;
 
 
-RandomWalkerModel::RandomWalkerModel(Heatmap* heatmap) :
+RandomWalkerModel::RandomWalkerModel(nlohmann::json* experimentConfig, Heatmap* heatmap) :
+    Model       (experimentConfig),
     _heatmap    (heatmap)
 {
     reset();

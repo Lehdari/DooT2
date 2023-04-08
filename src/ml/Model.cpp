@@ -15,15 +15,28 @@
 using namespace ml;
 
 
-Model::Model() :
+Model::Model(nlohmann::json* experimentConfig) :
     _trainingFinished   (true),
+    _experimentConfig   (experimentConfig),
     _trainingInfo       (nullptr)
 {
+    if (_experimentConfig != nullptr) {
+        assert(_experimentConfig->contains("experiment_root"));
+        assert(_experimentConfig->contains("model_config"));
+    }
 }
 
 void Model::setTrainingInfo(TrainingInfo* trainingInfo)
 {
     _trainingInfo = trainingInfo;
+}
+
+void Model::reset()
+{
+}
+
+void Model::save()
+{
 }
 
 void Model::train(SequenceStorage& storage)

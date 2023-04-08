@@ -45,7 +45,7 @@ private:
     std::unique_ptr<ml::Model>  _model; // model to be trained
 
     void trainingControl();
-    void resetModel(); // musn't be called when training thread is running
+    void resetExperiment(); // musn't be called when training thread is running
 };
 
 

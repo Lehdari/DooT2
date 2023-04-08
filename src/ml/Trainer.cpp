@@ -57,14 +57,6 @@ Trainer::Trainer(
     _actionConverter.setKeyIndex(3, Action::Key::ACTION_LEFT);
     _actionConverter.setKeyIndex(4, Action::Key::ACTION_RIGHT);
     _actionConverter.setKeyIndex(5, Action::Key::ACTION_USE);
-
-    // Create output directories if they do not exist
-    if (not fs::exists(doot2::modelsDirectory)) {
-        printf("Default models directory does not exist. Trying to create the directory\n");
-        if (not fs::create_directories(fs::path(doot2::modelsDirectory))) {
-            printf("Could not create the directory for models. Expect a crash upon training\n");
-        }
-    }
 }
 
 Trainer::~Trainer()
@@ -183,6 +175,36 @@ void Trainer::setModel(Model* model)
     _model->setTrainingInfo(&_trainingInfo);
 }
 
+void Trainer::configureExperiment(const gui::State& guiState)
+{
+    // Setup experiment config
+    _experimentConfig["experiment_root"] = "experiment_0"; // TODO temp
+    _experimentConfig["model_type"] = guiState.modelTypeName;
+    _experimentConfig["model_config"] = nlohmann::json(); // TODO temp
+
+    createExperimentDirectories();
+}
+
+void Trainer::saveExperiment() const
+{
+    printf("Saving the experiment\n"); // TODO logging
+
+    createExperimentDirectories();
+
+    fs::path experimentDir = doot2::experimentsDirectory / _experimentConfig["experiment_root"];
+
+    // Save the experiment config
+    {
+        std::ofstream experimentConfigFile(experimentDir / "experiment_config.json");
+        experimentConfigFile << std::setw(4) << _experimentConfig;
+    }
+
+    // Save the trained model
+    _model->save();
+
+    // TODO save time series data etc.
+}
+
 Model* Trainer::getModel()
 {
     return _model;
@@ -191,6 +213,11 @@ Model* Trainer::getModel()
 TrainingInfo* Trainer::getTrainingInfo()
 {
     return &_trainingInfo;
+}
+
+nlohmann::json* Trainer::getExperimentConfig()
+{
+    return &_experimentConfig;
 }
 
 const SingleBuffer<Image<uint8_t>>::ReadHandle Trainer::getFrameReadHandle()
@@ -218,4 +245,14 @@ void Trainer::nextMap(size_t newBatchEntryId)
     _agentModel->reset();
     if (_encoderModel != nullptr)
         _encoderModel->reset();
+}
+
+void Trainer::createExperimentDirectories() const
+{
+    fs::path experimentDir = doot2::experimentsDirectory / _experimentConfig["experiment_root"];
+    if (!fs::exists(experimentDir)) {
+        printf("Creating experiment directory \"%s\"\n", experimentDir.c_str()); // TODO logging
+        if (!fs::create_directories(experimentDir))
+            throw std::runtime_error("Could not create the directory \""+experimentDir.string()+"\"");
+    }
 }

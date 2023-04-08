@@ -142,6 +142,7 @@ void App::loop()
     if (_trainerThread.joinable()) {
         _trainer->quit();
         _trainerThread.join();
+        _trainer->saveExperiment();
     }
 }
 
@@ -152,6 +153,7 @@ void App::trainingControl()
             if (_trainerThread.joinable()) {
                 _trainer->quit();
                 _trainerThread.join();
+                _trainer->saveExperiment();
             }
         }   break;
         case gui::State::TrainingStatus::ONGOING: {
@@ -159,7 +161,7 @@ void App::trainingControl()
                 break;
 
             // no trainer thread running, instantiate new model and launch the training
-            resetModel();
+            resetExperiment();
             _trainerThread = std::thread(&ml::Trainer::loop, _trainer);
         }   break;
         case gui::State::TrainingStatus::PAUSED: {
@@ -168,14 +170,17 @@ void App::trainingControl()
     }
 }
 
-void App::resetModel()
+void App::resetExperiment()
 {
     // delete the previous model
     _model.reset();
 
+    // use the updated options (stored in GUI state) to configure the experiment
+    _trainer->configureExperiment(_gui.getState());
+
     // instantiate new model of desired type
     ml::modelTypeNameCallback(_gui.getState().modelTypeName, [&]<typename T_Model>(){
-        _model = std::make_unique<T_Model>();
+        _model = std::make_unique<T_Model>(_trainer->getExperimentConfig());
     });
 
     _trainer->setModel(_model.get());
