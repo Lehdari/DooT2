@@ -43,6 +43,7 @@ struct State {
         PAUSED  = 2
     }               trainingStatus      {TrainingStatus::STOPPED};
 
+    char            experimentName[256] {"experiment"};
     std::string     modelTypeName       {"AutoEncoderModel"}; // type name of the model to be trained
 };
 

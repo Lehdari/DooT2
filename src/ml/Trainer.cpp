@@ -10,6 +10,7 @@
 
 #include "ml/Trainer.hpp"
 #include "ml/Model.hpp"
+#include "gui/State.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
 
@@ -178,7 +179,7 @@ void Trainer::setModel(Model* model)
 void Trainer::configureExperiment(const gui::State& guiState)
 {
     // Setup experiment config
-    _experimentConfig["experiment_root"] = "experiment_0"; // TODO temp
+    _experimentConfig["experiment_root"] = guiState.experimentName;
     _experimentConfig["model_type"] = guiState.modelTypeName;
     _experimentConfig["model_config"] = nlohmann::json(); // TODO temp
 

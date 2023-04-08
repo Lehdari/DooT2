@@ -30,9 +30,18 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
     if (!_open) return;
     if (ImGui::Begin(("Training " + std::to_string(_id)).c_str(), &_open)) {
         float fontSize = ImGui::GetFontSize();
+        ImVec2 windowSize = ImGui::GetWindowSize();
+
+        // Experiment name input
+        ImGui::Text("Experiment name:");
+        ImGui::SetNextItemWidth(windowSize.x);
+        ImGui::InputText("##ExperimentName", _guiState->experimentName, 255);
 
         // Model select
+        ImGui::Text("Model:   ");
+        ImGui::SameLine();
         ImGui::BeginDisabled(_guiState->trainingStatus != State::TrainingStatus::STOPPED); // only available when training's not in progress
+        ImGui::SetNextItemWidth(windowSize.x - fontSize*6.35f);
         if (ImGui::BeginCombo("##ModelSelector", _guiState->modelTypeName.c_str())) {
             ml::modelForEachTypeCallback([&]<typename T_Model>() {
                 constexpr auto name = ml::ModelTypeInfo<T_Model>::name;
