@@ -29,6 +29,15 @@ struct TrainingInfo {
 
     SingleBuffer<TimeSeries>    timeSeries;
     ImageMap                    images;
+
+    inline void reset();
 };
+
+
+void TrainingInfo::reset()
+{
+    timeSeries.write()->clear();
+    images.clear();
+}
 
 } // namespace ml

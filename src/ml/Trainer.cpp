@@ -178,11 +178,15 @@ void Trainer::setModel(Model* model)
 
 void Trainer::configureExperiment(const gui::State& guiState)
 {
+    // Reset training info
+    _trainingInfo.reset();
+
     // Setup experiment config
     _experimentConfig["experiment_root"] = guiState.experimentName;
     _experimentConfig["model_type"] = guiState.modelTypeName;
     _experimentConfig["model_config"] = nlohmann::json(); // TODO temp
 
+    // Setup experiment files
     createExperimentDirectories();
 }
 
