@@ -56,7 +56,7 @@ public:
 
     void setModel(Model* model);
     void configureExperiment(const gui::State& guiState);
-    void saveExperiment() const;
+    void saveExperiment();
 
     // Access the model that is being trained
     Model* getModel();

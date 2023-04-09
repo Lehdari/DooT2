@@ -190,7 +190,7 @@ void Trainer::configureExperiment(const gui::State& guiState)
     createExperimentDirectories();
 }
 
-void Trainer::saveExperiment() const
+void Trainer::saveExperiment()
 {
     printf("Saving the experiment\n"); // TODO logging
 
@@ -207,7 +207,11 @@ void Trainer::saveExperiment() const
     // Save the trained model
     _model->save();
 
-    // TODO save time series data etc.
+    // Save the time series data
+    {
+        std::ofstream timeSeriesFile(experimentDir / "time_series.json");
+        timeSeriesFile << _trainingInfo.timeSeries.read()->toJson();
+    }
 }
 
 Model* Trainer::getModel()
