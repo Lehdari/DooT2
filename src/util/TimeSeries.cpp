@@ -77,6 +77,13 @@ TimeSeries& TimeSeries::operator=(TimeSeries&& other) noexcept
     return *this;
 }
 
+void TimeSeries::clear()
+{
+    auto& instanceStorage = storage[this];
+    instanceStorage.clear();
+    _size = 0;
+}
+
 std::vector<std::string> TimeSeries::getSeriesNames() const
 {
     auto& instanceStorage = storage[this];

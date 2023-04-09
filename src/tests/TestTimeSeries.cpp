@@ -138,6 +138,8 @@ TEST(TestTimeSeries, TestFundamentals)
         ASSERT_EQ(std::find(names1c.begin(), names1c.end(), "stonks"), names1c.end());
     }
     ASSERT_EQ(TimeSeries::getNumInstances(), 1);
+
+    // TODO test clear
 }
 
 TEST(TestTimeSeries, TestSerialization)

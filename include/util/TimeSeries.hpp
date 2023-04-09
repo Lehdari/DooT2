@@ -45,6 +45,8 @@ public:
     template <typename... T_NamesAndEntries>
     void addEntries(const T_NamesAndEntries&... namesAndEntries);
 
+    void clear();
+
     // Get pointer to a data vector of a time series. Returns nullptr in case a series with
     // name seriesName does not exist.
     template <typename T_Entry>
