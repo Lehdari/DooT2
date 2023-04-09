@@ -11,9 +11,9 @@
 #include "ml/Trainer.hpp"
 #include "ml/Model.hpp"
 #include "gui/State.hpp"
+#include "util/ExperimentName.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
-
 #include <opencv2/highgui.hpp>
 
 
@@ -182,7 +182,7 @@ void Trainer::configureExperiment(const gui::State& guiState)
     _trainingInfo.reset();
 
     // Setup experiment config
-    _experimentConfig["experiment_root"] = guiState.experimentName;
+    _experimentConfig["experiment_root"] = formatExperimentName(guiState);
     _experimentConfig["model_type"] = guiState.modelTypeName;
     _experimentConfig["model_config"] = nlohmann::json(); // TODO temp
 
