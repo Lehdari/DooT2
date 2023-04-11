@@ -15,19 +15,23 @@
 
 class ResNeXtModuleImpl : public torch::nn::Module {
 public:
-    ResNeXtModuleImpl(int nInputChannels, int nGroupChannels, int nGroups, int nOutputChannels);
+    ResNeXtModuleImpl(int nInputChannels, int nOutputChannels, int nGroups, int nGroupChannels = -1);
 
     torch::Tensor forward(torch::Tensor x);
 
 private:
-    int                                 _nInputChannels;
-    int                                 _nOutputChannels;
-    int                                 _nGroups;
+    int                         _nInputChannels;
+    int                         _nOutputChannels;
+    int                         _nGroups;
+    int                         _nGroupChannels;
 
-    std::vector<torch::nn::Sequential>  _groups;
-    torch::nn::Conv2d                   _convFinal;
-    torch::nn::BatchNorm2d              _bnFinal;
+    torch::nn::Conv2d           _conv1;
+    torch::nn::BatchNorm2d      _bn1;
+    torch::nn::Conv2d           _conv2;
+    torch::nn::BatchNorm2d      _bn2;
+    torch::nn::Conv2d           _conv3;
+    torch::nn::BatchNorm2d      _bn3;
 
-    std::vector<torch::Tensor>          _groupOutputs;
+    std::vector<torch::Tensor>  _groupOutputs;
 };
 TORCH_MODULE(ResNeXtModule);
