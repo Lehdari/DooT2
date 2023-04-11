@@ -19,8 +19,8 @@
 #include <random>
 
 
-static constexpr double     learningRate            = 1.0e-3; // TODO
-static constexpr int64_t    nTrainingIterations     = 4*64;
+static constexpr double     learningRate            = 1.0e-4; // TODO
+static constexpr int64_t    nTrainingIterations     = 6*64;
 
 
 using namespace torch;
@@ -32,12 +32,15 @@ namespace {
 
     INLINE torch::Tensor yuvLoss(const torch::Tensor& target, const torch::Tensor& pred) {
         return torch::mean(torch::abs(target-pred), {0, 2, 3}) // reduce only batch and spatial dimensions, preserve channels
-            .dot(torch::tensor({2.0f, 1.0f, 1.0f}, // higher weight on Y channel
+            .dot(torch::tensor({1.8f, 1.1f, 1.1f}, // higher weight on Y channel
             TensorOptions().device(target.device())));
     }
 
+    void imShowYUV(const std::string& windowName, cv::Mat& image);
+
     // Loss function for YUV images
-    inline torch::Tensor imageLoss(const torch::Tensor& target, const torch::Tensor& pred, float gradWeight = 2.0f)
+    using ImageLossTensors = std::tuple<Tensor, Tensor, Tensor, Tensor>;
+    inline ImageLossTensors imageLoss(const torch::Tensor& target, const torch::Tensor& pred)
     {
         using namespace torch::indexing;
 
@@ -55,10 +58,23 @@ namespace {
             pred.index({Slice(), Slice(), Slice(1, None), Slice()}) -
             pred.index({Slice(), Slice(), Slice(None, -1), Slice()});
 
-        return
-            yuvLoss(target, pred) +
-            gradWeight * yuvLoss(targetGradX, predGradX) +
-            gradWeight * yuvLoss(targetGradY, predGradY);
+        // Pixel-space laplacian
+        static float laplacianKernelData[9] = {
+            -0.5,    -1.0,   -0.5,
+            -1.0,   6.0,    -1.0,
+            -0.5,    -1.0,   -0.5
+        };
+        static torch::Tensor laplacianKernel = torch::from_blob(laplacianKernelData, {3,3})
+            .repeat({3,1,1,1}).to(target.device());
+        torch::Tensor targetLaplacian = tf::conv2d(target, laplacianKernel, tf::Conv2dFuncOptions().padding(1).groups(3));
+        torch::Tensor predLaplacian = tf::conv2d(pred, laplacianKernel, tf::Conv2dFuncOptions().padding(1).groups(3));
+
+        return {
+            yuvLoss(target, pred),
+            yuvLoss(targetGradX, predGradX),
+            yuvLoss(targetGradY, predGradY),
+            yuvLoss(targetLaplacian, predLaplacian)
+        };
     }
 
     void imShowYUV(const std::string& windowName, cv::Mat& image) {
@@ -77,7 +93,9 @@ AutoEncoderModel2::AutoEncoderModel2() :
     _optimizer          ({
         _frameEncoder->parameters(),
         _frameDecoder->parameters()},
-        torch::optim::AdamWOptions(learningRate).betas({0.9, 0.999}).weight_decay(0.001))
+        torch::optim::AdamWOptions(learningRate).betas({0.99, 0.999}).weight_decay(1.0e-7)),
+    _frameLossSmooth    (-1.0),
+    _skipLevel          (7.0) // 7.0
 {
     using namespace doot2;
 
@@ -153,13 +171,13 @@ void AutoEncoderModel2::trainImpl(SequenceStorage& storage)
         torch::Tensor batchIn1 = pixelDataIn.index({(int)t});
 
         // Forward passes
-        torch::Tensor encoding1 = _frameEncoder->forward(batchIn1); // image t encode
+        auto [encoding1, s0, s1, s2, s3, s4, s5, s6] = _frameEncoder->forward(batchIn1); // image t encode
 
         // Frame decode
-        auto batchOut = _frameDecoder->forward(encoding1);
+        auto [batchOut, levelMatchLoss] = _frameDecoder->forward(encoding1, s0, s1, s2, s3, s4, s5, s6, _skipLevel);
 
         // Frame losses
-        torch::Tensor frameLoss = imageLoss(batchIn1, batchOut);
+        auto [frameLoss, xGradLoss, yGradLoss, laplacianLoss] = imageLoss(batchIn1, batchOut);
 
         // Encoding mean/variance loss
         torch::Tensor encodingMean = torch::mean(encoding1, {0}); // mean across the batch dimension
@@ -167,15 +185,46 @@ void AutoEncoderModel2::trainImpl(SequenceStorage& storage)
         torch::Tensor encodingMeanLoss = 1.0e-6f * torch::sum(torch::square(encodingMean - encodingZeros));
         torch::Tensor encodingVarLoss = 1.0e-6f * torch::sum(torch::square(encodingVar - encodingOnes));
 
+        // Total frame loss
+        constexpr double xGradLossWeight = 4.0;
+        constexpr double yGradLossWeight = 5.0;
+        constexpr double laplacianLossWeight = 0.8;
+        torch::Tensor totalFrameLoss =
+            frameLoss
+            + xGradLossWeight * xGradLoss
+            + yGradLossWeight * yGradLoss;
+            + laplacianLossWeight * laplacianLoss;
 
         // Total loss
+        constexpr double levelMatchLossWeight = 10.0;
         torch::Tensor loss =
-            frameLoss
+            totalFrameLoss
             + encodingMeanLoss
-            + encodingVarLoss;
+            + encodingVarLoss
+            + levelMatchLossWeight * levelMatchLoss;
 
         // Backward pass
         loss.backward();
+
+        // Smooth loss
+        if (_frameLossSmooth < 0.0)
+            _frameLossSmooth = totalFrameLoss.item<double>();
+        else
+            _frameLossSmooth = _frameLossSmooth*0.99 + totalFrameLoss.item<double>()*0.01;
+
+        // Adjust skip level
+        constexpr double targetLoss = 0.25;
+        // P control
+        constexpr double skipLevelControlPFactorPositive = 0.01;
+        constexpr double skipLevelControlPFactorNegative = 0.001; // raise skipLevel slower
+        double skipLevelControlP = (targetLoss-_frameLossSmooth);
+        if (skipLevelControlP > 0.0)
+            skipLevelControlP *= skipLevelControlPFactorPositive;
+        else
+            skipLevelControlP *= skipLevelControlPFactorNegative;
+        _skipLevel -= skipLevelControlP;
+        // limit to sensible domain
+        _skipLevel = std::clamp(_skipLevel, -1.0, 7.0);
 
         // Apply gradients
         if (ti % optimizationInterval == optimizationInterval-1) {
@@ -203,13 +252,19 @@ void AutoEncoderModel2::trainImpl(SequenceStorage& storage)
 
         // Print loss
         printf(
-            "\r[%2ld/%2ld][%3ld/%3ld] loss: %9.6f frameLoss: %9.6f encMean: [%9.6f %9.6f] encVar: [%9.6f %9.6f]",
+            "\r[%2ld/%2ld][%3ld/%3ld] loss: %9.6f totalFrameLoss: %9.6f frameLoss: %9.6f xGradLoss: %9.6f yGradLoss: %9.6f laplacianLoss: %9.6f levelMatchLoss: %9.6f frameLossSmooth: %9.6f skipLevel: %9.6f",// encMean: [%9.6f %9.6f] encVar: [%9.6f %9.6f]",
             ti, nTrainingIterations, t, sequenceLength,
-            loss.item<float>(), frameLoss.item<float>(),
-            encodingMean.min().item<float>(), encodingMean.max().item<float>(),
-            encodingVar.min().item<float>(), encodingVar.max().item<float>());
+            loss.item<float>(), totalFrameLoss.item<float>(), frameLoss.item<float>(),
+            xGradLoss.item<float>() * xGradLossWeight, yGradLoss.item<float>() * yGradLossWeight,
+            laplacianLoss.item<float>() * laplacianLossWeight,
+            levelMatchLoss.item<float>() * levelMatchLossWeight,
+            _frameLossSmooth, _skipLevel
+//            encodingMean.min().item<float>(), encodingMean.max().item<float>(),
+//            encodingVar.min().item<float>(), encodingVar.max().item<float>()
+        );
         fflush(stdout);
     }
+    printf("\n");
 
     // Save models
     {

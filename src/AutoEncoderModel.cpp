@@ -205,8 +205,8 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
             tf::InterpolateFuncOptions().size(std::vector<long>{120, 160}).mode(kArea));
 
         // Forward passes
-        torch::Tensor encoding1 = _frameEncoder->forward(batchIn1); // image t encode
-        torch::Tensor encoding2 = _frameEncoder->forward(batchIn2); // image t+1 encode
+        auto [encoding1, s0a, s1a, s2a, s3a, s4a, s5a, s6a] = _frameEncoder->forward(batchIn1); // image t encode
+        auto [encoding2, s0b, s1b, s2b, s3b, s4b, s5b, s6b] = _frameEncoder->forward(batchIn2); // image t+1 encode
 #if FLOW
         // Flow from frame t to t+1
         torch::Tensor flowForward = _flowDecoder->forward(encoding2-encoding1);
@@ -232,7 +232,7 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
 
 #if DOUBLE_EDEC
         // Double encode-decode
-        torch::Tensor encoding1double = _frameEncoder->forward(batchOut);
+        auto [encoding1double, s0c, s1c, s2c, s3c, s4c, s5c, s6c] = _frameEncoder->forward(batchOut);
         auto tupleOut2 = _frameDecoder->forward(encoding1double);
         auto& batchOut2 = std::get<0>(tupleOut2);
         auto& batchOut2Scaled1 = std::get<1>(tupleOut2);

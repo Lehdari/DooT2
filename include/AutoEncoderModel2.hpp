@@ -36,6 +36,8 @@ private:
     FrameEncoder        _frameEncoder;
     FrameDecoder2       _frameDecoder;
     torch::optim::AdamW _optimizer;
+    double              _frameLossSmooth;
+    double              _skipLevel;
 
     void trainImpl(SequenceStorage& storage) override;
 };
