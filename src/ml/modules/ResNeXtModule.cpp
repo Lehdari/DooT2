@@ -15,42 +15,32 @@ using namespace ml;
 using namespace torch;
 
 
-ResNeXtModuleImpl::ResNeXtModuleImpl(int nInputChannels, int nGroupChannels, int nGroups, int nOutputChannels) :
+ResNeXtModuleImpl::ResNeXtModuleImpl(int nInputChannels, int nOutputChannels, int nGroups, int nGroupChannels) :
     _nInputChannels     (nInputChannels),
     _nOutputChannels    (nOutputChannels),
-    _nGroups    (nGroups),
-    _convFinal  (nn::Conv2dOptions(nGroupChannels*_nGroups, nOutputChannels, {1,1}).bias(false)),
-    _bnFinal    (nn::BatchNorm2dOptions(nOutputChannels))
+    _nGroups            (nGroups),
+    _nGroupChannels     (nGroupChannels < 0 ? _nOutputChannels : nGroupChannels*_nGroups),
+    _conv1              (nn::Conv2dOptions(_nInputChannels, _nGroupChannels, {1,1}).bias(false)),
+    _bn1                (nn::BatchNorm2dOptions(_nGroupChannels)),
+    _conv2              (nn::Conv2dOptions(_nGroupChannels, _nGroupChannels, {3,3})
+                         .bias(false).groups(_nGroups).padding(1)),
+    _bn2                (nn::BatchNorm2dOptions(_nGroupChannels)),
+    _conv3              (nn::Conv2dOptions(_nGroupChannels, _nOutputChannels, {1,1}).bias(false)),
+    _bn3                (nn::BatchNorm2dOptions(_nOutputChannels))
 {
-    // Add 1x1, 3x3 conv layers and batch norms for each group
-    _groups.reserve(_nGroups);
-    for (int i=0; i<_nGroups; ++i) {
-        _groups.emplace_back(
-            nn::Conv2d(nn::Conv2dOptions(nInputChannels, nGroupChannels, {1,1}).bias(false)),
-            nn::BatchNorm2d(nn::BatchNorm2dOptions(nGroupChannels)),
-            nn::LeakyReLU(nn::LeakyReLUOptions().negative_slope(0.01)),
-            nn::Conv2d(nn::Conv2dOptions(nGroupChannels, nGroupChannels, {3,3}).bias(false).padding(1)),
-            nn::BatchNorm2d(nn::BatchNorm2dOptions(nGroupChannels)),
-            nn::LeakyReLU(nn::LeakyReLUOptions().negative_slope(0.01))
-        );
-
-        register_module("group" + std::to_string(i), _groups.back());
-    }
-
-    register_module("convFinal", _convFinal);
-    register_module("bnFinal", _bnFinal);
-
-    // Allocate group outputs
-    _groupOutputs.resize(_nGroups);
+    register_module("conv1", _conv1);
+    register_module("bn1", _bn1);
+    register_module("conv2", _conv2);
+    register_module("bn2", _bn2);
+    register_module("conv3", _conv3);
+    register_module("bn3", _bn3);
 }
 
 torch::Tensor ResNeXtModuleImpl::forward(torch::Tensor x)
 {
     using namespace torch::indexing;
 
-    for (int i=0; i<_nGroups; ++i) {
-        _groupOutputs[i] = _groups[i]->forward(x);
-    }
+    constexpr double leakyReluNegativeSlope = 0.01;
 
     torch::Tensor skip = x;
     if (_nOutputChannels < _nInputChannels) {
@@ -64,5 +54,9 @@ torch::Tensor ResNeXtModuleImpl::forward(torch::Tensor x)
         skip = skip.index({Slice(), Slice(None, _nOutputChannels), Slice(), Slice()});
     }
 
-    return skip + torch::leaky_relu(_bnFinal(_convFinal(cat(_groupOutputs, 1))), 0.01);
+    x = torch::tanh(_bn1(_conv1(x)));
+    x = torch::tanh(_bn2(_conv2(x)));
+    x = torch::tanh(_bn3(_conv3(x) + skip));
+
+    return x;
 }
