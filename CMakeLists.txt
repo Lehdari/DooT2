@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.26)
 project(DooT2)
 
+# Custom CMake modules
+include(cmake/GitVersion.cmake)
+
+# Fetch the software version hash from git
+git_version()
 
 # Add external dependencies
 add_subdirectory(ext)
@@ -67,6 +72,7 @@ target_link_libraries(doot2
 )
 target_compile_definitions(doot2
     PUBLIC  ASSETS_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/assets\"
+    PUBLIC  GIT_VERSION=\"${GIT_VERSION}\"
 )
 set_target_properties(doot2 PROPERTIES
     CXX_STANDARD        20

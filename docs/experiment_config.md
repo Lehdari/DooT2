@@ -13,3 +13,5 @@ Entries in the JSON without which the configuration is considered to be invalid.
 - `model_config`: JSON subobject containing all the necessary information for constructing the model subject to
   training, including torch model paths, hyperparameters etc. It is the only field inside `experimentConfig` that
   is allowed to be modified by `Model` (and derivative) instances.
+- `software_version`: Git version hash of the software that was used to run the experiment. For example:
+  `6da8e26-dirty`

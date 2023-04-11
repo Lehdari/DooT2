@@ -29,5 +29,8 @@ std::string formatExperimentName(const gui::State& guiState)
     }();
     experimentName = std::regex_replace(experimentName, std::regex("\\{time}"), timestamp);
 
+    // Replace {version} with git version hash
+    experimentName = std::regex_replace(experimentName, std::regex("\\{version}"), GIT_VERSION);
+
     return experimentName;
 }

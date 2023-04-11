@@ -185,6 +185,7 @@ void Trainer::configureExperiment(const gui::State& guiState)
     _experimentConfig["experiment_root"] = formatExperimentName(guiState);
     _experimentConfig["model_type"] = guiState.modelTypeName;
     _experimentConfig["model_config"] = nlohmann::json(); // TODO temp
+    _experimentConfig["software_version"] = GIT_VERSION;
 
     // Setup experiment files
     createExperimentDirectories();
