@@ -12,4 +12,5 @@
 
 #include "ml/models/AutoEncoderModel.hpp"
 #include "ml/models/EncoderModel.hpp"
+#include "ml/models/MultiLevelAutoEncoderModel.hpp"
 #include "ml/models/RandomWalkerModel.hpp"

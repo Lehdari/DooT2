@@ -29,10 +29,12 @@ set(DOOT2_ML_SOURCES
     src/ml/Trainer.cpp
     src/ml/models/AutoEncoderModel.cpp
     src/ml/models/EncoderModel.cpp
+    src/ml/models/MultiLevelAutoEncoderModel.cpp
     src/ml/models/RandomWalkerModel.cpp
     src/ml/modules/FlowDecoder.cpp
     src/ml/modules/FrameDecoder.cpp
     src/ml/modules/FrameEncoder.cpp
+    src/ml/modules/MultiLevelFrameDecoder.cpp
     src/ml/modules/ResNeXtModule.cpp
 )
 set(DOOT2_UTIL_SOURCES

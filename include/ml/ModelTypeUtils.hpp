@@ -19,9 +19,10 @@
 
 // List all available model types in this macro
 // Remember to add the include in Models.hpp too!
-#define ML_MODEL_TYPES               \
-    ML_MODEL_TYPE(AutoEncoderModel)  \
-    ML_MODEL_TYPE(EncoderModel)      \
+#define ML_MODEL_TYPES                          \
+    ML_MODEL_TYPE(AutoEncoderModel)             \
+    ML_MODEL_TYPE(EncoderModel)                 \
+    ML_MODEL_TYPE(MultiLevelAutoEncoderModel)   \
     ML_MODEL_TYPE(RandomWalkerModel)
 
 
