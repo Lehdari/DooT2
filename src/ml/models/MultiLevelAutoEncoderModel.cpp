@@ -201,6 +201,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     _frameEncoder->zero_grad();
     _frameDecoder->zero_grad();
 
+    double lossAcc = 0.0; // accumulate loss over the optimization interval to compute average
     const auto sequenceLength = storage.length();
     for (int64_t ti=0; ti<nTrainingIterations; ++ti){
         // frame (time point) to use this iteration
@@ -252,14 +253,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
             frameLossWeight3 * frameLoss3 +
             frameLossWeight4 * frameLoss4 +
             frameLossWeight5 * frameLoss5;
-
-        // Loss level adjustment
-        constexpr double targetLoss = 0.1;
-        constexpr double controlP = 0.01;
-        // use hyperbolic error metric (asymptotically larger adjustments when loss approaches 0)
-        double error = 1.0 - (targetLoss / (loss.item<double>() + 1.0e-8));
-        _lossLevel -= error*controlP; // P control should suffice
-        _lossLevel = std::clamp(_lossLevel, 0.0, 5.0);
+        lossAcc += loss.item<double>();
 
         // Backward pass
         loss.backward();
@@ -307,6 +301,15 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
             _trainingInfo->images["prediction1"].write()->copyFrom(out1CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
             _trainingInfo->images["prediction0"].write()->copyFrom(out0CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
 
+            // Loss level adjustment
+            lossAcc /= (double)_optimizationInterval;
+            constexpr double targetLoss = 0.1;
+            constexpr double controlP = 0.01;
+            // use hyperbolic error metric (asymptotically larger adjustments when loss approaches 0)
+            double error = 1.0 - (targetLoss / (lossAcc + 1.0e-8));
+            _lossLevel -= error*controlP; // P control should suffice
+            _lossLevel = std::clamp(_lossLevel, 0.0, 5.0);
+
             // Write the time series
             {
                 auto timeSeriesWriteHandle = _trainingInfo->timeSeries.write();
@@ -314,10 +317,12 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
                 timeSeriesWriteHandle->addEntries(
                     "time", (double)duration_cast<milliseconds>(currentTime-_trainingStartTime).count() / 1000.0,
-                    "loss", loss.item<double>(),
+                    "loss", lossAcc,
                     "lossLevel", _lossLevel
                 );
             }
+
+            lossAcc = 0.0;
         }
 
         if (_abortTraining)
