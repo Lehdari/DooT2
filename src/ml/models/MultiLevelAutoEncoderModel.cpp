@@ -18,7 +18,7 @@
 #include <random>
 
 
-static constexpr double     learningRate            = 1.0e-3; // TODO
+static constexpr double     learningRate            = 1.0e-2; // TODO
 static constexpr int64_t    nTrainingIterations     = 3*128;
 
 
@@ -33,7 +33,7 @@ namespace {
 
     INLINE torch::Tensor yuvLoss(const torch::Tensor& target, const torch::Tensor& pred) {
         return torch::mean(torch::abs(target-pred), {0, 2, 3}) // reduce only batch and spatial dimensions, preserve channels
-            .dot(torch::tensor({2.0f, 1.0f, 1.0f}, // higher weight on Y channel
+            .dot(torch::tensor({1.4f, 1.3f, 1.3f}, // higher weight on Y channel
                 TensorOptions().device(target.device())));
     }
 
@@ -70,7 +70,7 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel(nlohmann::json* experimen
     _optimizer              ({
         _frameEncoder->parameters(),
         _frameDecoder->parameters()},
-        torch::optim::AdamWOptions(learningRate).betas({0.9, 0.999}).weight_decay(0.001)),
+        torch::optim::AdamWOptions(learningRate).betas({0.9, 0.999}).weight_decay(0.0001)),
     _trainingStartTime      (high_resolution_clock::now()),
     _lossLevel              (0.0)
 {
