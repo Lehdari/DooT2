@@ -11,7 +11,7 @@
 #pragma once
 
 #include "ml/Model.hpp"
-#include "ml/modules/FrameEncoder.hpp"
+#include "ml/modules/MultiLevelFrameEncoder.hpp"
 #include "ml/modules/MultiLevelFrameDecoder.hpp"
 
 #include <chrono>
@@ -45,7 +45,7 @@ private:
     std::filesystem::path   _frameDecoderFilename;
     int64_t                 _optimizationInterval; // for this many steps gradients will be accumulated before weight update
 
-    FrameEncoder            _frameEncoder;
+    MultiLevelFrameEncoder  _frameEncoder;
     MultiLevelFrameDecoder  _frameDecoder;
     torch::optim::AdamW     _optimizer;
     TimePoint               _trainingStartTime;

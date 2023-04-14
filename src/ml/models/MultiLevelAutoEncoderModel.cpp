@@ -223,7 +223,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
             tf::InterpolateFuncOptions().size(std::vector<long>{15, 20}).mode(kArea));
 
         // Frame encode
-        torch::Tensor enc = _frameEncoder->forward(in5);
+        torch::Tensor enc = _frameEncoder->forward(in5, in4, in3, in2, in1, in0, _lossLevel);
 
         // Frame decode
         auto [out0, out1, out2, out3, out4, out5] = _frameDecoder->forward(enc);

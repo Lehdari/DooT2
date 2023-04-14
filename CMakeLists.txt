@@ -35,6 +35,7 @@ set(DOOT2_ML_SOURCES
     src/ml/modules/FrameDecoder.cpp
     src/ml/modules/FrameEncoder.cpp
     src/ml/modules/MultiLevelFrameDecoder.cpp
+    src/ml/modules/MultiLevelFrameEncoder.cpp
     src/ml/modules/ResNeXtModule.cpp
 )
 set(DOOT2_UTIL_SOURCES
