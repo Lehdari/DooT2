@@ -30,7 +30,7 @@ MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
     _resNext2b          (1024, 1024, 8, 256),
     _convTranspose2     (nn::ConvTranspose2dOptions(1024, 512, {5, 6}).stride({3, 4}).bias(false)),
     _bn2                (nn::BatchNorm2dOptions(512)),
-    _conv2              (nn::Conv2dOptions(32, 16, {1, 1}).bias(false)),
+    _conv2              (nn::Conv2dOptions(512, 16, {1, 1}).bias(false)),
     _bn2b               (nn::BatchNorm2dOptions(16)),
     _conv2_Y            (nn::Conv2dOptions(16, 1, {1, 1})),
     _conv2_UV           (nn::Conv2dOptions(16, 2, {1, 1})),
@@ -38,7 +38,7 @@ MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
     _resNext3b          (512, 512, 8, 128),
     _convTranspose3     (nn::ConvTranspose2dOptions(512, 256, {4, 4}).stride({2, 2}).bias(false)),
     _bn3                (nn::BatchNorm2dOptions(256)),
-    _conv3              (nn::Conv2dOptions(32, 16, {1, 1}).bias(false)),
+    _conv3              (nn::Conv2dOptions(256, 16, {1, 1}).bias(false)),
     _bn3b               (nn::BatchNorm2dOptions(16)),
     _conv3_Y            (nn::Conv2dOptions(16, 1, {1, 1})),
     _conv3_UV           (nn::Conv2dOptions(16, 2, {1, 1})),
@@ -46,7 +46,7 @@ MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
     _resNext4b          (256, 256, 8, 64),
     _convTranspose4     (nn::ConvTranspose2dOptions(256, 128, {4, 4}).stride({2, 2}).bias(false)),
     _bn4                (nn::BatchNorm2dOptions(128)),
-    _conv4              (nn::Conv2dOptions(32, 16, {1, 1}).bias(false)),
+    _conv4              (nn::Conv2dOptions(128, 16, {1, 1}).bias(false)),
     _bn4b               (nn::BatchNorm2dOptions(16)),
     _conv4_Y            (nn::Conv2dOptions(16, 1, {1, 1})),
     _conv4_UV           (nn::Conv2dOptions(16, 2, {1, 1})),
@@ -54,7 +54,7 @@ MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
     _resNext5b          (128, 128, 8, 32),
     _convTranspose5     (nn::ConvTranspose2dOptions(128, 64, {4, 4}).stride({2, 2}).bias(false)),
     _bn5                (nn::BatchNorm2dOptions(64)),
-    _conv5              (nn::Conv2dOptions(32, 16, {1, 1}).bias(false)),
+    _conv5              (nn::Conv2dOptions(64, 16, {1, 1}).bias(false)),
     _bn5b               (nn::BatchNorm2dOptions(16)),
     _conv5_Y            (nn::Conv2dOptions(16, 1, {1, 1})),
     _conv5_UV           (nn::Conv2dOptions(16, 2, {1, 1})),
@@ -164,6 +164,43 @@ MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
     w = _conv7_UV->named_parameters(false).find("weight");
     if (w == nullptr) throw std::runtime_error("Unable to find layer weights");
     torch::nn::init::normal_(*w, 0.0, 0.001);
+
+    w = _conv2_Y->named_parameters(false).find("bias");
+    if (w == nullptr) throw std::runtime_error("Unable to find layer biases");
+    torch::nn::init::zeros_(*w);
+    w = _conv2_UV->named_parameters(false).find("bias");
+    if (w == nullptr) throw std::runtime_error("Unable to find layer biases");
+    torch::nn::init::zeros_(*w);
+    w = _conv3_Y->named_parameters(false).find("bias");
+    if (w == nullptr) throw std::runtime_error("Unable to find layer biases");
+    torch::nn::init::zeros_(*w);
+    w = _conv3_UV->named_parameters(false).find("bias");
+    if (w == nullptr) throw std::runtime_error("Unable to find layer biases");
+    torch::nn::init::zeros_(*w);
+    w = _conv4_Y->named_parameters(false).find("bias");
+    if (w == nullptr) throw std::runtime_error("Unable to find layer biases");
+    torch::nn::init::zeros_(*w);
+    w = _conv4_UV->named_parameters(false).find("bias");
+    if (w == nullptr) throw std::runtime_error("Unable to find layer biases");
+    torch::nn::init::zeros_(*w);
+    w = _conv5_Y->named_parameters(false).find("bias");
+    if (w == nullptr) throw std::runtime_error("Unable to find layer biases");
+    torch::nn::init::zeros_(*w);
+    w = _conv5_UV->named_parameters(false).find("bias");
+    if (w == nullptr) throw std::runtime_error("Unable to find layer biases");
+    torch::nn::init::zeros_(*w);
+    w = _conv6_Y->named_parameters(false).find("bias");
+    if (w == nullptr) throw std::runtime_error("Unable to find layer biases");
+    torch::nn::init::zeros_(*w);
+    w = _conv6_UV->named_parameters(false).find("bias");
+    if (w == nullptr) throw std::runtime_error("Unable to find layer biases");
+    torch::nn::init::zeros_(*w);
+    w = _conv7_Y->named_parameters(false).find("bias");
+    if (w == nullptr) throw std::runtime_error("Unable to find layer biases");
+    torch::nn::init::zeros_(*w);
+    w = _conv7_UV->named_parameters(false).find("bias");
+    if (w == nullptr) throw std::runtime_error("Unable to find layer biases");
+    torch::nn::init::zeros_(*w);
 }
 
 MultiLevelFrameDecoderImpl::ReturnType MultiLevelFrameDecoderImpl::forward(torch::Tensor x)
@@ -178,56 +215,61 @@ MultiLevelFrameDecoderImpl::ReturnType MultiLevelFrameDecoderImpl::forward(torch
     // Decoder
     x = torch::reshape(x, {batchSize, 128, 4, 4});
     x = _resNext1a(x);
+    x = torch::leaky_relu(_bn1(_convTranspose1(_resNext1b(x))), leakyReluNegativeSlope); // 5x5x1024
 
-    x = torch::tanh(_bn1(_convTranspose1(_resNext1b(x)))); // 5x5x1024
-
-    x = torch::tanh(_bn2(_convTranspose2(_resNext2b(_resNext2a(x)))));
+    x = torch::leaky_relu(_bn2(_convTranspose2(_resNext2b(_resNext2a(x)))), leakyReluNegativeSlope);
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 20x15x512
+    x = _resNext3b(_resNext3a(x)); // TODO move
 
-    torch::Tensor x0 = torch::tanh(_bn2b(_conv2(x.index({Slice(), Slice(None, 32), Slice(), Slice()}))));
+    torch::Tensor x0 = torch::leaky_relu(_bn2b(_conv2(x)), leakyReluNegativeSlope);
     torch::Tensor x0_Y = 0.5f + 0.51f * torch::tanh(_conv2_Y(x0));
     torch::Tensor x0_UV = 0.51f * torch::tanh(_conv2_UV(x0));
     x0 = torch::cat({x0_Y, x0_UV}, 1);
 
-    x = torch::tanh(_bn3(_convTranspose3(_resNext3b(_resNext3a(x)))));
+    x = torch::leaky_relu(_bn3(_convTranspose3(x)), leakyReluNegativeSlope);
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 40x30x256
 
-    torch::Tensor x1 = torch::tanh(_bn3b(_conv3(x.index({Slice(), Slice(None, 32), Slice(), Slice()}))));
+    torch::Tensor x1 = torch::leaky_relu(_bn3b(_conv3(x)), leakyReluNegativeSlope);
     torch::Tensor x1_Y = 0.5f + 0.51f * torch::tanh(_conv3_Y(x1));
     torch::Tensor x1_UV = 0.51f * torch::tanh(_conv3_UV(x1));
     x1 = torch::cat({x1_Y, x1_UV}, 1);
-
-    x = torch::tanh(_bn4(_convTranspose4(_resNext4b(_resNext4a(x)))));
+#if 0
+    x = torch::leaky_relu(_bn4(_convTranspose4(_resNext4b(_resNext4a(x)))), leakyReluNegativeSlope);
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 80x60x128
 
-    torch::Tensor x2 = torch::tanh(_bn4b(_conv4(x.index({Slice(), Slice(None, 32), Slice(), Slice()}))));
+    torch::Tensor x2 = torch::leaky_relu(_bn4b(_conv4(x)), leakyReluNegativeSlope);
     torch::Tensor x2_Y = 0.5f + 0.51f * torch::tanh(_conv4_Y(x2));
     torch::Tensor x2_UV = 0.51f * torch::tanh(_conv4_UV(x2));
     x2 = torch::cat({x2_Y, x2_UV}, 1);
 
-    x = torch::tanh(_bn5(_convTranspose5(_resNext5b(_resNext5a(x)))));
+    x = torch::leaky_relu(_bn5(_convTranspose5(_resNext5b(_resNext5a(x)))), leakyReluNegativeSlope);
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 160x120x64
 
-    torch::Tensor x3 = torch::tanh(_bn5b(_conv5(x.index({Slice(), Slice(None, 32), Slice(), Slice()}))));
+    torch::Tensor x3 = torch::leaky_relu(_bn5b(_conv5(x)), leakyReluNegativeSlope);
     torch::Tensor x3_Y = 0.5f + 0.51f * torch::tanh(_conv5_Y(x3));
     torch::Tensor x3_UV = 0.51f * torch::tanh(_conv5_UV(x3));
     x3 = torch::cat({x3_Y, x3_UV}, 1);
 
-    x = torch::tanh(_bn6(_convTranspose6(_resNext6b(_resNext6a(x)))));
+    x = torch::leaky_relu(_bn6(_convTranspose6(_resNext6b(_resNext6a(x)))), leakyReluNegativeSlope);
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 320x240x32
 
-    torch::Tensor x4 = torch::tanh(_bn6b(_conv6(x)));
+    torch::Tensor x4 = torch::leaky_relu(_bn6b(_conv6(x)), leakyReluNegativeSlope);
     torch::Tensor x4_Y = 0.5f + 0.51f * torch::tanh(_conv6_Y(x4));
     torch::Tensor x4_UV = 0.51f * torch::tanh(_conv6_UV(x4));
     x4 = torch::cat({x4_Y, x4_UV}, 1);
 
-    x = torch::tanh(_bn7(_convTranspose7(_resNext7b(_resNext7a(x)))));
+    x = torch::leaky_relu(_bn7(_convTranspose7(_resNext7b(_resNext7a(x)))), leakyReluNegativeSlope);
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 640x480x32
 
-    torch::Tensor x5 = torch::tanh(_bn7b(_conv7(x)));
+    torch::Tensor x5 = torch::leaky_relu(_bn7b(_conv7(x)), leakyReluNegativeSlope);
     torch::Tensor x5_Y = 0.5f + 0.51f * torch::tanh(_conv7_Y(x5));
     torch::Tensor x5_UV = 0.51f * torch::tanh(_conv7_UV(x5));
     x5 = torch::cat({x5_Y, x5_UV}, 1);
-
+#else
+    torch::Tensor x2 = torch::zeros({x.sizes()[0], 3, 60, 80});
+    torch::Tensor x3 = torch::zeros({x.sizes()[0], 3, 120, 160});
+    torch::Tensor x4 = torch::zeros({x.sizes()[0], 3, 240, 320});
+    torch::Tensor x5 = torch::zeros({x.sizes()[0], 3, 480, 640});
+#endif
     return {x0, x1, x2, x3, x4, x5};
 }

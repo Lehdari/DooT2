@@ -18,8 +18,8 @@
 #include <random>
 
 
-static constexpr double     learningRate            = 1.0e-2; // TODO
-static constexpr int64_t    nTrainingIterations     = 3*128;
+static constexpr double     learningRate            = 1.0e-3; // TODO
+static constexpr int64_t    nTrainingIterations     = 24*128;
 
 
 using namespace ml;
@@ -33,7 +33,7 @@ namespace {
 
     INLINE torch::Tensor yuvLoss(const torch::Tensor& target, const torch::Tensor& pred) {
         return torch::mean(torch::abs(target-pred), {0, 2, 3}) // reduce only batch and spatial dimensions, preserve channels
-            .dot(torch::tensor({1.4f, 1.3f, 1.3f}, // higher weight on Y channel
+            .dot(torch::tensor({1.8f, 1.1f, 1.1f}, // higher weight on Y channel
                 TensorOptions().device(target.device())));
     }
 
@@ -212,12 +212,19 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
         // ID of the frame (in sequence) to be used in the training batch
         torch::Tensor in5 = pixelDataIn.index({(int)t});
+#if 0
         torch::Tensor in4 = tf::interpolate(in5,
             tf::InterpolateFuncOptions().size(std::vector<long>{240, 320}).mode(kArea));
         torch::Tensor in3 = tf::interpolate(in5,
             tf::InterpolateFuncOptions().size(std::vector<long>{120, 160}).mode(kArea));
         torch::Tensor in2 = tf::interpolate(in5,
             tf::InterpolateFuncOptions().size(std::vector<long>{60, 80}).mode(kArea));
+#else
+        torch::Tensor in4 = torch::zeros({in5.sizes()[0], 3, 240, 320}, TensorOptions().device(device));
+        torch::Tensor in3 = torch::zeros({in5.sizes()[0], 3, 120, 160}, TensorOptions().device(device));
+        torch::Tensor in2 = torch::zeros({in5.sizes()[0], 3, 60, 80}, TensorOptions().device(device));
+#endif
+
         torch::Tensor in1 = tf::interpolate(in5,
             tf::InterpolateFuncOptions().size(std::vector<long>{30, 40}).mode(kArea));
         torch::Tensor in0 = tf::interpolate(in5,
@@ -232,10 +239,12 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         // Frame losses
         torch::Tensor frameLoss0 = imageLoss(in0, out0);
         torch::Tensor frameLoss1 = imageLoss(in1, out1);
+#if 0
         torch::Tensor frameLoss2 = imageLoss(in2, out2);
         torch::Tensor frameLoss3 = imageLoss(in3, out3);
         torch::Tensor frameLoss4 = imageLoss(in4, out4);
         torch::Tensor frameLoss5 = imageLoss(in5, out5);
+#endif
 
         // Frame loss weights
         float frameLossWeight0 = (float)std::clamp(1.0-_lossLevel, 0.0, 1.0);
@@ -248,11 +257,13 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         // Total loss
         torch::Tensor loss =
             frameLossWeight0 * frameLoss0 +
-            frameLossWeight1 * frameLoss1 +
+            frameLossWeight1 * frameLoss1;
+#if 0
             frameLossWeight2 * frameLoss2 +
             frameLossWeight3 * frameLoss3 +
             frameLossWeight4 * frameLoss4 +
             frameLossWeight5 * frameLoss5;
+#endif
         lossAcc += loss.item<double>();
 
         // Backward pass
@@ -303,12 +314,12 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
             // Loss level adjustment
             lossAcc /= (double)_optimizationInterval;
-            constexpr double targetLoss = 0.1;
+            constexpr double targetLoss = 0.15;
             constexpr double controlP = 0.01;
             // use hyperbolic error metric (asymptotically larger adjustments when loss approaches 0)
             double error = 1.0 - (targetLoss / (lossAcc + 1.0e-8));
             _lossLevel -= error*controlP; // P control should suffice
-            _lossLevel = std::clamp(_lossLevel, 0.0, 5.0);
+            _lossLevel = std::clamp(_lossLevel, 0.0, 1.0 /*TODO 5.0*/);
 
             // Write the time series
             {

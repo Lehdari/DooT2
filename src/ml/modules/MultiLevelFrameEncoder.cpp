@@ -22,20 +22,20 @@ MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl() :
     _bn1b           (nn::BatchNorm2dOptions(16)),
     _conv2          (nn::Conv2dOptions(16, 32, {4, 4}).stride({2, 2}).bias(false).padding(1)),
     _bn2            (nn::BatchNorm2dOptions(32)),
-    _conv2b         (nn::Conv2dOptions(3, 16, {3, 3}).bias(false).padding(1)),
-    _bn2b           (nn::BatchNorm2dOptions(16)),
+    _conv2b         (nn::Conv2dOptions(3, 32, {3, 3}).bias(false).padding(1)),
+    _bn2b           (nn::BatchNorm2dOptions(32)),
     _conv3          (nn::Conv2dOptions(32, 64, {4, 4}).stride({2, 2}).bias(false).padding(1)),
     _bn3            (nn::BatchNorm2dOptions(64)),
-    _conv3b         (nn::Conv2dOptions(3, 16, {3, 3}).bias(false).padding(1)),
-    _bn3b           (nn::BatchNorm2dOptions(16)),
+    _conv3b         (nn::Conv2dOptions(3, 64, {3, 3}).bias(false).padding(1)),
+    _bn3b           (nn::BatchNorm2dOptions(64)),
     _conv4          (nn::Conv2dOptions(64, 128, {4, 4}).stride({2, 2}).bias(false).padding(1)),
     _bn4            (nn::BatchNorm2dOptions(128)),
-    _conv4b         (nn::Conv2dOptions(3, 16, {3, 3}).bias(false).padding(1)),
-    _bn4b           (nn::BatchNorm2dOptions(16)),
+    _conv4b         (nn::Conv2dOptions(3, 128, {3, 3}).bias(false).padding(1)),
+    _bn4b           (nn::BatchNorm2dOptions(128)),
     _conv5          (nn::Conv2dOptions(128, 256, {4, 4}).stride({2, 2}).bias(false).padding(1)),
     _bn5            (nn::BatchNorm2dOptions(256)),
-    _conv5b         (nn::Conv2dOptions(3, 16, {3, 3}).bias(false).padding(1)),
-    _bn5b           (nn::BatchNorm2dOptions(16)),
+    _conv5b         (nn::Conv2dOptions(3, 256, {3, 3}).bias(false).padding(1)),
+    _bn5b           (nn::BatchNorm2dOptions(256)),
     _conv6          (nn::Conv2dOptions(256, 512, {5, 6}).stride({3, 4}).bias(false).padding(1)),
     _bn6            (nn::BatchNorm2dOptions(512)),
     _conv7          (nn::Conv2dOptions(512, 512, {2, 2}).bias(false)),
@@ -83,43 +83,36 @@ torch::Tensor MultiLevelFrameEncoderImpl::forward(
     constexpr double leakyReluNegativeSlope = 0.01;
 
     // Encoder
+#if 0
     torch::Tensor x = torch::leaky_relu(_bn1(_conv1(x5)), leakyReluNegativeSlope); // 320x240x16
 
     x4 = torch::leaky_relu(_bn1b(_conv1b(x4)), leakyReluNegativeSlope);
-    x4 = torch::cat({x4, torch::zeros({x4.sizes()[0], x.sizes()[1]-x4.sizes()[1], x4.sizes()[2], x4.sizes()[3]},
-        TensorOptions().device(x.device()))}, 1);
     float w4 = (float)std::clamp(5.0-lossLevel, 0.0, 1.0);
     x = w4*x4 + (1.0f-w4)*x;
 
     x = torch::leaky_relu(_bn2(_conv2(x)), leakyReluNegativeSlope); // 160x120x32
 
     x3 = torch::leaky_relu(_bn2b(_conv2b(x3)), leakyReluNegativeSlope);
-    x3 = torch::cat({x3, torch::zeros({x3.sizes()[0], x.sizes()[1]-x3.sizes()[1], x3.sizes()[2], x3.sizes()[3]},
-        TensorOptions().device(x.device()))}, 1);
     float w3 = (float)std::clamp(4.0-lossLevel, 0.0, 1.0);
     x = w3*x3 + (1.0f-w3)*x;
 
     x = torch::leaky_relu(_bn3(_conv3(x)), leakyReluNegativeSlope); // 80x60x64
 
     x2 = torch::leaky_relu(_bn3b(_conv3b(x2)), leakyReluNegativeSlope);
-    x2 = torch::cat({x2, torch::zeros({x2.sizes()[0], x.sizes()[1]-x2.sizes()[1], x2.sizes()[2], x2.sizes()[3]},
-        TensorOptions().device(x.device()))}, 1);
     float w2 = (float)std::clamp(3.0-lossLevel, 0.0, 1.0);
     x = w2*x2 + (1.0f-w2)*x;
 
     x = torch::leaky_relu(_bn4(_conv4(x)), leakyReluNegativeSlope); // 40x30x128
 
     x1 = torch::leaky_relu(_bn4b(_conv4b(x1)), leakyReluNegativeSlope);
-    x1 = torch::cat({x1, torch::zeros({x1.sizes()[0], x.sizes()[1]-x1.sizes()[1], x1.sizes()[2], x1.sizes()[3]},
-        TensorOptions().device(x.device()))}, 1);
     float w1 = (float)std::clamp(2.0-lossLevel, 0.0, 1.0);
     x = w1*x1 + (1.0f-w1)*x;
-
+#else
+    torch::Tensor x = torch::leaky_relu(_bn4b(_conv4b(x1)), leakyReluNegativeSlope);
+#endif
     x = torch::leaky_relu(_bn5(_conv5(x)), leakyReluNegativeSlope); // 20x15x256
 
     x0 = torch::leaky_relu(_bn5b(_conv5b(x0)), leakyReluNegativeSlope);
-    x0 = torch::cat({x0, torch::zeros({x0.sizes()[0], x.sizes()[1]-x0.sizes()[1], x0.sizes()[2], x0.sizes()[3]},
-            TensorOptions().device(x.device()))}, 1);
     float w0 = (float)std::clamp(1.0-lossLevel, 0.0, 1.0);
     x = w0*x0 + (1.0f-w0)*x;
 
