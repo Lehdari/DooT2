@@ -233,7 +233,7 @@ MultiLevelFrameDecoderImpl::ReturnType MultiLevelFrameDecoderImpl::forward(torch
     torch::Tensor x1_Y = 0.5f + 0.51f * torch::tanh(_conv3_Y(x1));
     torch::Tensor x1_UV = 0.51f * torch::tanh(_conv3_UV(x1));
     x1 = torch::cat({x1_Y, x1_UV}, 1);
-#if 0
+
     x = torch::leaky_relu(_bn4(_convTranspose4(_resNext4b(_resNext4a(x)))), leakyReluNegativeSlope);
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 80x60x128
 
@@ -241,7 +241,7 @@ MultiLevelFrameDecoderImpl::ReturnType MultiLevelFrameDecoderImpl::forward(torch
     torch::Tensor x2_Y = 0.5f + 0.51f * torch::tanh(_conv4_Y(x2));
     torch::Tensor x2_UV = 0.51f * torch::tanh(_conv4_UV(x2));
     x2 = torch::cat({x2_Y, x2_UV}, 1);
-
+#if 0
     x = torch::leaky_relu(_bn5(_convTranspose5(_resNext5b(_resNext5a(x)))), leakyReluNegativeSlope);
     x = x.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)}); // 160x120x64
 
@@ -266,7 +266,6 @@ MultiLevelFrameDecoderImpl::ReturnType MultiLevelFrameDecoderImpl::forward(torch
     torch::Tensor x5_UV = 0.51f * torch::tanh(_conv7_UV(x5));
     x5 = torch::cat({x5_Y, x5_UV}, 1);
 #else
-    torch::Tensor x2 = torch::zeros({x.sizes()[0], 3, 60, 80});
     torch::Tensor x3 = torch::zeros({x.sizes()[0], 3, 120, 160});
     torch::Tensor x4 = torch::zeros({x.sizes()[0], 3, 240, 320});
     torch::Tensor x5 = torch::zeros({x.sizes()[0], 3, 480, 640});

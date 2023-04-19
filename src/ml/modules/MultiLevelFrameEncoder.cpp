@@ -102,14 +102,15 @@ torch::Tensor MultiLevelFrameEncoderImpl::forward(
     float w2 = (float)std::clamp(3.0-lossLevel, 0.0, 1.0);
     x = w2*x2 + (1.0f-w2)*x;
 
+#else
+    torch::Tensor x = torch::leaky_relu(_bn3b(_conv3b(x2)), leakyReluNegativeSlope);
+#endif
     x = torch::leaky_relu(_bn4(_conv4(x)), leakyReluNegativeSlope); // 40x30x128
 
     x1 = torch::leaky_relu(_bn4b(_conv4b(x1)), leakyReluNegativeSlope);
     float w1 = (float)std::clamp(2.0-lossLevel, 0.0, 1.0);
     x = w1*x1 + (1.0f-w1)*x;
-#else
-    torch::Tensor x = torch::leaky_relu(_bn4b(_conv4b(x1)), leakyReluNegativeSlope);
-#endif
+
     x = torch::leaky_relu(_bn5(_conv5(x)), leakyReluNegativeSlope); // 20x15x256
 
     x0 = torch::leaky_relu(_bn5b(_conv5b(x0)), leakyReluNegativeSlope);
