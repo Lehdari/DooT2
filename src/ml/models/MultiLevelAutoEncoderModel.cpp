@@ -37,8 +37,8 @@ namespace {
                 TensorOptions().device(target.device())));
     }
 
-    // Loss function for YUV images
-    inline torch::Tensor imageLoss(const torch::Tensor& target, const torch::Tensor& pred, float gradWeight = 2.0f)
+    // Loss function for YUV image gradients
+    inline torch::Tensor imageGradLoss(const torch::Tensor& target, const torch::Tensor& pred)
     {
         using namespace torch::indexing;
 
@@ -56,10 +56,25 @@ namespace {
             pred.index({Slice(), Slice(), Slice(1, None), Slice()}) -
                 pred.index({Slice(), Slice(), Slice(None, -1), Slice()});
 
-        return
-            yuvLoss(target, pred) +
-                gradWeight * yuvLoss(targetGradX, predGradX) +
-                gradWeight * yuvLoss(targetGradY, predGradY);
+        return yuvLoss(targetGradX, predGradX) + yuvLoss(targetGradY, predGradY);
+    }
+
+    // Loss function for YUV image laplacian
+    inline torch::Tensor imageLaplacianLoss(const torch::Tensor& target, const torch::Tensor& pred)
+    {
+        static float laplacianKernelData[9] = {
+            -0.5,   -1.0,   -0.5,
+            -1.0,   6.0,    -1.0,
+            -0.5,   -1.0,   -0.5
+        };
+        static torch::Tensor laplacianKernel = torch::from_blob(laplacianKernelData, {3,3})
+            .repeat({3,1,1,1}).to(target.device());
+        torch::Tensor targetLaplacian = tf::conv2d(target, laplacianKernel,
+            tf::Conv2dFuncOptions().padding(1).groups(3));
+        torch::Tensor predLaplacian = tf::conv2d(pred, laplacianKernel,
+            tf::Conv2dFuncOptions().padding(1).groups(3));
+
+        return yuvLoss(targetLaplacian, predLaplacian);
     }
 
 }
@@ -129,6 +144,9 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
     {   // Initialize the time series
         auto timeSeriesWriteHandle = _trainingInfo->timeSeries.write();
         timeSeriesWriteHandle->addSeries<double>("time", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("frameLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("frameGradLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("frameLaplacianLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("loss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("lossLevel", 0.0);
     }
@@ -202,6 +220,9 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     _frameDecoder->zero_grad();
 
     double lossAcc = 0.0; // accumulate loss over the optimization interval to compute average
+    double frameLossAcc = 0.0;
+    double frameGradLossAcc = 0.0;
+    double frameLaplacianLossAcc = 0.0;
     const auto sequenceLength = storage.length();
     for (int64_t ti=0; ti<nTrainingIterations; ++ti){
         // frame (time point) to use this iteration
@@ -236,9 +257,6 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         // Frame decode
         auto [out0, out1, out2, out3, out4, out5] = _frameDecoder->forward(enc);
 
-        // Frame losses
-        torch::Tensor frameLoss0 = imageLoss(in0, out0);
-        torch::Tensor frameLoss1 = imageLoss(in1, out1);
 #if 0
         torch::Tensor frameLoss2 = imageLoss(in2, out2);
         torch::Tensor frameLoss3 = imageLoss(in3, out3);
@@ -254,17 +272,28 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         float frameLossWeight4 = (float)std::clamp(1.0-std::abs(_lossLevel-4.0), 0.0, 1.0);
         float frameLossWeight5 = (float)std::clamp(_lossLevel-4.0, 0.0, 1.0);
 
-        // Total loss
-        torch::Tensor loss =
-            frameLossWeight0 * frameLoss0 +
-            frameLossWeight1 * frameLoss1;
+        // Losses
+        torch::Tensor frameLoss =
+            frameLossWeight0 * yuvLoss(in0, out0) +
+            frameLossWeight1 * yuvLoss(in1, out1);
+        torch::Tensor frameGradLoss = 2.0*(
+            frameLossWeight0 * imageGradLoss(in0, out0) +
+            frameLossWeight1 * imageGradLoss(in1, out1));
+        torch::Tensor frameLaplacianLoss =
+            frameLossWeight0 * imageLaplacianLoss(in0, out0) +
+            frameLossWeight1 * imageLaplacianLoss(in1, out1);
 #if 0
             frameLossWeight2 * frameLoss2 +
             frameLossWeight3 * frameLoss3 +
             frameLossWeight4 * frameLoss4 +
             frameLossWeight5 * frameLoss5;
 #endif
+        torch::Tensor loss = frameLoss + frameGradLoss + frameLaplacianLoss;
+
         lossAcc += loss.item<double>();
+        frameLossAcc += frameLoss.item<double>();
+        frameGradLossAcc += frameGradLoss.item<double>();
+        frameLaplacianLossAcc += frameLaplacianLoss.item<double>();
 
         // Backward pass
         loss.backward();
@@ -314,7 +343,10 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
             // Loss level adjustment
             lossAcc /= (double)_optimizationInterval;
-            constexpr double targetLoss = 0.15;
+            frameLossAcc /= (double)_optimizationInterval;
+            frameGradLossAcc /= (double)_optimizationInterval;
+            frameLaplacianLossAcc /= (double)_optimizationInterval;
+            constexpr double targetLoss = 0.25;
             constexpr double controlP = 0.01;
             // use hyperbolic error metric (asymptotically larger adjustments when loss approaches 0)
             double error = 1.0 - (targetLoss / (lossAcc + 1.0e-8));
@@ -329,11 +361,17 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 timeSeriesWriteHandle->addEntries(
                     "time", (double)duration_cast<milliseconds>(currentTime-_trainingStartTime).count() / 1000.0,
                     "loss", lossAcc,
+                    "frameLoss", frameLossAcc,
+                    "frameGradLoss", frameGradLossAcc,
+                    "frameLaplacianLoss", frameLaplacianLossAcc,
                     "lossLevel", _lossLevel
                 );
             }
 
             lossAcc = 0.0;
+            frameLossAcc = 0.0;
+            frameGradLossAcc = 0.0;
+            frameLaplacianLossAcc = 0.0;
         }
 
         if (_abortTraining)
