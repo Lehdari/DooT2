@@ -35,12 +35,12 @@ Trainer::Trainer(
                                     DoomGame::instance().getScreenWidth(),
                                     DoomGame::instance().getScreenHeight(),
                                     ImageFormat::BGRA)),
-    _frameId                    (0),
     _batchEntryId               (0),
     _newPatchReady              (false),
     _model                      (nullptr),
     _agentModel                 (agentModel),
-    _encoderModel               (encoderModel)
+    _encoderModel               (encoderModel),
+    _playerDistanceThreshold    (_rnd()%768)
 {
 
     // Setup sequence storage
@@ -72,9 +72,10 @@ void Trainer::loop()
         throw std::runtime_error("Agent model must not be nullptr");
 
     auto& doomGame = DoomGame::instance();
+    _playerInitPos = doomGame.getGameState<GameState::PlayerPos>();
 
-    size_t recordBeginFrameId = 768+_rnd()%512;
-    size_t recordEndFrameId = recordBeginFrameId + _sequenceStorage.length();
+    bool recording = false;
+    int nRecordedFrames = 0;
 
     // Setup YUV frame
     std::vector<float> frameYUVData(doot2::frameWidth*doot2::frameHeight*
@@ -116,10 +117,10 @@ void Trainer::loop()
         auto action = _actionConverter(actionTV[0]);
 
         // Update the game state, restart if required
-        if (_frameId >= recordEndFrameId || doomGame.update(action)) {
+        if (nRecordedFrames >= _sequenceStorage.length() || doomGame.update(action)) {
             nextMap(_batchEntryId+1);
-            recordBeginFrameId = 768+_rnd()%512;
-            recordEndFrameId = recordBeginFrameId + _sequenceStorage.length();
+            nRecordedFrames = 0;
+            recording = false;
             continue;
         }
 
@@ -130,17 +131,20 @@ void Trainer::loop()
         }
 
         // Record
-        if (_frameId >= recordBeginFrameId) {
-            auto recordFrameId = _frameId - recordBeginFrameId;
-            _sequenceStorage.getBatch<Action>("action", recordFrameId)[_batchEntryId] = action;
+        if (recording) {
+            _sequenceStorage.getBatch<Action>("action", nRecordedFrames)[_batchEntryId] = action;
             {   // convert the frame
                 auto frameHandle = _frame.read();
                 convertImage(*frameHandle, frameYUV, ImageFormat::YUV);
-                _sequenceStorage.getBatch<float>("frame", recordFrameId)[_batchEntryId] = torch::from_blob(
+                _sequenceStorage.getBatch<float>("frame", nRecordedFrames)[_batchEntryId] = torch::from_blob(
                     frameYUVData.data(), frameShape, torch::TensorOptions().device(torch::kCPU)
                 );
             }
-            _sequenceStorage.getBatch<double>("reward", recordFrameId)[_batchEntryId] = 0.0; // TODO no rewards for now
+            _sequenceStorage.getBatch<double>("reward", nRecordedFrames)[_batchEntryId] = 0.0; // TODO no rewards for now
+            ++nRecordedFrames;
+        }
+        else if (startRecording()) {
+            recording = true;
         }
 
         // Train
@@ -151,10 +155,9 @@ void Trainer::loop()
 
             printf("Training...\n");
             _model->trainAsync(_sequenceStorage);
+            _visitedMaps.clear();
             _newPatchReady = false;
         }
-
-        ++_frameId;
     }
 
     _model->waitForTrainingFinished();
@@ -235,11 +238,17 @@ const SingleBuffer<Image<uint8_t>>::ReadHandle Trainer::getFrameReadHandle()
     return _frame.read();
 }
 
+bool Trainer::startRecording()
+{
+    auto& doomGame = DoomGame::instance();
+    float playerDistanceFromStart = (doomGame.getGameState<GameState::PlayerPos>() - _playerInitPos).norm();
+    return playerDistanceFromStart > _playerDistanceThreshold && _rnd()%256 == 0;
+}
+
 void Trainer::nextMap(size_t newBatchEntryId)
 {
     auto& doomGame = DoomGame::instance();
 
-    _frameId = 0;
     _newPatchReady = false;
     _batchEntryId = newBatchEntryId;
     if (_batchEntryId >= _sequenceStorage.batchSize()) {
@@ -248,8 +257,14 @@ void Trainer::nextMap(size_t newBatchEntryId)
     }
 
     gvizdoom::GameConfig newGameConfig = doomGame.getGameConfig();
-    newGameConfig.map = _rnd()%29 + 1;
+    do {
+        newGameConfig.map = _rnd()%29 + 1;
+    } while (_visitedMaps.contains(newGameConfig.map));
+    _visitedMaps.insert(newGameConfig.map);
     doomGame.restart(newGameConfig);
+    doomGame.update(gvizdoom::Action()); // one update required for init position
+    _playerInitPos = doomGame.getGameState<GameState::PlayerPos>();
+    _playerDistanceThreshold = _rnd()%768;
 
     _model->reset();
     _agentModel->reset();

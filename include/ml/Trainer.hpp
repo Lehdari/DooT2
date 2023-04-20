@@ -74,7 +74,6 @@ private:
     nlohmann::json                  _experimentConfig;
     TrainingInfo                    _trainingInfo;
 
-    size_t                          _frameId;
     size_t                          _batchEntryId;
     bool                            _newPatchReady;
 
@@ -82,6 +81,11 @@ private:
     Model*                          _agentModel;
     Model*                          _encoderModel;
 
+    std::set<int>                   _visitedMaps; // for keeping track of maps visited in current batch to avoid duplicates
+    Vec3f                           _playerInitPos;
+    float                           _playerDistanceThreshold; // distance from start to start recording
+
+    bool startRecording();
     void nextMap(size_t newBatchEntryId = 0); // proceed to next map
     void createExperimentDirectories() const;
 };
