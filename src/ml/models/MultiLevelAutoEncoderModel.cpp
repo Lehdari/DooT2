@@ -147,8 +147,11 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         timeSeriesWriteHandle->addSeries<double>("frameLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("frameGradLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("frameLaplacianLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("encodingDistanceLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("encodingMeanLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("loss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("lossLevel", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("maxEncodingCodistance", 0.0);
     }
     // Initialize images
     {
@@ -166,6 +169,8 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         *(_trainingInfo->images)["prediction2"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["prediction1"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["prediction0"].write() = Image<float>(width, height, ImageFormat::YUV);
+        *(_trainingInfo->images)["codistance_matrix"].write() = Image<float>(
+            doot2::batchSize*16, doot2::batchSize*16, ImageFormat::GRAY);
     }
 }
 
@@ -219,10 +224,17 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     _frameEncoder->zero_grad();
     _frameDecoder->zero_grad();
 
+    // Used as a target for encoding distance matrix
+    torch::Tensor targetDistanceMatrix = torch::ones({doot2::batchSize, doot2::batchSize},
+        TensorOptions().device(device));
+
     double lossAcc = 0.0; // accumulate loss over the optimization interval to compute average
     double frameLossAcc = 0.0;
     double frameGradLossAcc = 0.0;
     double frameLaplacianLossAcc = 0.0;
+    double encodingDistanceLossAcc = 0.0;
+    double encodingMeanLossAcc = 0.0;
+    double maxEncodingCodistance = 1.0; // max distance between encodings
     const auto sequenceLength = storage.length();
     for (int64_t ti=0; ti<nTrainingIterations; ++ti){
         // frame (time point) to use this iteration
@@ -252,6 +264,15 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         // Frame encode
         torch::Tensor enc = _frameEncoder->forward(in5, in4, in3, in2, in1, in0, _lossLevel);
 
+        // Compute distance from encoding mean to origin
+        torch::Tensor encMean = enc.mean(0);
+
+        // Compute distances between each encoding
+        torch::Tensor distanceMatrix = torch::cdist(enc, enc);
+        maxEncodingCodistance = torch::max(distanceMatrix).to(torch::kCPU).item<double>();
+        distanceMatrix = distanceMatrix + maxEncodingCodistance*
+            torch::eye(doot2::batchSize, TensorOptions().device(device));
+
         // Frame decode
         auto [out0, out1, out2, out3, out4, out5] = _frameDecoder->forward(enc);
 
@@ -276,17 +297,22 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
             frameLossWeight0 * imageLaplacianLoss(in0, out0) +
             frameLossWeight1 * imageLaplacianLoss(in1, out1) +
             frameLossWeight2 * imageLaplacianLoss(in2, out2);
+        torch::Tensor encodingDistanceLoss = torch::mse_loss(distanceMatrix, targetDistanceMatrix)*0.0001f;
+        torch::Tensor encodingMeanLoss = encMean.norm()*0.0001f;
 #if 0
             frameLossWeight3 * frameLoss3 +
             frameLossWeight4 * frameLoss4 +
             frameLossWeight5 * frameLoss5;
 #endif
-        torch::Tensor loss = frameLoss + frameGradLoss + frameLaplacianLoss;
+        torch::Tensor loss = frameLoss + frameGradLoss + frameLaplacianLoss + encodingDistanceLoss +
+            encodingMeanLoss;
 
         lossAcc += loss.item<double>();
         frameLossAcc += frameLoss.item<double>();
         frameGradLossAcc += frameGradLoss.item<double>();
         frameLaplacianLossAcc += frameLaplacianLoss.item<double>();
+        encodingDistanceLossAcc += encodingDistanceLoss.item<double>();
+        encodingMeanLossAcc += encodingMeanLoss.item<double>();
 
         // Backward pass
         loss.backward();
@@ -320,6 +346,11 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
             out1CPU = tf::interpolate(out1CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
             torch::Tensor out0CPU = out0.index({(int)displaySeqId, "..."}).to(torch::kCPU);
             out0CPU = tf::interpolate(out0CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
+            torch::Tensor distanceMatrixCPU = distanceMatrix.to(torch::kCPU);
+            distanceMatrixCPU /= maxEncodingCodistance;
+            distanceMatrixCPU = tf::interpolate(distanceMatrixCPU.unsqueeze(0).unsqueeze(0),
+                tf::InterpolateFuncOptions().size(std::vector<long>{doot2::batchSize*16, doot2::batchSize*16})
+                .mode(kNearestExact).align_corners(false));
 
             _trainingInfo->images["input5"].write()->copyFrom(in5CPU.data_ptr<float>());
             _trainingInfo->images["input4"].write()->copyFrom(in4CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
@@ -333,12 +364,15 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
             _trainingInfo->images["prediction2"].write()->copyFrom(out2CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
             _trainingInfo->images["prediction1"].write()->copyFrom(out1CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
             _trainingInfo->images["prediction0"].write()->copyFrom(out0CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
+            _trainingInfo->images["codistance_matrix"].write()->copyFrom(distanceMatrixCPU.contiguous().data_ptr<float>());
 
             // Loss level adjustment
             lossAcc /= (double)_optimizationInterval;
             frameLossAcc /= (double)_optimizationInterval;
             frameGradLossAcc /= (double)_optimizationInterval;
             frameLaplacianLossAcc /= (double)_optimizationInterval;
+            encodingDistanceLossAcc /= (double)_optimizationInterval;
+            encodingMeanLossAcc /= (double)_optimizationInterval;
             constexpr double targetLoss = 0.2;
             constexpr double controlP = 0.01;
             // use hyperbolic error metric (asymptotically larger adjustments when loss approaches 0)
@@ -353,11 +387,14 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
                 timeSeriesWriteHandle->addEntries(
                     "time", (double)duration_cast<milliseconds>(currentTime-_trainingStartTime).count() / 1000.0,
-                    "loss", lossAcc,
                     "frameLoss", frameLossAcc,
                     "frameGradLoss", frameGradLossAcc,
                     "frameLaplacianLoss", frameLaplacianLossAcc,
-                    "lossLevel", _lossLevel
+                    "encodingDistanceLoss", encodingDistanceLossAcc,
+                    "encodingMeanLoss", encodingMeanLossAcc,
+                    "loss", lossAcc,
+                    "lossLevel", _lossLevel,
+                    "maxEncodingCodistance", maxEncodingCodistance
                 );
             }
 
@@ -365,6 +402,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
             frameLossAcc = 0.0;
             frameGradLossAcc = 0.0;
             frameLaplacianLossAcc = 0.0;
+            encodingDistanceLossAcc = 0.0;
+            encodingMeanLossAcc = 0.0;
         }
 
         if (_abortTraining)
