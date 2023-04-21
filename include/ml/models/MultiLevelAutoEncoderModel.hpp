@@ -43,14 +43,30 @@ private:
     // Configuration variables and hyperparameters
     std::filesystem::path   _frameEncoderFilename;
     std::filesystem::path   _frameDecoderFilename;
+    double                  _optimizerLearningRate;
+    double                  _optimizerBeta1;
+    double                  _optimizerBeta2;
+    double                  _optimizerEpsilon;
+    double                  _optimizerWeightDecay;
+    int64_t                 _nTrainingIterations;
     int64_t                 _optimizationInterval; // for this many steps gradients will be accumulated before weight update
+    double                  _frameLossWeight;
+    double                  _frameGradLossWeight;
+    double                  _frameLaplacianLossWeight;
+    bool                    _useEncodingMeanLoss;
+    double                  _encodingMeanLossWeight;
+    bool                    _useEncodingCodistanceLoss;
+    double                  _encodingCodistanceLossWeight;
+    bool                    _useCovarianceLoss;
+    double                  _covarianceLossWeight;
+    double                  _targetLoss; // when loss is under this value, lossLevel is increased
+
+    double                  _lossLevel; // determines the resolution the encoder
 
     MultiLevelFrameEncoder  _frameEncoder;
     MultiLevelFrameDecoder  _frameDecoder;
     torch::optim::AdamW     _optimizer;
     TimePoint               _trainingStartTime;
-
-    double                  _lossLevel;
 
     void trainImpl(SequenceStorage& storage) override;
 };
