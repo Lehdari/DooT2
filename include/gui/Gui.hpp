@@ -49,8 +49,8 @@ public:
     void init(SDL_Window* window, SDL_GLContext* glContext);
     void update(ml::TrainingInfo* trainingInfo);
     void createDefaultLayout();
-    void loadLayout(const std::filesystem::path& layoutFilename);
-    void saveLayout(const std::filesystem::path& layoutFilename) const;
+    void loadLayout(const std::filesystem::path& layoutFilename, SDL_Window* window = nullptr);
+    void saveLayout(const std::filesystem::path& layoutFilename, SDL_Window* window = nullptr) const;
 
     void render(SDL_Window* window, ml::Trainer* trainer);
 

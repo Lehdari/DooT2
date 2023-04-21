@@ -81,8 +81,9 @@ App::App(Trainer* trainer) :
     _gui.setCallback("newModelTypeSelected", [&](const gui::State& guiState){ resetExperiment(); });
     _gui.update(_trainer->getTrainingInfo());
 
+    // Read gui layout from the layout file
     if (fs::exists(guiLayoutFilename))
-        _gui.loadLayout(guiLayoutFilename);
+        _gui.loadLayout(guiLayoutFilename, _window);
     else
         _gui.createDefaultLayout();
 
@@ -92,7 +93,7 @@ App::App(Trainer* trainer) :
 App::~App()
 {
     // Save the GUI layout
-    _gui.saveLayout(guiLayoutFilename);
+    _gui.saveLayout(guiLayoutFilename, _window);
 
     // Destroy window and quit SDL subsystems
     if (_glContext != nullptr)

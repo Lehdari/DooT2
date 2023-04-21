@@ -71,7 +71,7 @@ void Gui::createDefaultLayout()
     createWindow<gui::ImagesWindow>();
 }
 
-void Gui::loadLayout(const std::filesystem::path& layoutFilename)
+void Gui::loadLayout(const std::filesystem::path& layoutFilename, SDL_Window* window)
 {
     std::ifstream layoutFile(layoutFilename);
     auto layout = nlohmann::json::parse(layoutFile);
@@ -88,10 +88,38 @@ void Gui::loadLayout(const std::filesystem::path& layoutFilename)
             createWindow<T_Window>(w["id"], config);
         });
     }
+
+    // Set window dimensions and position
+    if (window != nullptr) {
+        if (layout.contains("windowWidth") && layout.contains("windowHeight")) {
+            int w = layout["windowWidth"].get<int>();
+            int h = layout["windowHeight"].get<int>();
+            SDL_SetWindowSize(window, w, h);
+            glViewport(0, 0, w, h);
+        }
+        if (layout.contains("windowPosX") && layout.contains("windowPosY")) {
+            int x = layout["windowPosX"].get<int>();
+            int y = layout["windowPosY"].get<int>();
+            SDL_SetWindowPosition(window, x, y);
+        }
+    }
 }
 
-void Gui::saveLayout(const std::filesystem::path& layoutFilename) const
+void Gui::saveLayout(const std::filesystem::path& layoutFilename, SDL_Window* window) const
 {
+    nlohmann::json layout;
+    if (window != nullptr) {
+        int x, y, w, h;
+        int t, l, b, r;
+        SDL_GetWindowBordersSize(window, &t, &l, &b, &r);
+        SDL_GetWindowPosition(window, &x, &y);
+        SDL_GetWindowSize(window, &w, &h);
+        layout["windowWidth"] = w;
+        layout["windowHeight"] = h;
+        layout["windowPosX"] = x;
+        layout["windowPosY"] = y-t;
+    }
+
     std::vector<nlohmann::json> windowLayouts;
     for (auto& w : _windows) {
         windowLayouts.emplace_back();
@@ -100,7 +128,6 @@ void Gui::saveLayout(const std::filesystem::path& layoutFilename) const
         windowLayouts.back()["config"] = w->getConfig();
     }
 
-    nlohmann::json layout;
     layout["windows"] = windowLayouts;
     std::ofstream layoutFile(layoutFilename);
     layoutFile << std::setw(4) << layout << std::endl;
