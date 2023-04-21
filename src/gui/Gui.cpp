@@ -142,6 +142,11 @@ void Gui::render(SDL_Window* window, ml::Trainer* trainer)
     imGuiRender();
 }
 
+void Gui::setCallback(const std::string& name, std::function<void(const State&)>&& callback)
+{
+    _guiState.callbacks[name] = callback;
+}
+
 const State& Gui::getState() const noexcept
 {
     return _guiState;

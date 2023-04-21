@@ -10,10 +10,8 @@
 
 #include "App.hpp"
 #include "Constants.hpp"
-#include "ml/Model.hpp"
-#include "ml/Models.hpp"
-#include "ml/ModelTypeUtils.hpp"
 #include "ml/Trainer.hpp"
+#include "util/ExperimentName.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
 #include "glad/glad.h"
@@ -80,11 +78,15 @@ App::App(Trainer* trainer) :
 
     // Initialize gui
     _gui.init(_window, &_glContext);
+    _gui.setCallback("newModelTypeSelected", [&](const gui::State& guiState){ resetExperiment(); });
     _gui.update(_trainer->getTrainingInfo());
+
     if (fs::exists(guiLayoutFilename))
         _gui.loadLayout(guiLayoutFilename);
     else
         _gui.createDefaultLayout();
+
+    resetExperiment();
 }
 
 App::~App()
@@ -161,7 +163,6 @@ void App::trainingControl()
                 break;
 
             // no trainer thread running, instantiate new model and launch the training
-            resetExperiment();
             _trainerThread = std::thread(&ml::Trainer::loop, _trainer);
         }   break;
         case gui::State::TrainingStatus::PAUSED: {
@@ -172,17 +173,18 @@ void App::trainingControl()
 
 void App::resetExperiment()
 {
-    // delete the previous model
-    _model.reset();
+    if (_gui.getState().trainingStatus != gui::State::TrainingStatus::STOPPED) {
+        printf("WARNING: App::resetExperiment called when experiment is ongoing, omitting reset...\n"); // TODO logging
+        return;
+    }
 
-    // use the updated options (stored in GUI state) to configure the experiment
-    _trainer->configureExperiment(_gui.getState());
+    // Setup experiment config
+    nlohmann::json experimentConfig;
+    experimentConfig["experiment_root"] = formatExperimentName(_gui.getState());
+    experimentConfig["model_type"] = _gui.getState().modelTypeName;
+    experimentConfig["model_config"] = nlohmann::json(); // TODO temp
+    experimentConfig["software_version"] = GIT_VERSION;
 
-    // instantiate new model of desired type
-    ml::modelTypeNameCallback(_gui.getState().modelTypeName, [&]<typename T_Model>(){
-        _model = std::make_unique<T_Model>(_trainer->getExperimentConfig());
-    });
-
-    _trainer->setModel(_model.get());
+    _trainer->configureExperiment(std::move(experimentConfig));
     _gui.update(_trainer->getTrainingInfo());
 }

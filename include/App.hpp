@@ -17,6 +17,12 @@
 #include <thread>
 
 
+namespace gui {
+
+class State;
+
+} // namespace gui
+
 namespace ml {
 
 class Trainer;
@@ -42,10 +48,9 @@ private:
     ml::Trainer*                _trainer;
     std::thread                 _trainerThread;
     gui::Gui                    _gui;
-    std::unique_ptr<ml::Model>  _model; // model to be trained
 
     void trainingControl();
-    void resetExperiment(); // musn't be called when training thread is running
+    void resetExperiment(); // shouldn't be called when training thread is running
 };
 
 

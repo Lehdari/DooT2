@@ -26,9 +26,12 @@ namespace gui {
 struct State {
     using TimeSeriesMap = std::unordered_map<std::string, SingleBuffer<TimeSeries>*>;
     using ImageRelayMap = std::map<std::string, gui::ImageRelay>;
+    using CallbackMap = std::unordered_map<std::string, std::function<void(const State&)>>;
 
     // Sources for time series data
     TimeSeriesMap   timeSeries;
+
+    CallbackMap     callbacks;
 
     // Game window state
     gut::Texture    frameTexture;

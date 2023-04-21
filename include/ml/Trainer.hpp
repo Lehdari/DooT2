@@ -24,11 +24,6 @@
 #include <random>
 
 
-namespace gui {
-    struct State;
-} // namespace gui
-
-
 namespace ml {
 
 class Model;
@@ -54,8 +49,7 @@ public:
     void loop();
     void quit();
 
-    void setModel(Model* model);
-    void configureExperiment(const gui::State& guiState);
+    void configureExperiment(nlohmann::json&& experimentConfig);
     void saveExperiment();
 
     // Access the model that is being trained
@@ -77,7 +71,7 @@ private:
     size_t                          _batchEntryId;
     bool                            _newPatchReady;
 
-    Model*                          _model;
+    std::unique_ptr<Model>          _model;
     Model*                          _agentModel;
     Model*                          _encoderModel;
 
@@ -87,6 +81,7 @@ private:
 
     bool startRecording();
     void nextMap(size_t newBatchEntryId = 0); // proceed to next map
+    void resetModel();
     void createExperimentDirectories() const;
 };
 

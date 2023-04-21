@@ -22,6 +22,7 @@
 
 #include <map>
 #include <set>
+#include <functional>
 
 
 namespace ml {
@@ -52,6 +53,8 @@ public:
     void saveLayout(const std::filesystem::path& layoutFilename) const;
 
     void render(SDL_Window* window, ml::Trainer* trainer);
+
+    void setCallback(const std::string& name, std::function<void(const State&)>&& callback);
 
     const State& getState() const noexcept;
 

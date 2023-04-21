@@ -10,8 +10,9 @@
 
 #include "ml/Trainer.hpp"
 #include "ml/Model.hpp"
+#include "ml/Models.hpp"
+#include "ml/ModelTypeUtils.hpp"
 #include "gui/State.hpp"
-#include "util/ExperimentName.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
 #include <opencv2/highgui.hpp>
@@ -67,9 +68,13 @@ Trainer::~Trainer()
 void Trainer::loop()
 {
     if (_model == nullptr)
-        throw std::runtime_error("Model to be trained must not be nullptr");
+        throw std::runtime_error("Model to be trained must not be nullptr (did you forget to call configureExperiment()?)");
     if (_agentModel == nullptr)
         throw std::runtime_error("Agent model must not be nullptr");
+
+    // Setup experiment files
+    createExperimentDirectories();
+    resetModel();
 
     auto& doomGame = DoomGame::instance();
     _playerInitPos = doomGame.getGameState<GameState::PlayerPos>();
@@ -170,28 +175,23 @@ void Trainer::quit()
     _model->abortTraining();
 }
 
-void Trainer::setModel(Model* model)
+void Trainer::configureExperiment(nlohmann::json&& experimentConfig)
 {
-    if (model == nullptr)
-        throw std::runtime_error("Model to be trained must not be nullptr");
+    if (!experimentConfig.contains("experiment_root"))
+        throw std::runtime_error("Experiment config does not contain mandatory entry \"experiment_root\"");
+    if (!experimentConfig.contains("model_type"))
+        throw std::runtime_error("Experiment config does not contain mandatory entry \"model_type\"");
+    if (!experimentConfig.contains("model_config"))
+        throw std::runtime_error("Experiment config does not contain mandatory entry \"model_config\"");
+    if (!experimentConfig.contains("software_version"))
+        throw std::runtime_error("Experiment config does not contain mandatory entry \"software_version\"");
 
-    _model = model;
-    _model->setTrainingInfo(&_trainingInfo);
-}
+    _experimentConfig = std::move(experimentConfig);
 
-void Trainer::configureExperiment(const gui::State& guiState)
-{
     // Reset training info
-    _trainingInfo.reset();
+    _trainingInfo.reset(); // TODO load past data if basis experiment is used
 
-    // Setup experiment config
-    _experimentConfig["experiment_root"] = formatExperimentName(guiState);
-    _experimentConfig["model_type"] = guiState.modelTypeName;
-    _experimentConfig["model_config"] = nlohmann::json(); // TODO temp
-    _experimentConfig["software_version"] = GIT_VERSION;
-
-    // Setup experiment files
-    createExperimentDirectories();
+    resetModel();
 }
 
 void Trainer::saveExperiment()
@@ -220,7 +220,7 @@ void Trainer::saveExperiment()
 
 Model* Trainer::getModel()
 {
-    return _model;
+    return _model.get();
 }
 
 TrainingInfo* Trainer::getTrainingInfo()
@@ -270,6 +270,19 @@ void Trainer::nextMap(size_t newBatchEntryId)
     _agentModel->reset();
     if (_encoderModel != nullptr)
         _encoderModel->reset();
+}
+
+void Trainer::resetModel()
+{
+    // delete the previous model
+    _model.reset();
+
+    // instantiate new model of desired type using the config above
+    ml::modelTypeNameCallback(_experimentConfig["model_type"], [&]<typename T_Model>(){
+        _model = std::make_unique<T_Model>(&_experimentConfig);
+    });
+
+    _model->setTrainingInfo(&_trainingInfo);
 }
 
 void Trainer::createExperimentDirectories() const

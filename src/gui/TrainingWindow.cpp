@@ -46,8 +46,13 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
             ml::modelForEachTypeCallback([&]<typename T_Model>() {
                 constexpr auto name = ml::ModelTypeInfo<T_Model>::name;
                 bool isSelected = (_guiState->modelTypeName == name);
-                if (ImGui::Selectable(name, isSelected))
-                    _guiState->modelTypeName = name;
+                if (ImGui::Selectable(name, isSelected)) {
+                    // Call the callback function for new model type selection (in case it's defined)
+                    if (_guiState->modelTypeName != name && _guiState->callbacks.contains("newModelTypeSelected")) {
+                        _guiState->modelTypeName = name;
+                        _guiState->callbacks["newModelTypeSelected"](*_guiState);
+                    }
+                }
                 if (isSelected)
                     ImGui::SetItemDefaultFocus();
             });
