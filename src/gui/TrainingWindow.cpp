@@ -12,8 +12,10 @@
 #include "gui/State.hpp"
 #include "ml/Models.hpp"
 #include "ml/ModelTypeUtils.hpp"
+#include "ml/Trainer.hpp"
 
 #include "imgui.h"
+#include "misc/cpp/imgui_stdlib.h"
 
 
 gui::TrainingWindow::TrainingWindow(std::set<int>* activeIds, State* guiState, int id) :
@@ -60,6 +62,62 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
             ImGui::EndCombo();
         }
         ImGui::EndDisabled();
+
+        // Model config table
+        if (ImGui::CollapsingHeader("Model configuration")) {
+            auto* experimentConfig = trainer->getExperimentConfig();
+            assert(experimentConfig != nullptr);
+            if (experimentConfig->contains("model_config")) {
+                auto& modelConfig = (*experimentConfig)["model_config"];
+                if (ImGui::BeginTable("Model configuration", 2,
+                    ImGuiTableFlags_Borders |
+                    ImGuiTableFlags_SizingFixedFit |
+                    ImGuiTableFlags_SizingFixedSame)) {
+                    int id = 0;
+                    // List all config entries
+                    ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, {0,0});
+                    for (auto& [paramName, paramValue]: modelConfig.items()) {
+                        ImGui::TableNextRow();
+                        ImGui::TableSetColumnIndex(0);
+                        ImGui::Text("%s", paramName.c_str());
+                        ImGui::TableSetColumnIndex(1);
+                        float columnWidth = ImGui::GetColumnWidth(1);
+                        ImGui::PushID(id++);
+                        switch (paramValue.type()) {
+                            case nlohmann::json::value_t::boolean: {
+                                bool v = paramValue.get<bool>();
+                                ImGui::Checkbox("##value", &v);
+                                paramValue = v;
+                            }   break;
+                            case nlohmann::json::value_t::number_integer: {
+                                int v = paramValue.get<int>();
+                                ImGui::SetNextItemWidth(columnWidth);
+                                ImGui::InputInt("##value", &v);
+                                paramValue = v;
+                            }   break;
+                            case nlohmann::json::value_t::number_float: {
+                                double v = paramValue.get<double>();
+                                ImGui::SetNextItemWidth(columnWidth);
+                                ImGui::InputDouble("##value", &v, 0.0, 0.0, "%.5g");
+                                paramValue = v;
+                            }   break;
+                            case nlohmann::json::value_t::string: {
+                                std::string v = paramValue.get<std::string>();
+                                ImGui::SetNextItemWidth(columnWidth);
+                                if (ImGui::InputText("##value", &v))
+                                    paramValue = v;
+                            }   break;
+                            default: {
+                                ImGui::Text("Unsupported type");
+                            }   break;
+                        }
+                        ImGui::PopID();
+                    }
+                    ImGui::PopStyleVar();
+                    ImGui::EndTable();
+                }
+            }
+        }
 
         // Training controls
         ImGui::Text("Training:");
