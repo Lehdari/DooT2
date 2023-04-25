@@ -291,6 +291,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     // Used as a target for encoding distance matrix (try to get all encoding codistances to 1)
     torch::Tensor targetDistanceMatrix = torch::ones({doot2::batchSize, doot2::batchSize},
         TensorOptions().device(device));
+    torch::Tensor zero = torch::zeros({}, TensorOptions().device(device));
 
     double lossAcc = 0.0; // accumulate loss over the optimization interval to compute average
     double frameLossAcc = 0.0;
@@ -311,19 +312,23 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
         // ID of the frame (in sequence) to be used in the training batch
         torch::Tensor in5 = pixelDataIn.index({(int)t});
-#if 0
-        torch::Tensor in4 = tf::interpolate(in5,
-            tf::InterpolateFuncOptions().size(std::vector<long>{240, 320}).mode(kArea));
-        torch::Tensor in3 = tf::interpolate(in5,
-            tf::InterpolateFuncOptions().size(std::vector<long>{120, 160}).mode(kArea));
-#else
-        torch::Tensor in4 = torch::zeros({in5.sizes()[0], 3, 240, 320}, TensorOptions().device(device));
-        torch::Tensor in3 = torch::zeros({in5.sizes()[0], 3, 120, 160}, TensorOptions().device(device));
-#endif
-        torch::Tensor in2 = tf::interpolate(in5,
-            tf::InterpolateFuncOptions().size(std::vector<long>{60, 80}).mode(kArea));
-        torch::Tensor in1 = tf::interpolate(in5,
-            tf::InterpolateFuncOptions().size(std::vector<long>{30, 40}).mode(kArea));
+        torch::Tensor in4, in3, in2, in1;
+        if (_lossLevel > 3.0)
+            in4 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{240, 320}).mode(kArea));
+        else
+            in4 = torch::zeros({in5.sizes()[0], 3, 240, 320}, TensorOptions().device(device));
+        if (_lossLevel > 2.0)
+            in3 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{120, 160}).mode(kArea));
+        else
+            in3 = torch::zeros({in5.sizes()[0], 3, 120, 160}, TensorOptions().device(device));
+        if (_lossLevel > 1.0)
+            in2 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{60, 80}).mode(kArea));
+        else
+            in2 = torch::zeros({in5.sizes()[0], 3, 60, 80}, TensorOptions().device(device));
+        if (_lossLevel > 0.0)
+            in1 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{30, 40}).mode(kArea));
+        else
+            in1 = torch::zeros({in5.sizes()[0], 3, 30, 40}, TensorOptions().device(device));
         torch::Tensor in0 = tf::interpolate(in5,
             tf::InterpolateFuncOptions().size(std::vector<long>{15, 20}).mode(kArea));
 
@@ -364,7 +369,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         }
 
         // Frame decode
-        auto [out0, out1, out2, out3, out4, out5] = _frameDecoder->forward(enc);
+        auto [out0, out1, out2, out3, out4, out5] = _frameDecoder->forward(enc, _lossLevel);
 
         // Frame loss weights
         float frameLossWeight0 = (float)std::clamp(1.0-_lossLevel, 0.0, 1.0);
@@ -377,24 +382,29 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         // Frame decoding losses
         torch::Tensor frameLoss = _frameLossWeight*(
             frameLossWeight0 * yuvLoss(in0, out0) +
-            frameLossWeight1 * yuvLoss(in1, out1) +
-            frameLossWeight2 * yuvLoss(in2, out2));
+            (_lossLevel > 0.0 ? frameLossWeight1 * yuvLoss(in1, out1) : zero) +
+            (_lossLevel > 1.0 ? frameLossWeight2 * yuvLoss(in2, out2) : zero) +
+            (_lossLevel > 2.0 ? frameLossWeight3 * yuvLoss(in3, out3) : zero) +
+            (_lossLevel > 3.0 ? frameLossWeight4 * yuvLoss(in4, out4) : zero) +
+            (_lossLevel > 4.0 ? frameLossWeight5 * yuvLoss(in5, out5) : zero));
         frameLossAcc += frameLoss.item<double>();
         torch::Tensor frameGradLoss = _frameGradLossWeight*(
             frameLossWeight0 * imageGradLoss(in0, out0) +
-            frameLossWeight1 * imageGradLoss(in1, out1) +
-            frameLossWeight2 * imageGradLoss(in2, out2));
+            (_lossLevel > 0.0 ? frameLossWeight1 * imageGradLoss(in1, out1) : zero) +
+            (_lossLevel > 1.0 ? frameLossWeight2 * imageGradLoss(in2, out2) : zero) +
+            (_lossLevel > 2.0 ? frameLossWeight3 * imageGradLoss(in3, out3) : zero) +
+            (_lossLevel > 3.0 ? frameLossWeight4 * imageGradLoss(in4, out4) : zero) +
+            (_lossLevel > 4.0 ? frameLossWeight5 * imageGradLoss(in5, out5) : zero));
         frameGradLossAcc += frameGradLoss.item<double>();
         torch::Tensor frameLaplacianLoss = _frameLaplacianLossWeight*(
             frameLossWeight0 * imageLaplacianLoss(in0, out0) +
-            frameLossWeight1 * imageLaplacianLoss(in1, out1) +
-            frameLossWeight2 * imageLaplacianLoss(in2, out2));
+            (_lossLevel > 0.0 ? frameLossWeight1 * imageLaplacianLoss(in1, out1) : zero) +
+            (_lossLevel > 1.0 ? frameLossWeight2 * imageLaplacianLoss(in2, out2) : zero) +
+            (_lossLevel > 2.0 ? frameLossWeight3 * imageLaplacianLoss(in3, out3) : zero) +
+            (_lossLevel > 3.0 ? frameLossWeight4 * imageLaplacianLoss(in4, out4) : zero) +
+            (_lossLevel > 4.0 ? frameLossWeight5 * imageLaplacianLoss(in5, out5) : zero));
         frameLaplacianLossAcc += frameLaplacianLoss.item<double>();
-#if 0
-            frameLossWeight3 * frameLoss3 +
-            frameLossWeight4 * frameLoss4 +
-            frameLossWeight5 * frameLoss5;
-#endif
+
         torch::Tensor loss = frameLoss + frameGradLoss + frameLaplacianLoss + encodingCodistanceLoss +
             encodingMeanLoss;
 
@@ -476,7 +486,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
             // use hyperbolic error metric (asymptotically larger adjustments when loss approaches 0)
             double error = 1.0 - (_targetLoss / (lossAcc + 1.0e-8));
             _lossLevel -= error*controlP; // P control should suffice
-            _lossLevel = std::clamp(_lossLevel, 0.0, 2.0 /*TODO 5.0*/);
+            _lossLevel = std::clamp(_lossLevel, 0.0, 5.0);
 
             // Write the time series
             {

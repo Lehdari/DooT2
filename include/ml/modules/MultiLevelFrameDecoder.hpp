@@ -29,7 +29,7 @@ public:
 
     MultiLevelFrameDecoderImpl();
 
-    ReturnType forward(torch::Tensor x);
+    ReturnType forward(torch::Tensor x, double lossLevel);
 
 private:
     ResNeXtModule               _resNext1a;

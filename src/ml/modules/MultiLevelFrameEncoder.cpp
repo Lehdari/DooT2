@@ -83,39 +83,51 @@ torch::Tensor MultiLevelFrameEncoderImpl::forward(
     constexpr double leakyReluNegativeSlope = 0.01;
 
     // Encoder
-#if 0
-    torch::Tensor x = torch::leaky_relu(_bn1(_conv1(x5)), leakyReluNegativeSlope); // 320x240x16
+    torch::Tensor x;
+    if (lossLevel > 0.0) {
+        if (lossLevel > 1.0) {
+            if (lossLevel > 2.0) {
+                if (lossLevel > 3.0) {
+                    if (lossLevel > 4.0) {
+                        x = torch::leaky_relu(_bn1(_conv1(x5)), leakyReluNegativeSlope); // 320x240x16
+                        x4 = torch::leaky_relu(_bn1b(_conv1b(x4)), leakyReluNegativeSlope);
+                        float w4 = (float)std::clamp(5.0-lossLevel, 0.0, 1.0);
+                        x = w4*x4 + (1.0f-w4)*x;
+                    }
+                    else
+                        x = torch::leaky_relu(_bn1b(_conv1b(x4)), leakyReluNegativeSlope);
 
-    x4 = torch::leaky_relu(_bn1b(_conv1b(x4)), leakyReluNegativeSlope);
-    float w4 = (float)std::clamp(5.0-lossLevel, 0.0, 1.0);
-    x = w4*x4 + (1.0f-w4)*x;
+                    x = torch::leaky_relu(_bn2(_conv2(x)), leakyReluNegativeSlope); // 160x120x32
+                    x3 = torch::leaky_relu(_bn2b(_conv2b(x3)), leakyReluNegativeSlope);
+                    float w3 = (float)std::clamp(4.0-lossLevel, 0.0, 1.0);
+                    x = w3*x3 + (1.0f-w3)*x;
+                }
+                else
+                    x = torch::leaky_relu(_bn2b(_conv2b(x3)), leakyReluNegativeSlope);
 
-    x = torch::leaky_relu(_bn2(_conv2(x)), leakyReluNegativeSlope); // 160x120x32
+                x = torch::leaky_relu(_bn3(_conv3(x)), leakyReluNegativeSlope); // 80x60x64
+                x2 = torch::leaky_relu(_bn3b(_conv3b(x2)), leakyReluNegativeSlope);
+                float w2 = (float)std::clamp(3.0-lossLevel, 0.0, 1.0);
+                x = w2*x2 + (1.0f-w2)*x;
+            }
+            else
+                x = torch::leaky_relu(_bn3b(_conv3b(x2)), leakyReluNegativeSlope);
 
-    x3 = torch::leaky_relu(_bn2b(_conv2b(x3)), leakyReluNegativeSlope);
-    float w3 = (float)std::clamp(4.0-lossLevel, 0.0, 1.0);
-    x = w3*x3 + (1.0f-w3)*x;
+            x = torch::leaky_relu(_bn4(_conv4(x)), leakyReluNegativeSlope); // 40x30x128
+            x1 = torch::leaky_relu(_bn4b(_conv4b(x1)), leakyReluNegativeSlope);
+            float w1 = (float)std::clamp(2.0-lossLevel, 0.0, 1.0);
+            x = w1*x1 + (1.0f-w1)*x;
+        }
+        else
+            x = torch::leaky_relu(_bn4b(_conv4b(x1)), leakyReluNegativeSlope);
 
-    x = torch::leaky_relu(_bn3(_conv3(x)), leakyReluNegativeSlope); // 80x60x64
-
-    x2 = torch::leaky_relu(_bn3b(_conv3b(x2)), leakyReluNegativeSlope);
-    float w2 = (float)std::clamp(3.0-lossLevel, 0.0, 1.0);
-    x = w2*x2 + (1.0f-w2)*x;
-
-#else
-    torch::Tensor x = torch::leaky_relu(_bn3b(_conv3b(x2)), leakyReluNegativeSlope);
-#endif
-    x = torch::leaky_relu(_bn4(_conv4(x)), leakyReluNegativeSlope); // 40x30x128
-
-    x1 = torch::leaky_relu(_bn4b(_conv4b(x1)), leakyReluNegativeSlope);
-    float w1 = (float)std::clamp(2.0-lossLevel, 0.0, 1.0);
-    x = w1*x1 + (1.0f-w1)*x;
-
-    x = torch::leaky_relu(_bn5(_conv5(x)), leakyReluNegativeSlope); // 20x15x256
-
-    x0 = torch::leaky_relu(_bn5b(_conv5b(x0)), leakyReluNegativeSlope);
-    float w0 = (float)std::clamp(1.0-lossLevel, 0.0, 1.0);
-    x = w0*x0 + (1.0f-w0)*x;
+        x = torch::leaky_relu(_bn5(_conv5(x)), leakyReluNegativeSlope); // 20x15x256
+        x0 = torch::leaky_relu(_bn5b(_conv5b(x0)), leakyReluNegativeSlope);
+        float w0 = (float)std::clamp(1.0-lossLevel, 0.0, 1.0);
+        x = w0*x0 + (1.0f-w0)*x;
+    }
+    else
+        x = torch::leaky_relu(_bn5b(_conv5b(x0)), leakyReluNegativeSlope);
 
     x = torch::leaky_relu(_bn6(_conv6(x)), leakyReluNegativeSlope); // 5x5x512
     x = torch::leaky_relu(_bn7(_conv7(x)), leakyReluNegativeSlope); // 4x4x512
