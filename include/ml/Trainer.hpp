@@ -81,7 +81,7 @@ private:
 
     bool startRecording();
     void nextMap(size_t newBatchEntryId = 0); // proceed to next map
-    void resetModel();
+    void setupExperiment(); // called before starting the training
     void createExperimentDirectories() const;
 };
 

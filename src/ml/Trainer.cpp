@@ -13,6 +13,7 @@
 #include "ml/Models.hpp"
 #include "ml/ModelTypeUtils.hpp"
 #include "gui/State.hpp"
+#include "util/ExperimentName.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
 #include <opencv2/highgui.hpp>
@@ -72,9 +73,7 @@ void Trainer::loop()
     if (_agentModel == nullptr)
         throw std::runtime_error("Agent model must not be nullptr");
 
-    // Setup experiment files
-    createExperimentDirectories();
-    resetModel();
+    setupExperiment();
 
     auto& doomGame = DoomGame::instance();
     _playerInitPos = doomGame.getGameState<GameState::PlayerPos>();
@@ -177,21 +176,28 @@ void Trainer::quit()
 
 void Trainer::configureExperiment(nlohmann::json&& experimentConfig)
 {
-    if (!experimentConfig.contains("experiment_root"))
-        throw std::runtime_error("Experiment config does not contain mandatory entry \"experiment_root\"");
+    // Check for mandatory entries
+    if (!experimentConfig.contains("experiment_name"))
+        throw std::runtime_error("Experiment config does not contain mandatory entry \"experiment_name\"");
     if (!experimentConfig.contains("model_type"))
         throw std::runtime_error("Experiment config does not contain mandatory entry \"model_type\"");
     if (!experimentConfig.contains("model_config"))
         throw std::runtime_error("Experiment config does not contain mandatory entry \"model_config\"");
-    if (!experimentConfig.contains("software_version"))
-        throw std::runtime_error("Experiment config does not contain mandatory entry \"software_version\"");
 
     _experimentConfig = std::move(experimentConfig);
 
     // Reset training info
     _trainingInfo.reset(); // TODO load past data if basis experiment is used
 
-    resetModel();
+    // delete the previous model
+    _model.reset();
+
+    // instantiate new model of desired type using the config above
+    ml::modelTypeNameCallback(_experimentConfig["model_type"], [&]<typename T_Model>(){
+        _model = std::make_unique<T_Model>();
+    });
+
+    _model->setTrainingInfo(&_trainingInfo);
 }
 
 void Trainer::saveExperiment()
@@ -272,17 +278,21 @@ void Trainer::nextMap(size_t newBatchEntryId)
         _encoderModel->reset();
 }
 
-void Trainer::resetModel()
+void Trainer::setupExperiment()
 {
-    // delete the previous model
-    _model.reset();
+    // Format the experiment name
+    _experimentConfig["experiment_name"] = formatExperimentName(_experimentConfig["experiment_name"],
+        _experimentConfig["model_config"]);
 
-    // instantiate new model of desired type using the config above
-    ml::modelTypeNameCallback(_experimentConfig["model_type"], [&]<typename T_Model>(){
-        _model = std::make_unique<T_Model>(&_experimentConfig);
-    });
+    if (!_experimentConfig.contains("experiment_root")) {
+        printf("INFO: No \"experiment_root\" defined. Using experiment_name: \"%s\"\n",
+            _experimentConfig["experiment_name"].get<std::string>().c_str());
+        _experimentConfig["experiment_root"] = _experimentConfig["experiment_name"];
+    }
 
-    _model->setTrainingInfo(&_trainingInfo);
+    createExperimentDirectories();
+
+    _model->init(_experimentConfig);
 }
 
 void Trainer::createExperimentDirectories() const

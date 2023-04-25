@@ -9,15 +9,14 @@
 //
 
 #include "util/ExperimentName.hpp"
-#include "gui/State.hpp"
 
 #include <sstream>
 #include <regex>
 
 
-std::string formatExperimentName(const gui::State& guiState)
+std::string formatExperimentName(const std::string& name, const nlohmann::json& modelConfig)
 {
-    std::string experimentName(guiState.experimentName);
+    std::string experimentName(name);
 
     // Replace {time} with GMT timestamp
     std::string timestamp = [](){

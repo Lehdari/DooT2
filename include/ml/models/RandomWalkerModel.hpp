@@ -23,12 +23,13 @@ namespace ml {
 
 class RandomWalkerModel final : public Model {
 public:
-    RandomWalkerModel(nlohmann::json* experimentConfig, Heatmap* heatmap=nullptr);
+    RandomWalkerModel(Heatmap* heatmap=nullptr);
     RandomWalkerModel(const RandomWalkerModel&) = delete;
     RandomWalkerModel(RandomWalkerModel&&) = delete;
     RandomWalkerModel& operator=(const RandomWalkerModel&) = delete;
     RandomWalkerModel& operator=(RandomWalkerModel&&) = delete;
 
+    void init(const nlohmann::json& experimentConfig) override;
     void reset() override;
     void infer(const TensorVector& input, TensorVector& output) override;
 

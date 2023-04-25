@@ -37,7 +37,10 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
         // Experiment name input
         ImGui::Text("Experiment name:");
         ImGui::SetNextItemWidth(windowSize.x);
-        ImGui::InputText("##ExperimentName", _guiState->experimentName, 255);
+        if (ImGui::InputText("##ExperimentName", _guiState->experimentName, 255)) {
+            if (_guiState->callbacks.contains("newModelTypeSelected"))
+                _guiState->callbacks["newModelTypeSelected"](*_guiState);
+        }
 
         // Model select
         ImGui::Text("Model:   ");

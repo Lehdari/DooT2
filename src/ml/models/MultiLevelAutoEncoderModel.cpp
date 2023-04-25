@@ -18,16 +18,6 @@
 #include <random>
 
 
-// Macro for setting config (hyper)parameter default and allowing override from model config.
-// In case the config does not contain the parameter, the default value will be written to it.
-#define MODEL_CONFIG_PARAMETER(NAME, VARIABLE, DEFAULT) \
-    VARIABLE = DEFAULT;                                 \
-    if (modelConfig.contains(NAME))                     \
-        VARIABLE = modelConfig[NAME];                   \
-    else                                                \
-        modelConfig[NAME] = VARIABLE;
-
-
 using namespace ml;
 using namespace torch;
 namespace tf = torch::nn::functional;
@@ -83,28 +73,72 @@ namespace {
         return yuvLoss(targetLaplacian, predLaplacian);
     }
 
+} // namespace
+
+nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
+{
+    nlohmann::json modelConfig;
+
+    modelConfig["frame_encoder_filename"] = "frame_encoder.pt";
+    modelConfig["frame_decoder_filename"] = "frame_decoder.pt";
+    modelConfig["optimizer_learning_rate"] = 0.001;
+    modelConfig["optimizer_beta1"] = 0.9;
+    modelConfig["optimizer_beta2"] = 0.999;
+    modelConfig["optimizer_epsilon"] = 1.0e-8;
+    modelConfig["optimizer_weight_decay"] = 0.0001;
+    modelConfig["training_iterations"] = 16*128;
+    modelConfig["optimization_interval"] = 32;
+    modelConfig["frame_loss_weight"] = 1.0;
+    modelConfig["frame_grad_loss_weight"] = 2.0;
+    modelConfig["frame_laplacian_loss_weight"] = 1.0;
+    modelConfig["use_encoding_mean_loss"] = true;
+    modelConfig["encoding_mean_loss_weight"] = 0.001;
+    modelConfig["use_encoding_codistance_loss"] = true;
+    modelConfig["encoding_codistance_loss_weight"] = 0.0001;
+    modelConfig["use_covariance_loss"] = false;
+    modelConfig["covariance_loss_weight"] = 0.0001;
+    modelConfig["initial_loss_level"] = 0.0;
+    modelConfig["target_loss"] = 0.2;
+
+    return modelConfig;
 }
 
-MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel(nlohmann::json* experimentConfig) :
-    Model                   (experimentConfig),
-    _optimizer              ({_frameEncoder->parameters(), _frameDecoder->parameters()}),
-    _trainingStartTime      (high_resolution_clock::now())
+MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
+    _optimizer                      ({_frameEncoder->parameters(), _frameDecoder->parameters()}),
+    _optimizerLearningRate          (0.001),
+    _optimizerBeta1                 (0.9),
+    _optimizerBeta2                 (0.999),
+    _optimizerEpsilon               (1.0e-8),
+    _optimizerWeightDecay           (0.0001),
+    _nTrainingIterations            (16*128),
+    _optimizationInterval           (32),
+    _frameLossWeight                (1.0),
+    _frameGradLossWeight            (2.0),
+    _frameLaplacianLossWeight       (1.0),
+    _useEncodingMeanLoss            (true),
+    _encodingMeanLossWeight         (0.001),
+    _useEncodingCodistanceLoss      (true),
+    _encodingCodistanceLossWeight   (0.0001),
+    _useCovarianceLoss              (false),
+    _covarianceLossWeight           (0.0001),
+    _targetLoss                     (0.2),
+    _lossLevel                      (0.0)
 {
-    auto& modelConfig = (*_experimentConfig)["model_config"];
-    fs::path experimentRoot = doot2::experimentsDirectory / (*_experimentConfig)["experiment_root"].get<fs::path>();
+}
+
+void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
+{
+    auto& modelConfig = experimentConfig["model_config"];
+    fs::path experimentRoot = doot2::experimentsDirectory / experimentConfig["experiment_root"].get<fs::path>();
 
     // Load torch model file names from the model config
     _frameEncoderFilename = experimentRoot / "frame_encoder.pt";
     if (modelConfig.contains("frame_encoder_filename"))
         _frameEncoderFilename = experimentRoot / modelConfig["frame_encoder_filename"].get<fs::path>();
-    else
-        modelConfig["frame_encoder_filename"] = "frame_encoder.pt";
 
     _frameDecoderFilename = experimentRoot / "frame_decoder.pt";
     if (modelConfig.contains("frame_decoder_filename"))
         _frameDecoderFilename = experimentRoot / modelConfig["frame_decoder_filename"].get<fs::path>();
-    else
-        modelConfig["frame_decoder_filename"] = "frame_decoder.pt";
 
     // Load frame encoder
     if (fs::exists(_frameEncoderFilename)) {
@@ -129,23 +163,24 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel(nlohmann::json* experimen
     }
 
     // Setup hyperparameters
-    MODEL_CONFIG_PARAMETER("optimizer_learning_rate", _optimizerLearningRate, 0.001);
-    MODEL_CONFIG_PARAMETER("optimizer_beta1", _optimizerBeta1, 0.9);
-    MODEL_CONFIG_PARAMETER("optimizer_beta2", _optimizerBeta2, 0.999);
-    MODEL_CONFIG_PARAMETER("optimizer_epsilon", _optimizerEpsilon, 1.0e-8);
-    MODEL_CONFIG_PARAMETER("optimizer_weight_decay", _optimizerWeightDecay, 0.0001);
-    MODEL_CONFIG_PARAMETER("training_iterations", _nTrainingIterations, 16*128);
-    MODEL_CONFIG_PARAMETER("optimization_interval", _optimizationInterval, 32);
-    MODEL_CONFIG_PARAMETER("frame_loss_weight", _frameLossWeight, 1.0);
-    MODEL_CONFIG_PARAMETER("frame_grad_loss_weight", _frameGradLossWeight, 2.0);
-    MODEL_CONFIG_PARAMETER("frame_laplacian_loss_weight", _frameLaplacianLossWeight, 1.0);
-    MODEL_CONFIG_PARAMETER("use_encoding_mean_loss", _useEncodingMeanLoss, true);
-    MODEL_CONFIG_PARAMETER("encoding_mean_loss_weight", _encodingMeanLossWeight, 0.001);
-    MODEL_CONFIG_PARAMETER("use_encoding_codistance_loss", _useEncodingCodistanceLoss, true);
-    MODEL_CONFIG_PARAMETER("encoding_codistance_loss_weight", _encodingCodistanceLossWeight, 0.0001);
-    MODEL_CONFIG_PARAMETER("use_covariance_loss", _useCovarianceLoss, false);
-    MODEL_CONFIG_PARAMETER("initial_loss_level", _lossLevel, 0.0);
-    MODEL_CONFIG_PARAMETER("target_loss", _targetLoss, 0.2);
+    _optimizerLearningRate = modelConfig["optimizer_learning_rate"];
+    _optimizerBeta1 = modelConfig["optimizer_beta1"];
+    _optimizerBeta2 = modelConfig["optimizer_beta2"];
+    _optimizerEpsilon = modelConfig["optimizer_epsilon"];
+    _optimizerWeightDecay = modelConfig["optimizer_weight_decay"];
+    _nTrainingIterations = modelConfig["training_iterations"];
+    _optimizationInterval = modelConfig["optimization_interval"];
+    _frameLossWeight = modelConfig["frame_loss_weight"];
+    _frameGradLossWeight = modelConfig["frame_grad_loss_weight"];
+    _frameLaplacianLossWeight = modelConfig["frame_laplacian_loss_weight"];
+    _useEncodingMeanLoss = modelConfig["use_encoding_mean_loss"];
+    _encodingMeanLossWeight = modelConfig["encoding_mean_loss_weight"];
+    _useEncodingCodistanceLoss = modelConfig["use_encoding_codistance_loss"];
+    _encodingCodistanceLossWeight = modelConfig["encoding_codistance_loss_weight"];
+    _useCovarianceLoss = modelConfig["use_covariance_loss"];
+    _covarianceLossWeight = modelConfig["covariance_loss_weight"];
+    _targetLoss = modelConfig["target_loss"];
+    _lossLevel = modelConfig["initial_loss_level"];
 
     // Setup optimizer
     dynamic_cast<torch::optim::AdamWOptions&>(_optimizer.param_groups()[0].options())
@@ -153,6 +188,8 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel(nlohmann::json* experimen
         .betas({_optimizerBeta1, _optimizerBeta2})
         .eps(_optimizerEpsilon)
         .weight_decay(_optimizerWeightDecay);
+
+    _trainingStartTime = high_resolution_clock::now();
 }
 
 void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)

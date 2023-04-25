@@ -20,8 +20,7 @@ using namespace ml;
 using namespace gvizdoom;
 
 
-RandomWalkerModel::RandomWalkerModel(nlohmann::json* experimentConfig, Heatmap* heatmap) :
-    Model       (experimentConfig),
+RandomWalkerModel::RandomWalkerModel(Heatmap* heatmap) :
     _heatmap    (heatmap)
 {
     reset();
@@ -43,6 +42,10 @@ void RandomWalkerModel::reset()
         _heatmap->applyExitPositionPriori(doomGame.getGameState<GameState::ExitPos>(), 0.25f);
         _heatmapValuePrev = _heatmap->sample(playerPos);
     }
+}
+
+void RandomWalkerModel::init(const nlohmann::json& experimentConfig)
+{
 }
 
 void RandomWalkerModel::infer(const TensorVector& input, TensorVector& output)

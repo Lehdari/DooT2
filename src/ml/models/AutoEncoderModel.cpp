@@ -70,8 +70,7 @@ namespace {
 }
 
 
-AutoEncoderModel::AutoEncoderModel(nlohmann::json* experimentConfig) :
-    Model               (experimentConfig),
+AutoEncoderModel::AutoEncoderModel() :
     _optimizer          ({
         _frameEncoder->parameters(),
         _frameDecoder->parameters(),
@@ -79,27 +78,25 @@ AutoEncoderModel::AutoEncoderModel(nlohmann::json* experimentConfig) :
         torch::optim::AdamWOptions(learningRate).betas({0.9, 0.999}).weight_decay(0.001)),
     _trainingStartTime  (high_resolution_clock::now())
 {
-    auto& modelConfig = (*_experimentConfig)["model_config"];
-    fs::path experimentRoot = doot2::experimentsDirectory / (*_experimentConfig)["experiment_root"].get<fs::path>();
+}
+
+void AutoEncoderModel::init(const nlohmann::json& experimentConfig)
+{
+    auto& modelConfig = experimentConfig["model_config"];
+    fs::path experimentRoot = doot2::experimentsDirectory / experimentConfig["experiment_root"].get<fs::path>();
 
     // Load torch model file names from the model config
     _frameEncoderFilename = experimentRoot / "frame_encoder.pt";
     if (modelConfig.contains("frame_encoder_filename"))
         _frameEncoderFilename = experimentRoot / modelConfig["frame_encoder_filename"].get<fs::path>();
-    else
-        modelConfig["frame_encoder_filename"] = "frame_encoder.pt";
 
     _frameDecoderFilename = experimentRoot / "frame_decoder.pt";
     if (modelConfig.contains("frame_decoder_filename"))
         _frameDecoderFilename = experimentRoot / modelConfig["frame_decoder_filename"].get<fs::path>();
-    else
-        modelConfig["frame_decoder_filename"] = "frame_decoder.pt";
 
     _flowDecoderFilename = experimentRoot / "flow_decoder.pt";
     if (modelConfig.contains("flow_decoder_filename"))
         _flowDecoderFilename = experimentRoot / modelConfig["flow_decoder_filename"].get<fs::path>();
-    else
-        modelConfig["flow_decoder_filename"] = "flow_decoder.pt";
 
     // Load frame encoder
     if (fs::exists(_frameEncoderFilename)) {

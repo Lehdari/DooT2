@@ -27,12 +27,15 @@ struct TrainingInfo;
 
 class MultiLevelAutoEncoderModel final : public Model {
 public:
-    MultiLevelAutoEncoderModel(nlohmann::json* experimentConfig);
+    static nlohmann::json getDefaultModelConfig();
+
+    MultiLevelAutoEncoderModel();
     MultiLevelAutoEncoderModel(const MultiLevelAutoEncoderModel&) = delete;
     MultiLevelAutoEncoderModel(MultiLevelAutoEncoderModel&&) = delete;
     MultiLevelAutoEncoderModel& operator=(const MultiLevelAutoEncoderModel&) = delete;
     MultiLevelAutoEncoderModel& operator=(MultiLevelAutoEncoderModel&&) = delete;
 
+    void init(const nlohmann::json& experimentConfig) override;
     void setTrainingInfo(TrainingInfo* trainingInfo) override;
     void save() override;
     void infer(const TensorVector& input, TensorVector& output) override;

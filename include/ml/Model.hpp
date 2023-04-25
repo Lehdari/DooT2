@@ -31,16 +31,15 @@ struct TrainingInfo;
 
 // Interface class for models, which provides facilities for synchronous and
 // asynchronous (threaded) training.
-// Implement pure virtual functions infer() and trainImpl() in the derived class.
+// Implement pure virtual functions init(), infer() and trainImpl() in the derived class.
 // Optionally, the default functionalities of setTrainingInfo(), reset() and save() can be overridden.
 class Model {
 public:
-    // experimentConfig is a handle to the experiment configuration which is reinstantiated
-    // when starting a training process. Even though models have access to the entire
-    // experiment configuration object, only contents under the "model_config" subobject
-    // should be modified.
-    Model(nlohmann::json* experimentConfig);
+    Model();
     virtual ~Model() = default;
+
+    // Initialize the model using an experiment config
+    virtual void init(const nlohmann::json& experimentConfig) = 0;
 
     // Set pointer to training info
     virtual void setTrainingInfo(TrainingInfo* trainingInfo);
@@ -73,7 +72,6 @@ private:
     bool                    _trainingFinished;
 
 protected:
-    nlohmann::json*         _experimentConfig;
     TrainingInfo*           _trainingInfo;
 
     std::atomic_bool        _abortTraining{false};

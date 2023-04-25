@@ -30,12 +30,13 @@ struct TrainingInfo;
 
 class AutoEncoderModel final : public Model {
 public:
-    AutoEncoderModel(nlohmann::json* experimentConfig);
+    AutoEncoderModel();
     AutoEncoderModel(const AutoEncoderModel&) = delete;
     AutoEncoderModel(AutoEncoderModel&&) = delete;
     AutoEncoderModel& operator=(const AutoEncoderModel&) = delete;
     AutoEncoderModel& operator=(AutoEncoderModel&&) = delete;
 
+    void init(const nlohmann::json& experimentConfig) override;
     void setTrainingInfo(TrainingInfo* trainingInfo) override;
     void save() override;
     void infer(const TensorVector& input, TensorVector& output) override;

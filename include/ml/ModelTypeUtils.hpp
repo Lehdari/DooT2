@@ -110,4 +110,37 @@ void modelForEachTypeCallback(F&& f)
 
 } // namespace ml
 
+namespace detail {
+
+    // Utilities for checking the existence of getDefaultModelConfig and calling it
+    template <typename T_Model, typename = void>
+    struct HasGetDefaultModelConfig : std::false_type {};
+    template <typename T_Model>
+    struct HasGetDefaultModelConfig<T_Model, decltype((void)T_Model::getDefaultModelConfig, void())> : std::true_type {};
+
+    template <class T_Model>
+    nlohmann::json getDefaultModelConfigCheck(std::false_type){
+        printf("WARNING: %s does not have getDefaultModelConfig static member function, using empty model config.\n",
+            ml::ModelTypeInfo<T_Model>::name); // TODO logging
+        return {};
+    }
+    template <class T_Model>
+    nlohmann::json getDefaultModelConfigCheck(std::true_type){
+        return T_Model::getDefaultModelConfig();
+    }
+
+} // namespace detail
+
+namespace ml {
+
+// Checks the existence of getDefaultModelConfig static member function and calls it.
+// Emits a warning in case it does not exist.
+template <typename T_Model>
+nlohmann::json getDefaultModelConfig()
+{
+    return detail::getDefaultModelConfigCheck<T_Model>(detail::HasGetDefaultModelConfig<T_Model>{});
+}
+
+} // namespace ml
+
 #undef ML_MODEL_TYPES

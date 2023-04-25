@@ -10,12 +10,9 @@
 
 #pragma once
 
+#include <nlohmann/json.hpp>
+
 #include <string>
 
 
-namespace gui {
-struct State;
-} // namespace gui
-
-
-std::string formatExperimentName(const gui::State& guiState); // TODO maybe move to utils?
+std::string formatExperimentName(const std::string& name, const nlohmann::json& modelConfig);

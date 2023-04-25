@@ -33,7 +33,7 @@ int main()
     // Initialize models
     Heatmap randomWalkerHeatmap({512, 32.0f,
         doomGame.getGameState<gvizdoom::GameState::PlayerPos>().block<2,1>(0,0)});
-    ml::RandomWalkerModel agentModel(nullptr, &randomWalkerHeatmap); // model used for agent
+    ml::RandomWalkerModel agentModel(&randomWalkerHeatmap); // model used for agent
 
     ml::Trainer trainer(&agentModel, nullptr, cliBatchSize, cliSequenceLength);
     App app(&trainer);

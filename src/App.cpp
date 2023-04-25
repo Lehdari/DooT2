@@ -10,8 +10,9 @@
 
 #include "App.hpp"
 #include "Constants.hpp"
+#include "ml/Models.hpp"
+#include "ml/ModelTypeUtils.hpp"
 #include "ml/Trainer.hpp"
-#include "util/ExperimentName.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
 #include "glad/glad.h"
@@ -163,7 +164,9 @@ void App::trainingControl()
             if (_trainerThread.joinable()) // thread running, continue business as usual
                 break;
 
-            // no trainer thread running, instantiate new model and launch the training
+            // no trainer thread running, launch it
+            (*_trainer->getExperimentConfig())["experiment_name"] = _gui.getState().experimentName;
+            (*_trainer->getExperimentConfig()).erase("experiment_root");
             _trainerThread = std::thread(&ml::Trainer::loop, _trainer);
         }   break;
         case gui::State::TrainingStatus::PAUSED: {
@@ -181,9 +184,11 @@ void App::resetExperiment()
 
     // Setup experiment config
     nlohmann::json experimentConfig;
-    experimentConfig["experiment_root"] = formatExperimentName(_gui.getState());
+    experimentConfig["experiment_name"] = _gui.getState().experimentName;
     experimentConfig["model_type"] = _gui.getState().modelTypeName;
-    experimentConfig["model_config"] = nlohmann::json(); // TODO temp
+    modelTypeNameCallback(_gui.getState().modelTypeName, [&]<typename T_Model>(){ // load the default model config
+        experimentConfig["model_config"] = getDefaultModelConfig<T_Model>();
+    });
     experimentConfig["software_version"] = GIT_VERSION;
 
     _trainer->configureExperiment(std::move(experimentConfig));

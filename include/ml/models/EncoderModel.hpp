@@ -20,12 +20,13 @@ namespace ml {
 
     class EncoderModel final : public Model {
     public:
-        EncoderModel(nlohmann::json* experimentConfig);
+        EncoderModel();
         EncoderModel(const EncoderModel&) = delete;
         EncoderModel(EncoderModel&&) = delete;
         EncoderModel& operator=(const EncoderModel&) = delete;
         EncoderModel& operator=(EncoderModel&&) = delete;
 
+        void init(const nlohmann::json& experimentConfig) override;
         void infer(const TensorVector& input, TensorVector& output) override;
 
     private:

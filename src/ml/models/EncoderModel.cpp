@@ -14,8 +14,11 @@
 using namespace ml;
 
 
-EncoderModel::EncoderModel(nlohmann::json* experimentConfig) :
-    Model(experimentConfig)
+EncoderModel::EncoderModel()
+{
+}
+
+void EncoderModel::init(const nlohmann::json& experimentConfig)
 {
 }
 
