@@ -39,7 +39,7 @@ set(DOOT2_ML_SOURCES
     src/ml/modules/ResNeXtModule.cpp
 )
 set(DOOT2_UTIL_SOURCES
-    src/util/ExperimentName.cpp
+    src/util/ExperimentUtils.cpp
     src/util/SequenceStorage.cpp
     src/util/TimeSeries.cpp
 )

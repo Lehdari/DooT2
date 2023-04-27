@@ -8,7 +8,7 @@
 // with this source code package.
 //
 
-#include "util/ExperimentName.hpp"
+#include "util/ExperimentUtils.hpp"
 
 #include <sstream>
 #include <regex>

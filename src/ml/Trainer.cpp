@@ -13,7 +13,7 @@
 #include "ml/Models.hpp"
 #include "ml/ModelTypeUtils.hpp"
 #include "gui/State.hpp"
-#include "util/ExperimentName.hpp"
+#include "util/ExperimentUtils.hpp"
 
 #include "gvizdoom/DoomGame.hpp"
 #include <opencv2/highgui.hpp>
