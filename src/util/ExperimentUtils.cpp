@@ -9,6 +9,7 @@
 //
 
 #include "util/ExperimentUtils.hpp"
+#include "Constants.hpp"
 
 #include <sstream>
 #include <regex>
@@ -32,4 +33,12 @@ std::string formatExperimentName(const std::string& name, const nlohmann::json& 
     experimentName = std::regex_replace(experimentName, std::regex("\\{version}"), GIT_VERSION);
 
     return experimentName;
+}
+
+std::filesystem::path experimentRootFromString(const std::string& experimentRoot)
+{
+    std::filesystem::path root = experimentRoot;
+    if (!root.is_absolute())
+        root = doot2::experimentsDirectory / root;
+    return root;
 }
