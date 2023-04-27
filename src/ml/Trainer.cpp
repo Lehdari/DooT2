@@ -73,8 +73,6 @@ void Trainer::loop()
     if (_agentModel == nullptr)
         throw std::runtime_error("Agent model must not be nullptr");
 
-    setupExperiment();
-
     auto& doomGame = DoomGame::instance();
     _playerInitPos = doomGame.getGameState<GameState::PlayerPos>();
 
@@ -184,20 +182,46 @@ void Trainer::configureExperiment(nlohmann::json&& experimentConfig)
     if (!experimentConfig.contains("model_config"))
         throw std::runtime_error("Experiment config does not contain mandatory entry \"model_config\"");
 
+    std::string previousModelType;
+    if (_experimentConfig.contains("model_type"))
+        previousModelType = _experimentConfig["model_type"];
+
     _experimentConfig = std::move(experimentConfig);
 
-    // Reset training info
-    _trainingInfo.reset(); // TODO load past data if basis experiment is used
+    // Reset training info, load base experiment data if one is specified
+    loadBaseExperimentTrainingInfo();
 
-    // delete the previous model
-    _model.reset();
+    // Check if the model type has changed, reinstantiate the model in that case
+    if (previousModelType != _experimentConfig["model_type"].get<std::string>()) {
+        // delete the previous model
+        _model.reset();
 
-    // instantiate new model of desired type using the config above
-    ml::modelTypeNameCallback(_experimentConfig["model_type"], [&]<typename T_Model>(){
-        _model = std::make_unique<T_Model>();
-    });
+        // instantiate new model of desired type using the config above
+        ml::modelTypeNameCallback(_experimentConfig["model_type"], [&]<typename T_Model>() {
+            _model = std::make_unique<T_Model>();
+        });
+    }
 
     _model->setTrainingInfo(&_trainingInfo);
+}
+
+void Trainer::setupExperiment()
+{
+    // Format the experiment name
+    _experimentConfig["experiment_name"] = formatExperimentName(_experimentConfig["experiment_name"],
+        _experimentConfig["model_config"]);
+
+    if (!_experimentConfig.contains("experiment_root")) {
+        printf("INFO: No \"experiment_root\" defined. Using experiment_name: \"%s\"\n",
+            _experimentConfig["experiment_name"].get<std::string>().c_str());
+        _experimentConfig["experiment_root"] = _experimentConfig["experiment_name"];
+    }
+
+    createExperimentDirectories();
+    loadBaseExperimentTrainingInfo();
+
+    _model->setTrainingInfo(&_trainingInfo);
+    _model->init(_experimentConfig);
 }
 
 void Trainer::saveExperiment()
@@ -278,23 +302,6 @@ void Trainer::nextMap(size_t newBatchEntryId)
         _encoderModel->reset();
 }
 
-void Trainer::setupExperiment()
-{
-    // Format the experiment name
-    _experimentConfig["experiment_name"] = formatExperimentName(_experimentConfig["experiment_name"],
-        _experimentConfig["model_config"]);
-
-    if (!_experimentConfig.contains("experiment_root")) {
-        printf("INFO: No \"experiment_root\" defined. Using experiment_name: \"%s\"\n",
-            _experimentConfig["experiment_name"].get<std::string>().c_str());
-        _experimentConfig["experiment_root"] = _experimentConfig["experiment_name"];
-    }
-
-    createExperimentDirectories();
-
-    _model->init(_experimentConfig);
-}
-
 void Trainer::createExperimentDirectories() const
 {
     fs::path experimentDir = doot2::experimentsDirectory / _experimentConfig["experiment_root"];
@@ -303,4 +310,24 @@ void Trainer::createExperimentDirectories() const
         if (!fs::create_directories(experimentDir))
             throw std::runtime_error("Could not create the directory \""+experimentDir.string()+"\"");
     }
+}
+
+void Trainer::loadBaseExperimentTrainingInfo()
+{
+    _trainingInfo.reset();
+
+    if (!_experimentConfig.contains("experiment_base_root"))
+        return; // no base experiment specified, return
+
+    fs::path timeSeriesPath = _experimentConfig["experiment_base_root"].get<fs::path>() / "time_series.json";
+    if (!fs::exists(timeSeriesPath)) {
+        printf("WARNING: Base experiment specified in config but time series data was not found (%s).",
+            timeSeriesPath.c_str()); // TODO logging
+        return;
+    }
+
+    // TODO handle potential exceptions
+    std::ifstream timeSeriesFile(timeSeriesPath);
+    auto timeSeriesJson = nlohmann::json::parse(timeSeriesFile);
+    _trainingInfo.timeSeries.write()->fromJson<double>(timeSeriesJson);
 }

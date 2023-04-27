@@ -50,7 +50,13 @@ private:
     gui::Gui                    _gui;
 
     void trainingControl();
-    void resetExperiment(); // shouldn't be called when training thread is running
+
+    // For updating possible changes made in GUI
+    void updateExperimentConfig(nlohmann::json& experimentConfig);
+
+    // Reset the whole experiment, create new config and instantiate new model.
+    // Shouldn't be called when training thread is running.
+    void resetExperiment();
 };
 
 

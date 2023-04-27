@@ -140,26 +140,36 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     if (modelConfig.contains("frame_decoder_filename"))
         _frameDecoderFilename = experimentRoot / modelConfig["frame_decoder_filename"].get<fs::path>();
 
+    // Separate loading paths in case a base experiment is specified
+    fs::path frameEncoderFilename = _frameEncoderFilename;
+    fs::path frameDecoderFilename = _frameDecoderFilename;
+    if (experimentConfig.contains("experiment_base_root") && experimentConfig.contains("base_model_config")) {
+        frameEncoderFilename = experimentConfig["experiment_base_root"].get<fs::path>() /
+            experimentConfig["base_model_config"]["frame_encoder_filename"].get<fs::path>();
+        frameDecoderFilename = experimentConfig["experiment_base_root"].get<fs::path>() /
+            experimentConfig["base_model_config"]["frame_decoder_filename"].get<fs::path>();
+    }
+
     // Load frame encoder
-    if (fs::exists(_frameEncoderFilename)) {
-        printf("Loading frame encoder model from %s\n", _frameEncoderFilename.c_str()); // TODO logging
+    if (fs::exists(frameEncoderFilename)) {
+        printf("Loading frame encoder model from %s\n", frameEncoderFilename.c_str()); // TODO logging
         serialize::InputArchive inputArchive;
-        inputArchive.load_from(_frameEncoderFilename);
+        inputArchive.load_from(frameEncoderFilename);
         _frameEncoder->load(inputArchive);
     }
     else {
-        printf("No %s found. Initializing new frame encoder model.\n", _frameEncoderFilename.c_str()); // TODO logging
+        printf("No %s found. Initializing new frame encoder model.\n", frameEncoderFilename.c_str()); // TODO logging
     }
 
     // Load frame decoder
-    if (fs::exists(_frameDecoderFilename)) {
-        printf("Loading frame decoder model from %s\n", _frameDecoderFilename.c_str()); // TODO logging
+    if (fs::exists(frameDecoderFilename)) {
+        printf("Loading frame decoder model from %s\n", frameDecoderFilename.c_str()); // TODO logging
         serialize::InputArchive inputArchive;
-        inputArchive.load_from(_frameDecoderFilename);
+        inputArchive.load_from(frameDecoderFilename);
         _frameDecoder->load(inputArchive);
     }
     else {
-        printf("No %s found. Initializing new frame decoder model.\n", _frameDecoderFilename.c_str()); // TODO logging
+        printf("No %s found. Initializing new frame decoder model.\n", frameDecoderFilename.c_str()); // TODO logging
     }
 
     // Setup hyperparameters

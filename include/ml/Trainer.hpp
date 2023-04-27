@@ -50,6 +50,7 @@ public:
     void quit();
 
     void configureExperiment(nlohmann::json&& experimentConfig);
+    void setupExperiment(); // called before starting the training loop
     void saveExperiment();
 
     // Access the model that is being trained
@@ -81,8 +82,8 @@ private:
 
     bool startRecording();
     void nextMap(size_t newBatchEntryId = 0); // proceed to next map
-    void setupExperiment(); // called before starting the training
     void createExperimentDirectories() const;
+    void loadBaseExperimentTrainingInfo();
 };
 
 } // namespace ml

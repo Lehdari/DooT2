@@ -44,10 +44,12 @@ struct State {
         STOPPED = 0,
         ONGOING = 1,
         PAUSED  = 2
-    }               trainingStatus      {TrainingStatus::STOPPED};
+    }               trainingStatus          {TrainingStatus::STOPPED};
 
-    char            experimentName[256] {"ex_{time}_{version}"};
-    std::string     modelTypeName       {"AutoEncoderModel"}; // type name of the model to be trained
+    char            experimentName[256]     {"ex_{time}_{version}"};
+    std::string     experimentBase          {""};
+    nlohmann::json  baseExperimentConfig;
+    std::string     modelTypeName           {"AutoEncoderModel"}; // type name of the model to be trained
 };
 
 } // namespace gui

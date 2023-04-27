@@ -16,6 +16,7 @@
 
 #include "gvizdoom/DoomGame.hpp"
 #include "glad/glad.h"
+#include "util/ExperimentUtils.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -79,7 +80,7 @@ App::App(Trainer* trainer) :
 
     // Initialize gui
     _gui.init(_window, &_glContext);
-    _gui.setCallback("newModelTypeSelected", [&](const gui::State& guiState){ resetExperiment(); });
+    _gui.setCallback("resetExperiment", [&](const gui::State& guiState){ resetExperiment(); });
     _gui.update(_trainer->getTrainingInfo());
 
     // Read gui layout from the layout file
@@ -165,14 +166,28 @@ void App::trainingControl()
                 break;
 
             // no trainer thread running, launch it
-            (*_trainer->getExperimentConfig())["experiment_name"] = _gui.getState().experimentName;
-            (*_trainer->getExperimentConfig()).erase("experiment_root");
+            updateExperimentConfig(*_trainer->getExperimentConfig());
+            _trainer->setupExperiment(); // needed for updated training info
+            _gui.update(_trainer->getTrainingInfo()); // communicate potential changes in training info to gui
             _trainerThread = std::thread(&ml::Trainer::loop, _trainer);
         }   break;
         case gui::State::TrainingStatus::PAUSED: {
             // TODO, requires pausing interface for Model
         }   break;
     }
+}
+
+void App::updateExperimentConfig(nlohmann::json& experimentConfig)
+{
+    // TODO This is here so that when using macros in the experiment name a new directory is generated.
+    // TODO It is planned be overridable from the experiment configuration GUI section.
+    if (experimentConfig.contains("experiment_root"))
+        experimentConfig.erase("experiment_root");
+
+    experimentConfig["experiment_name"] = _gui.getState().experimentName;
+    if (!_gui.getState().experimentBase.empty())
+        experimentConfig["experiment_base_root"] = experimentRootFromString(_gui.getState().experimentBase);
+    experimentConfig["software_version"] = GIT_VERSION;
 }
 
 void App::resetExperiment()
@@ -184,12 +199,18 @@ void App::resetExperiment()
 
     // Setup experiment config
     nlohmann::json experimentConfig;
-    experimentConfig["experiment_name"] = _gui.getState().experimentName;
+    updateExperimentConfig(experimentConfig);
     experimentConfig["model_type"] = _gui.getState().modelTypeName;
-    modelTypeNameCallback(_gui.getState().modelTypeName, [&]<typename T_Model>(){ // load the default model config
-        experimentConfig["model_config"] = getDefaultModelConfig<T_Model>();
-    });
-    experimentConfig["software_version"] = GIT_VERSION;
+    if (_gui.getState().baseExperimentConfig.contains("model_config")) {
+        experimentConfig["model_config"] = _gui.getState().baseExperimentConfig["model_config"];
+        // model config may change, store also the original
+        experimentConfig["base_model_config"] = _gui.getState().baseExperimentConfig["model_config"];
+    }
+    else {
+        modelTypeNameCallback(_gui.getState().modelTypeName, [&]<typename T_Model>() { // load the default model config
+            experimentConfig["model_config"] = getDefaultModelConfig<T_Model>();
+        });
+    }
 
     _trainer->configureExperiment(std::move(experimentConfig));
     _gui.update(_trainer->getTrainingInfo());

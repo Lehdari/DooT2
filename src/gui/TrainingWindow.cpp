@@ -13,9 +13,13 @@
 #include "ml/Models.hpp"
 #include "ml/ModelTypeUtils.hpp"
 #include "ml/Trainer.hpp"
+#include "util/ExperimentUtils.hpp"
 
 #include "imgui.h"
 #include "misc/cpp/imgui_stdlib.h"
+
+
+namespace fs = std::filesystem;
 
 
 gui::TrainingWindow::TrainingWindow(std::set<int>* activeIds, State* guiState, int id) :
@@ -36,39 +40,70 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
 
         // Flag for disabling all settings when training's in progress
         bool trainingInProgress = _guiState->trainingStatus != State::TrainingStatus::STOPPED;
-        ImGui::BeginDisabled(trainingInProgress);
 
-        // Experiment name input
-        ImGui::Text("Experiment name:");
-        ImGui::SetNextItemWidth(windowSize.x);
-        if (ImGui::InputText("##ExperimentName", _guiState->experimentName, 255)) {
-            if (_guiState->callbacks.contains("newModelTypeSelected"))
-                _guiState->callbacks["newModelTypeSelected"](*_guiState);
-        }
+        if (ImGui::CollapsingHeader("Experiment configuration")) {
+            ImGui::BeginDisabled(trainingInProgress);
 
-        // Model select
-        ImGui::Text("Model:   ");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(windowSize.x - fontSize*6.35f);
-        if (ImGui::BeginCombo("##ModelSelector", _guiState->modelTypeName.c_str())) {
-            ml::modelForEachTypeCallback([&]<typename T_Model>() {
-                constexpr auto name = ml::ModelTypeInfo<T_Model>::name;
-                bool isSelected = (_guiState->modelTypeName == name);
-                if (ImGui::Selectable(name, isSelected)) {
-                    // Call the callback function for new model type selection (in case it's defined)
-                    if (_guiState->modelTypeName != name && _guiState->callbacks.contains("newModelTypeSelected")) {
-                        _guiState->modelTypeName = name;
-                        _guiState->callbacks["newModelTypeSelected"](*_guiState);
+            // Experiment name input
+            ImGui::Text("Experiment name:");
+            ImGui::SetNextItemWidth(windowSize.x - fontSize * 2.0f);
+            ImGui::InputText("##ExperimentName", _guiState->experimentName, 255);
+
+            // Experiment base input
+            ImGui::Text("Experiment base:");
+            ImGui::SetNextItemWidth(windowSize.x - fontSize * 2.0f);
+            if (ImGui::InputText("##ExperimentBase", &_guiState->experimentBase) &&
+                !_guiState->experimentBase.empty()) {
+                auto baseRoot = experimentRootFromString(_guiState->experimentBase);
+                if (fs::exists(baseRoot)) { // valid experiment root passed, let's check if there's a config
+                    fs::path baseExperimentConfigFilename = baseRoot / "experiment_config.json";
+                    if (fs::exists(baseExperimentConfigFilename)) { // config found, parse it
+                        std::ifstream baseExperimentConfigFile(baseExperimentConfigFilename);
+                        _guiState->baseExperimentConfig = nlohmann::json::parse(baseExperimentConfigFile);
+                        if (_guiState->baseExperimentConfig.contains("model_type")) { // reset the model
+                            _guiState->modelTypeName = _guiState->baseExperimentConfig["model_type"];
+                            if (_guiState->callbacks.contains("resetExperiment"))
+                                _guiState->callbacks["resetExperiment"](*_guiState);
+                        }
+                        else
+                            printf("WARNING: No model_type specified in the base experiment config\n"); // TODO logging
                     }
+                    else
+                        printf("WARNING: No experiment config from %s found!\n", baseExperimentConfigFilename.c_str());
                 }
-                if (isSelected)
-                    ImGui::SetItemDefaultFocus();
-            });
+            }
+            if (ImGui::Button("Reload model config")) { // reload model config from the base experiment
+                if (_guiState->baseExperimentConfig.contains("model_config"))
+                    (*trainer->getExperimentConfig())["model_config"] = _guiState->baseExperimentConfig["model_config"];
+                else
+                    printf("WARNING: No base experiment model config found\n"); // TODO logging
+            }
 
-            ImGui::EndCombo();
+            // Model select
+            ImGui::BeginDisabled(!_guiState->experimentBase.empty()); // Same model type forced when using a base experiment
+            ImGui::Text("Model:");
+            ImGui::SetNextItemWidth(windowSize.x - fontSize * 2.0f);
+            if (ImGui::BeginCombo("##ModelSelector", _guiState->modelTypeName.c_str())) {
+                ml::modelForEachTypeCallback([&]<typename T_Model>() {
+                    constexpr auto name = ml::ModelTypeInfo<T_Model>::name;
+                    bool isSelected = (_guiState->modelTypeName == name);
+                    if (ImGui::Selectable(name, isSelected)) {
+                        // Call the callback function for new model type selection (in case it's defined)
+                        if (_guiState->modelTypeName != name && _guiState->callbacks.contains("resetExperiment")) {
+                            _guiState->modelTypeName = name;
+                            _guiState->callbacks["resetExperiment"](*_guiState);
+                        }
+                    }
+                    if (isSelected)
+                        ImGui::SetItemDefaultFocus();
+                });
+
+                ImGui::EndCombo();
+            }
+            ImGui::EndDisabled();
+
+            ImGui::EndDisabled();
         }
-
-        ImGui::EndDisabled();
 
         // Model config table
         if (ImGui::CollapsingHeader("Model configuration")) {
@@ -98,7 +133,8 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
                                 ImGui::Checkbox("##value", &v);
                                 paramValue = v;
                             }   break;
-                            case nlohmann::json::value_t::number_integer: {
+                            case nlohmann::json::value_t::number_integer:
+                            case nlohmann::json::value_t::number_unsigned: {
                                 int v = paramValue.get<int>();
                                 ImGui::SetNextItemWidth(columnWidth);
                                 ImGui::InputInt("##value", &v);
