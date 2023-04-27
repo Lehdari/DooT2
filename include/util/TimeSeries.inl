@@ -66,6 +66,24 @@ const std::vector<T_Entry>* TimeSeries::getSeriesVector(const std::string& serie
     return &instanceStorage.at(seriesName).getVector<T_Entry>();
 }
 
+template<typename T_Entry>
+void TimeSeries::fromJson(const nlohmann::json& json)
+{
+    clear(); // delete all previous data
+
+    for (auto& [name, jsonData] : json.items()) {
+        assert(jsonData.is_array());
+        auto& series = getSeries<T_Entry>(name, T_Entry());
+        // Copy the data directly to avoid overhead from all the function pointer business
+        auto& seriesData = *static_cast<std::vector<T_Entry>*>(series._data);
+        seriesData = jsonData.template get<std::vector<T_Entry>>();
+        if (_size == 0)
+            _size = seriesData.size();
+        else
+            assert(_size == seriesData.size());
+    }
+}
+
 template<typename T_FirstEntry, typename... T_NamesAndEntries>
 void TimeSeries::addEntriesRecursive(
     const std::string& seriesName,

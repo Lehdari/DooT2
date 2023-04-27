@@ -63,6 +63,8 @@ public:
 
     // Serialize to JSON
     nlohmann::json toJson() const;
+    template <typename T_Entry>
+    void fromJson(const nlohmann::json& json); // support only for a single type for now
 
     // Get total number of TimeSeries instances
     static size_t getNumInstances();
@@ -120,6 +122,7 @@ private:
         template <typename T_Entry>
         void serializer(const std::string& seriesName, nlohmann::json& json) const;
 
+        friend class TimeSeries;
     public:
         template <typename T_Entry>
         Series(const T_Entry& defaultValue);
