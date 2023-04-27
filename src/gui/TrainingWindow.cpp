@@ -34,6 +34,10 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
         float fontSize = ImGui::GetFontSize();
         ImVec2 windowSize = ImGui::GetWindowSize();
 
+        // Flag for disabling all settings when training's in progress
+        bool trainingInProgress = _guiState->trainingStatus != State::TrainingStatus::STOPPED;
+        ImGui::BeginDisabled(trainingInProgress);
+
         // Experiment name input
         ImGui::Text("Experiment name:");
         ImGui::SetNextItemWidth(windowSize.x);
@@ -45,7 +49,6 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
         // Model select
         ImGui::Text("Model:   ");
         ImGui::SameLine();
-        ImGui::BeginDisabled(_guiState->trainingStatus != State::TrainingStatus::STOPPED); // only available when training's not in progress
         ImGui::SetNextItemWidth(windowSize.x - fontSize*6.35f);
         if (ImGui::BeginCombo("##ModelSelector", _guiState->modelTypeName.c_str())) {
             ml::modelForEachTypeCallback([&]<typename T_Model>() {
@@ -64,10 +67,13 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
 
             ImGui::EndCombo();
         }
+
         ImGui::EndDisabled();
 
         // Model config table
         if (ImGui::CollapsingHeader("Model configuration")) {
+            ImGui::BeginDisabled(trainingInProgress);
+
             auto* experimentConfig = trainer->getExperimentConfig();
             assert(experimentConfig != nullptr);
             if (experimentConfig->contains("model_config")) {
@@ -120,6 +126,8 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
                     ImGui::EndTable();
                 }
             }
+
+            ImGui::EndDisabled();
         }
 
         // Training controls
