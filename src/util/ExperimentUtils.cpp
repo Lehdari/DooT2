@@ -66,3 +66,29 @@ std::filesystem::path experimentRootFromString(const std::string& experimentRoot
         root = doot2::experimentsDirectory / root;
     return root;
 }
+
+std::vector<nlohmann::json> flattenGridSearchParameters(const nlohmann::json& json)
+{
+    auto jsonTail = json;
+    jsonTail.erase(json.begin().key());
+    std::vector<nlohmann::json> tail;
+    if (!jsonTail.empty())
+        tail = flattenGridSearchParameters(jsonTail);
+
+    std::vector<nlohmann::json> out;
+    for (auto& v : json.begin().value()) {
+        nlohmann::json j;
+        j[json.begin().key()] = v;
+        if (tail.empty()) {
+            out.push_back(std::move(j));
+        }
+        else {
+            for (auto& t: tail) {
+                auto j2 = j;
+                j2.update(t);
+                out.push_back(std::move(j2));
+            }
+        }
+    }
+    return out;
+}
