@@ -42,12 +42,13 @@ public:
 private:
     SDL_Window*                 _window;
     SDL_GLContext               _glContext;
-
     bool                        _quit;
-
     ml::Trainer*                _trainer;
     std::thread                 _trainerThread;
     gui::Gui                    _gui;
+    std::vector<nlohmann::json> _gridSearchParameters; // flattened list of parameters for grid search
+    size_t                      _gridSearchId; // ID of the current grid search experiment
+
 
     void trainingControl();
 

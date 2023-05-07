@@ -29,10 +29,11 @@ namespace fs = std::filesystem;
 
 
 App::App(Trainer* trainer) :
-    _window     (nullptr),
-    _glContext  (nullptr),
-    _quit       (false),
-    _trainer    (trainer)
+    _window         (nullptr),
+    _glContext      (nullptr),
+    _quit           (false),
+    _trainer        (trainer),
+    _gridSearchId   (0)
 {
     auto& doomGame = DoomGame::instance();
 
@@ -162,8 +163,30 @@ void App::trainingControl()
             }
         }   break;
         case gui::State::TrainingStatus::ONGOING: {
-            if (_trainerThread.joinable()) // thread running, continue business as usual
+            if (!_trainer->isFinished()) // training running, continue business as usual
                 break;
+
+            // Trainer finished, clean up the experiment
+            if (_trainerThread.joinable()) {
+                _trainerThread.join();
+                _trainer->saveExperiment();
+                if (_gridSearchId >= _gridSearchParameters.size()) {
+                    _gridSearchId = 0;
+                    _gridSearchParameters.clear();
+                    // TODO change the training status to stopped
+                }
+            }
+
+            // grid search specified, create the flattened parameter list in case it
+            if (_gui.getState().gridSearch && _gridSearchParameters.empty()) {
+                if (_gui.getState().gridSearchModelConfigParams.empty()) {
+                    printf("ERROR: Grid search specified but no model parameters specified.\n"); // TODO logging
+                }
+                else {
+                    _gridSearchParameters = flattenGridSearchParameters(_gui.getState().gridSearchModelConfigParams);
+                    _gridSearchId = 0;
+                }
+            }
 
             // no trainer thread running, launch it
             updateExperimentConfig(*_trainer->getExperimentConfig());
@@ -188,6 +211,21 @@ void App::updateExperimentConfig(nlohmann::json& experimentConfig)
     if (!_gui.getState().experimentBase.empty())
         experimentConfig["experiment_base_root"] = experimentRootFromString(_gui.getState().experimentBase);
     experimentConfig["software_version"] = GIT_VERSION;
+
+    // Apply grid search parameter changes
+    if (_gui.getState().gridSearch && !_gridSearchParameters.empty()) {
+        experimentConfig["model_config"].update(_gridSearchParameters[_gridSearchId]);
+        experimentConfig["n_training_epochs"] = 256;
+
+        // TODO logging
+        printf("INFO: Starting grid search experiment %lu / %lu, params:\n",
+            _gridSearchId+1, _gridSearchParameters.size());
+        for (auto& [param, value] : _gridSearchParameters[_gridSearchId].items()) {
+            std::cout << "    " << param << ": " << value << std::endl;
+        }
+
+        ++_gridSearchId;
+    }
 }
 
 void App::resetExperiment()
