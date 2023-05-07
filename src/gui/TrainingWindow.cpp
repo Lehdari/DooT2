@@ -47,7 +47,7 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
             // Experiment name input
             ImGui::Text("Experiment name:");
             ImGui::SetNextItemWidth(windowSize.x - fontSize * 2.0f);
-            ImGui::InputText("##ExperimentName", _guiState->experimentName, 255);
+            ImGui::InputText("##ExperimentName", &_guiState->experimentName);
 
             // Experiment base input
             ImGui::Text("Experiment base:");
