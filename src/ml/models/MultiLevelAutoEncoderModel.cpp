@@ -104,7 +104,9 @@ nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
 }
 
 MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
-    _optimizer                      ({_frameEncoder->parameters(), _frameDecoder->parameters()}),
+    _optimizer                      (std::make_unique<torch::optim::AdamW>(
+                                     std::vector<optim::OptimizerParamGroup>
+                                     {_frameEncoder->parameters(), _frameDecoder->parameters()})),
     _optimizerLearningRate          (0.001),
     _optimizerBeta1                 (0.9),
     _optimizerBeta2                 (0.999),
@@ -159,6 +161,7 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     }
     else {
         printf("No %s found. Initializing new frame encoder model.\n", frameEncoderFilename.c_str()); // TODO logging
+        *_frameEncoder = MultiLevelFrameEncoderImpl();
     }
 
     // Load frame decoder
@@ -170,6 +173,7 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     }
     else {
         printf("No %s found. Initializing new frame decoder model.\n", frameDecoderFilename.c_str()); // TODO logging
+        *_frameDecoder = MultiLevelFrameDecoderImpl();
     }
 
     // Setup hyperparameters
@@ -193,7 +197,9 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     _lossLevel = modelConfig["initial_loss_level"];
 
     // Setup optimizer
-    dynamic_cast<torch::optim::AdamWOptions&>(_optimizer.param_groups()[0].options())
+    _optimizer = std::make_unique<torch::optim::AdamW>(std::vector<optim::OptimizerParamGroup>
+        {_frameEncoder->parameters(), _frameDecoder->parameters()});
+    dynamic_cast<torch::optim::AdamWOptions&>(_optimizer->param_groups()[0].options())
         .lr(_optimizerLearningRate)
         .betas({_optimizerBeta1, _optimizerBeta2})
         .eps(_optimizerEpsilon)
@@ -425,7 +431,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
         // Apply gradients
         if (ti % _optimizationInterval == _optimizationInterval-1) {
-            _optimizer.step();
+            _optimizer->step();
             _frameEncoder->zero_grad();
             _frameDecoder->zero_grad();
 
