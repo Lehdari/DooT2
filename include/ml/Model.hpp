@@ -70,6 +70,7 @@ private:
     std::mutex              _trainingMutex;
     std::condition_variable _trainingCv;
     bool                    _trainingFinished;
+    std::atomic_int         _nAsyncCalls; // number of async calls waiting for execution
 
 protected:
     TrainingInfo*           _trainingInfo;

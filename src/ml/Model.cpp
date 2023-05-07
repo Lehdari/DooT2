@@ -17,7 +17,8 @@ using namespace ml;
 
 Model::Model() :
     _trainingFinished   (true),
-    _trainingInfo       (nullptr)
+    _trainingInfo       (nullptr),
+    _nAsyncCalls        (0)
 {
 }
 
@@ -50,24 +51,27 @@ void Model::train(SequenceStorage& storage)
 
 void Model::trainAsync(SequenceStorage storage)
 {
+    ++_nAsyncCalls;
     std::thread t(&Model::trainAsyncThreadWrapper, this, std::move(storage));
     t.detach();
 }
 
 bool Model::trainingFinished() const noexcept
 {
-    return _trainingFinished;
+    return _trainingFinished && _nAsyncCalls == 0;
 }
 
 void Model::waitForTrainingFinished() noexcept
 {
     std::unique_lock<std::mutex> lock(_trainingMutex);
-    _trainingCv.wait(lock, [&]{ return _trainingFinished; });
+    _trainingCv.wait(lock, [&]{ return trainingFinished(); });
 }
 
 void Model::trainAsyncThreadWrapper(SequenceStorage&& storage)
 {
     train(storage);
+    if (--_nAsyncCalls < 0)
+        throw std::runtime_error("Model::_nAsyncCalls < 0: BUG"); // something's gone terribly wrong with the async threading
 }
 
 void Model::abortTraining() noexcept
