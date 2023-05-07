@@ -32,6 +32,7 @@ Trainer::Trainer(
 ) :
     _rnd                        (1507715517),
     _quit                       (false),
+    _finished                   (true),
     _sequenceStorage            (batchSizeIn),
     _frame                      (Image<uint8_t>(
                                     DoomGame::instance().getScreenWidth(),
@@ -96,6 +97,7 @@ void Trainer::loop()
     TensorVector encodingTV(1); // frame converted into an encoding (output of the encoding model)
     TensorVector actionTV(1); // action output produced by the agent model
 
+    int epoch = 0;
     _quit = false;
     while (!_quit) {
         // Map the frame into a tensor
@@ -155,21 +157,35 @@ void Trainer::loop()
             // quit() might've been called in the meanwhile
             if (_quit) break;
 
-            printf("Training...\n");
             _model->trainAsync(_sequenceStorage);
             _visitedMaps.clear();
             _newPatchReady = false;
+
+            ++epoch;
+            // number of epochs training termination condition
+            if (_experimentConfig.contains("n_training_epochs") &&
+                epoch >= _experimentConfig["n_training_epochs"].get<int>()) {
+                printf("INFO: n_training_epochs reached: %d / %d, terminating experiment...\n", epoch,
+                    _experimentConfig["n_training_epochs"].get<int>()); // TODO logging
+                break;
+            }
         }
     }
 
     _model->waitForTrainingFinished();
     nextMap();
+    _finished = true;
 }
 
 void Trainer::quit()
 {
     _quit = true;
     _model->abortTraining();
+}
+
+bool Trainer::isFinished()
+{
+    return _finished;
 }
 
 void Trainer::configureExperiment(nlohmann::json&& experimentConfig)
@@ -222,6 +238,7 @@ void Trainer::setupExperiment()
 
     _model->setTrainingInfo(&_trainingInfo);
     _model->init(_experimentConfig);
+    _finished = false;
 }
 
 void Trainer::saveExperiment()
