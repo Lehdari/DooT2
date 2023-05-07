@@ -54,9 +54,9 @@ torch::Tensor ResNeXtModuleImpl::forward(torch::Tensor x)
         skip = skip.index({Slice(), Slice(None, _nOutputChannels), Slice(), Slice()});
     }
 
-    x = torch::tanh(_bn1(_conv1(x)));
-    x = torch::tanh(_bn2(_conv2(x)));
-    x = torch::tanh(_bn3(_conv3(x) + skip));
+    x = torch::leaky_relu(_bn1(_conv1(x)), leakyReluNegativeSlope);
+    x = torch::leaky_relu(_bn2(_conv2(x)), leakyReluNegativeSlope);
+    x = torch::leaky_relu(_bn3(_conv3(x) + skip), leakyReluNegativeSlope);
 
     return x;
 }
