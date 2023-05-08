@@ -208,6 +208,19 @@ void App::updateExperimentConfig(nlohmann::json& experimentConfig)
         experimentConfig.erase("experiment_root");
 
     experimentConfig["experiment_name"] = _gui.getState().experimentName;
+    experimentConfig["pwad_filenames"] = { // TODO kovakoodattua paskaa
+        assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_01.wad",
+        assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_02.wad",
+        assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_03.wad",
+        assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_04.wad",
+        assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_05.wad",
+        assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_06.wad",
+        assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_07.wad",
+        assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_08.wad",
+        assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_09.wad",
+        assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_10.wad"
+    };
+
     if (!_gui.getState().experimentBase.empty())
         experimentConfig["experiment_base_root"] = experimentRootFromString(_gui.getState().experimentBase);
     experimentConfig["software_version"] = GIT_VERSION;

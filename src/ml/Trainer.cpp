@@ -75,10 +75,10 @@ void Trainer::loop()
         throw std::runtime_error("Agent model must not be nullptr");
 
     auto& doomGame = DoomGame::instance();
-    _playerInitPos = doomGame.getGameState<GameState::PlayerPos>();
 
-    bool recording = false;
-    int nRecordedFrames = 0;
+    // Pick random first map
+    _visitedMaps.clear();
+    nextMap();
 
     // Setup YUV frame
     std::vector<float> frameYUVData(doot2::frameWidth*doot2::frameHeight*
@@ -97,6 +97,8 @@ void Trainer::loop()
     TensorVector encodingTV(1); // frame converted into an encoding (output of the encoding model)
     TensorVector actionTV(1); // action output produced by the agent model
 
+    bool recording = false;
+    int nRecordedFrames = 0;
     int epoch = 0;
     _quit = false;
     while (!_quit) {
@@ -304,10 +306,16 @@ void Trainer::nextMap(size_t newBatchEntryId)
     }
 
     gvizdoom::GameConfig newGameConfig = doomGame.getGameConfig();
+    assert(_experimentConfig.contains("pwad_filenames"));
+    auto nWads = _experimentConfig["pwad_filenames"].size();
+    int newMapId = 0;
     do {
+        auto wadId = _rnd() % nWads;
+        newGameConfig.pwadFileNames = {_experimentConfig["pwad_filenames"][wadId]};
         newGameConfig.map = _rnd()%29 + 1;
-    } while (_visitedMaps.contains(newGameConfig.map));
-    _visitedMaps.insert(newGameConfig.map);
+        newMapId = (int)wadId*100 + newGameConfig.map;
+    } while (_visitedMaps.contains(newMapId));
+    _visitedMaps.insert(newMapId);
     doomGame.restart(newGameConfig);
     doomGame.update(gvizdoom::Action()); // one update required for init position
     _playerInitPos = doomGame.getGameState<GameState::PlayerPos>();
