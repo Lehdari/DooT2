@@ -25,7 +25,7 @@ int main()
         gvizdoom::GameConfig::HUD_DISABLED, 2, false,
         3, 1, 1
     };
-    config.pwadFileNames = {{assetsDir/"wads"/"oblige01.wad"}};
+    config.pwadFileNames = {{assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_01.wad"}};
     auto& doomGame = gvizdoom::DoomGame::instance();
     doomGame.init(config);
     doomGame.update(gvizdoom::Action());
