@@ -88,13 +88,13 @@ nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
     modelConfig["optimizer_weight_decay"] = 0.0001;
     modelConfig["training_iterations"] = 16*128;
     modelConfig["optimization_interval"] = 32;
-    modelConfig["frame_loss_weight"] = 1.0;
-    modelConfig["frame_grad_loss_weight"] = 2.0;
-    modelConfig["frame_laplacian_loss_weight"] = 1.0;
+    modelConfig["frame_loss_weight"] = 1.5;
+    modelConfig["frame_grad_loss_weight"] = 1.8;
+    modelConfig["frame_laplacian_loss_weight"] = 1.5;
     modelConfig["use_encoding_mean_loss"] = true;
     modelConfig["encoding_mean_loss_weight"] = 0.001;
     modelConfig["use_encoding_codistance_loss"] = true;
-    modelConfig["encoding_codistance_loss_weight"] = 0.0001;
+    modelConfig["encoding_codistance_loss_weight"] = 0.0005;
     modelConfig["use_covariance_loss"] = false;
     modelConfig["covariance_loss_weight"] = 0.0001;
     modelConfig["initial_loss_level"] = 0.0;
@@ -114,13 +114,13 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
     _optimizerWeightDecay           (0.0001),
     _nTrainingIterations            (16*128),
     _optimizationInterval           (32),
-    _frameLossWeight                (1.0),
-    _frameGradLossWeight            (2.0),
-    _frameLaplacianLossWeight       (1.0),
+    _frameLossWeight                (1.5),
+    _frameGradLossWeight            (1.8),
+    _frameLaplacianLossWeight       (1.5),
     _useEncodingMeanLoss            (true),
     _encodingMeanLossWeight         (0.001),
     _useEncodingCodistanceLoss      (true),
-    _encodingCodistanceLossWeight   (0.0001),
+    _encodingCodistanceLossWeight   (0.0005),
     _useCovarianceLoss              (false),
     _covarianceLossWeight           (0.0001),
     _targetLoss                     (0.2),
