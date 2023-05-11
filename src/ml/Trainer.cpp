@@ -98,6 +98,7 @@ void Trainer::loop()
     TensorVector actionTV(1); // action output produced by the agent model
 
     bool recording = false;
+    bool evaluating = false;
     int nRecordedFrames = 0;
     int epoch = 0;
     _quit = false;
@@ -124,7 +125,7 @@ void Trainer::loop()
 
         // Update the game state, restart if required
         if (nRecordedFrames >= _sequenceStorage.length() || doomGame.update(action)) {
-            nextMap(_batchEntryId+1);
+            nextMap(_batchEntryId+1, evaluating);
             nRecordedFrames = 0;
             recording = false;
             continue;
@@ -153,24 +154,40 @@ void Trainer::loop()
             recording = true;
         }
 
-        // Train
+        // Train or evaluate
         if (_newPatchReady) {
             _model->waitForTrainingFinished();
             // quit() might've been called in the meanwhile
             if (_quit) break;
 
-            _model->trainAsync(_sequenceStorage);
-            _visitedMaps.clear();
-            _newPatchReady = false;
-
-            ++epoch;
-            // number of epochs training termination condition
-            if (_experimentConfig.contains("n_training_epochs") &&
-                epoch >= _experimentConfig["n_training_epochs"].get<int>()) {
-                printf("INFO: n_training_epochs reached: %d / %d, terminating experiment...\n", epoch,
-                    _experimentConfig["n_training_epochs"].get<int>()); // TODO logging
-                break;
+            if (evaluating) {
+                evaluateModel();
+                evaluating = false;
+                nextMap();
             }
+            else { // training
+                _model->trainAsync(_sequenceStorage);
+                _visitedMaps.clear();
+                _newPatchReady = false;
+                ++epoch;
+
+                // Check for evaluation epoch
+                if (_experimentConfig.contains("evaluation_interval")) {
+                    assert(_experimentConfig.contains("pwad_filenames_evaluation"));
+                    if (epoch % _experimentConfig["evaluation_interval"].get<int>() == 0) {
+                        // evaluation interval epoch hit
+                        evaluating = true;
+                    }
+                }
+            }
+        }
+
+        // number of epochs training termination condition
+        if (_experimentConfig.contains("n_training_epochs") &&
+            epoch >= _experimentConfig["n_training_epochs"].get<int>()) {
+            printf("INFO: n_training_epochs reached: %d / %d, terminating experiment...\n", epoch,
+                _experimentConfig["n_training_epochs"].get<int>()); // TODO logging
+            break;
         }
     }
 
@@ -238,6 +255,21 @@ void Trainer::setupExperiment()
     createExperimentDirectories();
     loadBaseExperimentTrainingInfo();
 
+    if (_experimentConfig.contains("evaluation_interval")) {
+        // Add evaluation input/output images
+        if (!_trainingInfo.images.contains("evaluation_input"))
+            *_trainingInfo.images["evaluation_input"].write() = Image<float>(
+                doot2::frameWidth, doot2::frameHeight, ImageFormat::YUV);
+        if (!_trainingInfo.images.contains("evaluation_output"))
+            *_trainingInfo.images["evaluation_output"].write() = Image<float>(
+                doot2::frameWidth, doot2::frameHeight, ImageFormat::YUV);
+
+        // Add evaluation time series
+        _trainingInfo.evaluationTimeSeries.write()->addSeries<double>("time", 0.0);
+        _trainingInfo.evaluationTimeSeries.write()->addSeries<double>("performanceAvg", 0.0);
+        _trainingInfo.evaluationTimeSeries.write()->addSeries<double>("performanceMin", 0.0);
+    }
+
     _model->setTrainingInfo(&_trainingInfo);
     _model->init(_experimentConfig);
     _finished = false;
@@ -298,7 +330,7 @@ bool Trainer::startRecording()
     return playerDistanceFromStart > _playerDistanceThreshold && _rnd()%256 == 0;
 }
 
-void Trainer::nextMap(size_t newBatchEntryId)
+void Trainer::nextMap(size_t newBatchEntryId, bool evaluating)
 {
     auto& doomGame = DoomGame::instance();
 
@@ -309,13 +341,24 @@ void Trainer::nextMap(size_t newBatchEntryId)
         _batchEntryId = 0;
     }
 
+    // Use training or evaluation map wads based on whether evaluation was requested
+    std::vector<fs::path> wadFilenames;
+    if (evaluating) {
+        assert(_experimentConfig.contains("pwad_filenames_evaluation"));
+        wadFilenames = _experimentConfig["pwad_filenames_evaluation"];
+    }
+    else {
+        assert(_experimentConfig.contains("pwad_filenames_training"));
+        wadFilenames = _experimentConfig["pwad_filenames_training"];
+    }
+    auto nWads = wadFilenames.size();
+
+    // Pick a new map that hasn't been visited in this batch before and restart the game
     gvizdoom::GameConfig newGameConfig = doomGame.getGameConfig();
-    assert(_experimentConfig.contains("pwad_filenames"));
-    auto nWads = _experimentConfig["pwad_filenames"].size();
     int newMapId = 0;
     do {
         auto wadId = _rnd() % nWads;
-        newGameConfig.pwadFileNames = {_experimentConfig["pwad_filenames"][wadId]};
+        newGameConfig.pwadFileNames = {wadFilenames[wadId]};
         newGameConfig.map = _rnd()%29 + 1;
         newMapId = (int)wadId*100 + newGameConfig.map;
     } while (_visitedMaps.contains(newMapId));
@@ -325,10 +368,51 @@ void Trainer::nextMap(size_t newBatchEntryId)
     _playerInitPos = doomGame.getGameState<GameState::PlayerPos>();
     _playerDistanceThreshold = _rnd()%768;
 
+    // Reset models
     _model->reset();
     _agentModel->reset();
     if (_encoderModel != nullptr)
         _encoderModel->reset();
+}
+
+void Trainer::evaluateModel()
+{
+    TensorVector inputs(1);
+    TensorVector outputs(1);
+
+    double performanceAvg = 0.0;
+    double performanceMin = std::numeric_limits<double>::max();
+    int nSamples = 0;
+    for (int i=0; i<doot2::batchSize; ++i) {
+        auto* storageFrames = _sequenceStorage.getSequence<float>("frame");
+        assert(storageFrames != nullptr);
+        torch::Tensor pixelDataIn = storageFrames->tensor();
+        for (int t=0; t<storageFrames->length(); ++t) {
+            using namespace torch::indexing;
+            inputs[0] = pixelDataIn.index({t, i, "..."}).unsqueeze(0).permute({0, 3, 1, 2});
+            _model->infer(inputs, outputs);
+
+            _trainingInfo.images["evaluation_input"].write()->copyFrom(
+                inputs[0].permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
+            _trainingInfo.images["evaluation_output"].write()->copyFrom(
+                outputs[0].permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
+
+            // TODO introduce proper performance metric(s)
+            auto loss = torch::mean(torch::abs(inputs[0]-outputs[0])).item<double>();
+            double performance = 1.0 / loss; // use inverse of l1 loss for now
+
+            performanceAvg += performance;
+            performanceMin = std::min(performanceMin, performance);
+            ++nSamples;
+        }
+    }
+
+    performanceAvg /= nSamples;
+
+    _trainingInfo.evaluationTimeSeries.write()->addEntries(
+        "performanceAvg", performanceAvg,
+        "performanceMin", performanceMin
+    );
 }
 
 void Trainer::createExperimentDirectories() const

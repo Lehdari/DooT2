@@ -207,8 +207,9 @@ void App::updateExperimentConfig(nlohmann::json& experimentConfig)
     if (experimentConfig.contains("experiment_root"))
         experimentConfig.erase("experiment_root");
 
+    // mandatory entries
     experimentConfig["experiment_name"] = _gui.getState().experimentName;
-    experimentConfig["pwad_filenames"] = { // TODO kovakoodattua paskaa
+    experimentConfig["pwad_filenames_training"] = { // filenames for wads used in training
         assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_01.wad",
         assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_02.wad",
         assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_03.wad",
@@ -221,14 +222,19 @@ void App::updateExperimentConfig(nlohmann::json& experimentConfig)
         assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_10.wad"
     };
 
+    // optional entries
     if (!_gui.getState().experimentBase.empty())
         experimentConfig["experiment_base_root"] = experimentRootFromString(_gui.getState().experimentBase);
     experimentConfig["software_version"] = GIT_VERSION;
+    experimentConfig["evaluation_interval"] = 4; // interval in epochs to run the evaluation on, TODO make controllable from the GUI
+    experimentConfig["pwad_filenames_evaluation"] = { // filenames for wads used in evaluation, mandatory if evaluation_interval is specified
+        assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_11.wad"
+    };
 
     // Apply grid search parameter changes
     if (_gui.getState().gridSearch && !_gridSearchParameters.empty()) {
         experimentConfig["model_config"].update(_gridSearchParameters[_gridSearchId]);
-        experimentConfig["n_training_epochs"] = 256;
+        experimentConfig["n_training_epochs"] = 256; // TODO make controllable from the GUI
 
         // TODO logging
         printf("INFO: Starting grid search experiment %lu / %lu, params:\n",

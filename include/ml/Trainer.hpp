@@ -83,7 +83,8 @@ private:
     float                           _playerDistanceThreshold; // distance from start to start recording
 
     bool startRecording();
-    void nextMap(size_t newBatchEntryId = 0); // proceed to next map
+    void nextMap(size_t newBatchEntryId = 0, bool evaluating = false); // proceed to next map
+    void evaluateModel();
     void createExperimentDirectories() const;
     void loadBaseExperimentTrainingInfo();
 };
