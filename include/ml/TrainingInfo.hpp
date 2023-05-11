@@ -27,7 +27,8 @@ struct TrainingInfo;
 struct TrainingInfo {
     using ImageMap = std::unordered_map<std::string, SingleBuffer<Image<float>>>;
 
-    SingleBuffer<TimeSeries>    timeSeries;
+    SingleBuffer<TimeSeries>    trainingTimeSeries;
+    SingleBuffer<TimeSeries>    evaluationTimeSeries;
     ImageMap                    images;
 
     inline void reset();
@@ -36,7 +37,8 @@ struct TrainingInfo {
 
 void TrainingInfo::reset()
 {
-    timeSeries.write()->clear();
+    trainingTimeSeries.write()->clear();
+    evaluationTimeSeries.write()->clear();
     images.clear();
 }
 

@@ -262,8 +262,12 @@ void Trainer::saveExperiment()
 
     // Save the time series data
     {
-        std::ofstream timeSeriesFile(experimentDir / "time_series.json");
-        timeSeriesFile << _trainingInfo.timeSeries.read()->toJson();
+        std::ofstream timeSeriesFile(experimentDir / "training_time_series.json");
+        timeSeriesFile << _trainingInfo.trainingTimeSeries.read()->toJson();
+    }
+    {
+        std::ofstream timeSeriesFile(experimentDir / "evaluation_time_series.json");
+        timeSeriesFile << _trainingInfo.evaluationTimeSeries.read()->toJson();
     }
 }
 
@@ -344,15 +348,33 @@ void Trainer::loadBaseExperimentTrainingInfo()
     if (!_experimentConfig.contains("experiment_base_root"))
         return; // no base experiment specified, return
 
-    fs::path timeSeriesPath = _experimentConfig["experiment_base_root"].get<fs::path>() / "time_series.json";
-    if (!fs::exists(timeSeriesPath)) {
-        printf("WARNING: Base experiment specified in config but time series data was not found (%s).",
-            timeSeriesPath.c_str()); // TODO logging
+    // Load training time series
+    fs::path trainingTimeSeriesPath = _experimentConfig["experiment_base_root"].get<fs::path>() / "training_time_series.json";
+    if (fs::exists(trainingTimeSeriesPath)) {
+        // TODO handle potential exceptions
+        std::ifstream timeSeriesFile(trainingTimeSeriesPath);
+        auto timeSeriesJson = nlohmann::json::parse(timeSeriesFile);
+        _trainingInfo.trainingTimeSeries.write()->fromJson<double>(timeSeriesJson);
+    }
+    else {
+        printf("WARNING: Base experiment specified in config but training time series data was not found (%s).\n",
+            trainingTimeSeriesPath.c_str()); // TODO logging
         return;
     }
 
-    // TODO handle potential exceptions
-    std::ifstream timeSeriesFile(timeSeriesPath);
-    auto timeSeriesJson = nlohmann::json::parse(timeSeriesFile);
-    _trainingInfo.timeSeries.write()->fromJson<double>(timeSeriesJson);
+    // Load evaluation time series
+    if (_experimentConfig.contains("evaluation_interval")) {
+        fs::path evaluationTimeSeriesPath = _experimentConfig["experiment_base_root"].get<fs::path>() / "evaluation_time_series.json";
+        if (fs::exists(evaluationTimeSeriesPath)) {
+            // TODO handle potential exceptions
+            std::ifstream timeSeriesFile(evaluationTimeSeriesPath);
+            auto timeSeriesJson = nlohmann::json::parse(timeSeriesFile);
+            _trainingInfo.evaluationTimeSeries.write()->fromJson<double>(timeSeriesJson);
+        }
+        else {
+            printf("WARNING: Base experiment and evaluation interval specified in config but evaluation time series data was not found (%s).\n",
+                evaluationTimeSeriesPath.c_str()); // TODO logging
+            return;
+        }
+    }
 }

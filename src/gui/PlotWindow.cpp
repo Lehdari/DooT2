@@ -81,7 +81,7 @@ void gui::PlotWindow::render(ml::Trainer* trainer)
         // Save button
         ImGui::SameLine();
         if (ImGui::Button("Save")) {
-            auto timeSeriesReadHandle = model->timeSeries.read();
+            auto timeSeriesReadHandle = model->trainingTimeSeries.read();
             auto plotJson = timeSeriesReadHandle->toJson();
             std::ofstream plotFile(_plotFileName);
             plotFile << plotJson;

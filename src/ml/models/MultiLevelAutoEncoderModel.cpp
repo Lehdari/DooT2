@@ -221,7 +221,7 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
     assert(_trainingInfo != nullptr);
 
     {   // Initialize the time series
-        auto timeSeriesWriteHandle = _trainingInfo->timeSeries.write();
+        auto timeSeriesWriteHandle = _trainingInfo->trainingTimeSeries.write();
         timeSeriesWriteHandle->addSeries<double>("time", 0.0);
         timeSeriesWriteHandle->addSeries<double>("frameLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("frameGradLoss", 0.0);
@@ -569,7 +569,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
             // Write the time series
             {
-                auto timeSeriesWriteHandle = _trainingInfo->timeSeries.write();
+                auto timeSeriesWriteHandle = _trainingInfo->trainingTimeSeries.write();
                 auto currentTime = high_resolution_clock::now();
 
                 timeSeriesWriteHandle->addEntries(

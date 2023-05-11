@@ -49,7 +49,8 @@ void Gui::init(SDL_Window* window, SDL_GLContext* glContext)
 
 void Gui::update(ml::TrainingInfo* trainingInfo)
 {
-    _guiState.timeSeries["training"] = &trainingInfo->timeSeries;
+    _guiState.timeSeries["training"] = &trainingInfo->trainingTimeSeries;
+    _guiState.timeSeries["evaluation"] = &trainingInfo->evaluationTimeSeries;
 
     // Update the model image relays map
     _guiState.modelImageRelays.clear();
