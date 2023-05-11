@@ -107,6 +107,7 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
     _optimizer                      (std::make_unique<torch::optim::AdamW>(
                                      std::vector<optim::OptimizerParamGroup>
                                      {_frameEncoder->parameters(), _frameDecoder->parameters()})),
+    _device                         (torch::cuda::is_available() ? torch::kCUDA : torch::kCPU),
     _optimizerLearningRate          (0.001),
     _optimizerBeta1                 (0.9),
     _optimizerBeta2                 (0.999),
@@ -175,6 +176,10 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
         printf("No %s found. Initializing new frame decoder model.\n", frameDecoderFilename.c_str()); // TODO logging
         *_frameDecoder = MultiLevelFrameDecoderImpl();
     }
+
+    // Move model parameters to GPU if it's used
+    _frameEncoder->to(_device);
+    _frameDecoder->to(_device);
 
     // Setup hyperparameters
     _optimizerLearningRate = modelConfig["optimizer_learning_rate"];
@@ -277,7 +282,67 @@ void MultiLevelAutoEncoderModel::save()
 
 void MultiLevelAutoEncoderModel::infer(const TensorVector& input, TensorVector& output)
 {
+    _frameEncoder->train(false);
+    _frameDecoder->train(false);
 
+    torch::Tensor in5 = input[0].to(_device);
+    torch::Tensor in4, in3, in2, in1;
+    if (_lossLevel > 3.0)
+        in4 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{240, 320}).mode(kArea));
+    else
+        in4 = torch::zeros({in5.sizes()[0], 3, 240, 320}, TensorOptions().device(_device));
+    if (_lossLevel > 2.0)
+        in3 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{120, 160}).mode(kArea));
+    else
+        in3 = torch::zeros({in5.sizes()[0], 3, 120, 160}, TensorOptions().device(_device));
+    if (_lossLevel > 1.0)
+        in2 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{60, 80}).mode(kArea));
+    else
+        in2 = torch::zeros({in5.sizes()[0], 3, 60, 80}, TensorOptions().device(_device));
+    if (_lossLevel > 0.0)
+        in1 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{30, 40}).mode(kArea));
+    else
+        in1 = torch::zeros({in5.sizes()[0], 3, 30, 40}, TensorOptions().device(_device));
+    torch::Tensor in0 = tf::interpolate(in5,
+        tf::InterpolateFuncOptions().size(std::vector<long>{15, 20}).mode(kArea));
+
+    // Frame encode
+    torch::Tensor enc = _frameEncoder->forward(in5, in4, in3, in2, in1, in0, _lossLevel);
+
+    // Frame decode
+    auto [out0, out1, out2, out3, out4, out5] = _frameDecoder->forward(enc, _lossLevel);
+
+    // Level weights
+    float levelWeight0 = (float)std::clamp(1.0-_lossLevel, 0.0, 1.0);
+    float levelWeight1 = (float)std::clamp(1.0-std::abs(_lossLevel-1.0), 0.0, 1.0);
+    float levelWeight2 = (float)std::clamp(1.0-std::abs(_lossLevel-2.0), 0.0, 1.0);
+    float levelWeight3 = (float)std::clamp(1.0-std::abs(_lossLevel-3.0), 0.0, 1.0);
+    float levelWeight4 = (float)std::clamp(1.0-std::abs(_lossLevel-4.0), 0.0, 1.0);
+    float levelWeight5 = (float)std::clamp(_lossLevel-4.0, 0.0, 1.0);
+
+    // Resize outputs
+    out0 = tf::interpolate(out0, tf::InterpolateFuncOptions()
+        .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
+    out1 = tf::interpolate(out1, tf::InterpolateFuncOptions()
+        .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
+    out2 = tf::interpolate(out2, tf::InterpolateFuncOptions()
+        .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
+    out3 = tf::interpolate(out3, tf::InterpolateFuncOptions()
+        .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
+    out4 = tf::interpolate(out4, tf::InterpolateFuncOptions()
+        .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
+    out5 = tf::interpolate(out5, tf::InterpolateFuncOptions()
+        .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
+
+    output.clear();
+    output.push_back((
+        levelWeight0 * out0 +
+        levelWeight1 * out1 +
+        levelWeight2 * out2 +
+        levelWeight3 * out3 +
+        levelWeight4 * out4 +
+        levelWeight5 * out5)
+        .to(input[0].device()));
 }
 
 void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
@@ -288,17 +353,15 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     // This model is used solely for training, trainingInfo must never be nullptr
     assert(_trainingInfo != nullptr);
 
-    torch::Device device(torch::cuda::is_available() ? torch::kCUDA : torch::kCPU);
-
-    // Move model parameters to GPU
-    _frameEncoder->to(device);
-    _frameDecoder->to(device);
-
     // Load the whole storage's pixel data to the GPU
     auto* storageFrames = storage.getSequence<float>("frame");
     assert(storageFrames != nullptr);
-    torch::Tensor pixelDataIn = storageFrames->tensor().to(device);
+    torch::Tensor pixelDataIn = storageFrames->tensor().to(_device);
     pixelDataIn = pixelDataIn.permute({0, 1, 4, 2, 3});
+
+    // Set training mode on
+    _frameEncoder->train(true);
+    _frameDecoder->train(true);
 
     // Zero out the gradients
     _frameEncoder->zero_grad();
@@ -306,8 +369,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
     // Used as a target for encoding distance matrix (try to get all encoding codistances to 1)
     torch::Tensor targetDistanceMatrix = torch::ones({doot2::batchSize, doot2::batchSize},
-        TensorOptions().device(device));
-    torch::Tensor zero = torch::zeros({}, TensorOptions().device(device));
+        TensorOptions().device(_device));
+    torch::Tensor zero = torch::zeros({}, TensorOptions().device(_device));
 
     double lossAcc = 0.0; // accumulate loss over the optimization interval to compute average
     double frameLossAcc = 0.0;
@@ -332,19 +395,19 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         if (_lossLevel > 3.0)
             in4 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{240, 320}).mode(kArea));
         else
-            in4 = torch::zeros({in5.sizes()[0], 3, 240, 320}, TensorOptions().device(device));
+            in4 = torch::zeros({in5.sizes()[0], 3, 240, 320}, TensorOptions().device(_device));
         if (_lossLevel > 2.0)
             in3 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{120, 160}).mode(kArea));
         else
-            in3 = torch::zeros({in5.sizes()[0], 3, 120, 160}, TensorOptions().device(device));
+            in3 = torch::zeros({in5.sizes()[0], 3, 120, 160}, TensorOptions().device(_device));
         if (_lossLevel > 1.0)
             in2 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{60, 80}).mode(kArea));
         else
-            in2 = torch::zeros({in5.sizes()[0], 3, 60, 80}, TensorOptions().device(device));
+            in2 = torch::zeros({in5.sizes()[0], 3, 60, 80}, TensorOptions().device(_device));
         if (_lossLevel > 0.0)
             in1 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{30, 40}).mode(kArea));
         else
-            in1 = torch::zeros({in5.sizes()[0], 3, 30, 40}, TensorOptions().device(device));
+            in1 = torch::zeros({in5.sizes()[0], 3, 30, 40}, TensorOptions().device(_device));
         torch::Tensor in0 = tf::interpolate(in5,
             tf::InterpolateFuncOptions().size(std::vector<long>{15, 20}).mode(kArea));
 
@@ -366,7 +429,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
             codistanceMatrix = torch::cdist(enc, enc);
             maxEncodingCodistance = torch::max(codistanceMatrix).to(torch::kCPU).item<double>();
             codistanceMatrix = codistanceMatrix + maxEncodingCodistance *
-                torch::eye(doot2::batchSize, TensorOptions().device(device));
+                torch::eye(doot2::batchSize, TensorOptions().device(_device));
             encodingCodistanceLoss = torch::mse_loss(codistanceMatrix, targetDistanceMatrix) *
                 _encodingCodistanceLossWeight;
             encodingCodistanceLossAcc += encodingCodistanceLoss.item<double>();

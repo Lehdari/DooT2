@@ -69,6 +69,7 @@ private:
     MultiLevelFrameEncoder                  _frameEncoder;
     MultiLevelFrameDecoder                  _frameDecoder;
     std::unique_ptr<torch::optim::AdamW>    _optimizer;
+    torch::Device                           _device;
     TimePoint                               _trainingStartTime;
 
     void trainImpl(SequenceStorage& storage) override;
