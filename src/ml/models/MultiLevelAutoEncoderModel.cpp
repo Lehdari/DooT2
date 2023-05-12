@@ -407,6 +407,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     double maxEncodingCodistance = 1.0; // max distance between encodings
     double maxEncodingCovariance = 1.0; // max value in the covariance matrix
     int64_t nVirtualBatchesPerCycle = (int64_t)sequenceLength / _virtualBatchSize;
+    const double framesPerCycle = (double)nVirtualBatchesPerCycle * _virtualBatchSize;
     for (int64_t c=0; c<_nTrainingCycles; ++c) {
         for (int64_t v=0; v<nVirtualBatchesPerCycle; ++v) {
             torch::Tensor in5, in4, in3, in2, in1, in0;
@@ -601,55 +602,57 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
             _frameEncoder->zero_grad();
             _frameDecoder->zero_grad();
 
-
-            lossAcc /= (double)_virtualBatchSize;
-            frameLossAcc /= (double)_virtualBatchSize;
-            frameGradLossAcc /= (double)_virtualBatchSize;
-            frameLaplacianLossAcc /= (double)_virtualBatchSize;
-            encodingCodistanceLossAcc /= (double)_virtualBatchSize;
-            encodingMeanLossAcc /= (double)_virtualBatchSize;
-            covarianceLossAcc /= (double)_virtualBatchSize;
-            encodingPrevDistanceLossAcc /= (double)_virtualBatchSize;
-
-            // Loss level adjustment
-            constexpr double controlP = 0.01;
-            // use hyperbolic error metric (asymptotically larger adjustments when loss approaches 0)
-            double error = 1.0 - (_targetLoss / (lossAcc + 1.0e-8));
-            _lossLevel -= error*controlP; // P control should suffice
-            _lossLevel = std::clamp(_lossLevel, 0.0, 5.0);
-
-            // Write the time series
-            {
-                auto timeSeriesWriteHandle = _trainingInfo->trainingTimeSeries.write();
-                auto currentTime = high_resolution_clock::now();
-
-                timeSeriesWriteHandle->addEntries(
-                    "time", (double)duration_cast<milliseconds>(currentTime-_trainingStartTime).count() / 1000.0,
-                    "frameLoss", frameLossAcc,
-                    "frameGradLoss", frameGradLossAcc,
-                    "frameLaplacianLoss", frameLaplacianLossAcc,
-                    "encodingCodistanceLoss", encodingCodistanceLossAcc,
-                    "encodingMeanLoss", encodingMeanLossAcc,
-                    "covarianceLoss", covarianceLossAcc,
-                    "encodingPrevDistanceLoss", encodingPrevDistanceLossAcc,
-                    "loss", lossAcc,
-                    "lossLevel", _lossLevel,
-                    "maxEncodingCodistance", maxEncodingCodistance,
-                    "maxEncodingCovariance", maxEncodingCovariance
-                );
-            }
-
-            lossAcc = 0.0;
-            frameLossAcc = 0.0;
-            frameGradLossAcc = 0.0;
-            frameLaplacianLossAcc = 0.0;
-            encodingCodistanceLossAcc = 0.0;
-            encodingMeanLossAcc = 0.0;
-            covarianceLossAcc = 0.0;
-            encodingPrevDistanceLossAcc = 0.0;
-
             if (_abortTraining)
                 break;
         }
+
+        lossAcc /= framesPerCycle;
+        frameLossAcc /= framesPerCycle;
+        frameGradLossAcc /= framesPerCycle;
+        frameLaplacianLossAcc /= framesPerCycle;
+        encodingCodistanceLossAcc /= framesPerCycle;
+        encodingMeanLossAcc /= framesPerCycle;
+        covarianceLossAcc /= framesPerCycle;
+        encodingPrevDistanceLossAcc /= framesPerCycle;
+
+        // Loss level adjustment
+        constexpr double controlP = 0.01;
+        // use hyperbolic error metric (asymptotically larger adjustments when loss approaches 0)
+        double error = 1.0 - (_targetLoss / (lossAcc + 1.0e-8));
+        _lossLevel -= error*controlP; // P control should suffice
+        _lossLevel = std::clamp(_lossLevel, 0.0, 5.0);
+
+        // Write the time series
+        {
+            auto timeSeriesWriteHandle = _trainingInfo->trainingTimeSeries.write();
+            auto currentTime = high_resolution_clock::now();
+
+            timeSeriesWriteHandle->addEntries(
+                "time", (double)duration_cast<milliseconds>(currentTime-_trainingStartTime).count() / 1000.0,
+                "frameLoss", frameLossAcc,
+                "frameGradLoss", frameGradLossAcc,
+                "frameLaplacianLoss", frameLaplacianLossAcc,
+                "encodingCodistanceLoss", encodingCodistanceLossAcc,
+                "encodingMeanLoss", encodingMeanLossAcc,
+                "covarianceLoss", covarianceLossAcc,
+                "encodingPrevDistanceLoss", encodingPrevDistanceLossAcc,
+                "loss", lossAcc,
+                "lossLevel", _lossLevel,
+                "maxEncodingCodistance", maxEncodingCodistance,
+                "maxEncodingCovariance", maxEncodingCovariance
+            );
+        }
+
+        lossAcc = 0.0;
+        frameLossAcc = 0.0;
+        frameGradLossAcc = 0.0;
+        frameLaplacianLossAcc = 0.0;
+        encodingCodistanceLossAcc = 0.0;
+        encodingMeanLossAcc = 0.0;
+        covarianceLossAcc = 0.0;
+        encodingPrevDistanceLossAcc = 0.0;
+
+        if (_abortTraining)
+            break;
     }
 }
