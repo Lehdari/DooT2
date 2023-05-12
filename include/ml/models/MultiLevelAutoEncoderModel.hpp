@@ -51,8 +51,8 @@ private:
     double                                  _optimizerBeta2;
     double                                  _optimizerEpsilon;
     double                                  _optimizerWeightDecay;
-    int64_t                                 _nTrainingIterations;
-    int64_t                                 _optimizationInterval; // for this many steps gradients will be accumulated before weight update
+    int64_t                                 _nTrainingCycles; // number of times the sequence collection will be cycled through in each training call
+    int64_t                                 _virtualBatchSize; // this many frames will gradients be accumulated over before the optimization step. must be at least 2
     double                                  _frameLossWeight;
     double                                  _frameGradLossWeight;
     double                                  _frameLaplacianLossWeight;
@@ -62,9 +62,12 @@ private:
     double                                  _encodingCodistanceLossWeight;
     bool                                    _useCovarianceLoss;
     double                                  _covarianceLossWeight;
+    bool                                    _useEncodingPrevDistanceLoss;
+    double                                  _encodingPrevDistanceLossWeight;
     double                                  _targetLoss; // when loss is under this value, lossLevel is increased
 
     double                                  _lossLevel; // determines the resolution the encoder
+    double                                  _batchPixelDiff; // estimate for average pixel difference between frames from different sequences
 
     MultiLevelFrameEncoder                  _frameEncoder;
     MultiLevelFrameDecoder                  _frameDecoder;

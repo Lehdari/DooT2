@@ -86,17 +86,19 @@ nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
     modelConfig["optimizer_beta2"] = 0.999;
     modelConfig["optimizer_epsilon"] = 1.0e-8;
     modelConfig["optimizer_weight_decay"] = 0.0001;
-    modelConfig["training_iterations"] = 16*128;
-    modelConfig["optimization_interval"] = 32;
+    modelConfig["n_training_cycles"] = 16;
+    modelConfig["virtual_batch_size"] = 32;
     modelConfig["frame_loss_weight"] = 1.5;
     modelConfig["frame_grad_loss_weight"] = 1.8;
     modelConfig["frame_laplacian_loss_weight"] = 1.5;
     modelConfig["use_encoding_mean_loss"] = true;
     modelConfig["encoding_mean_loss_weight"] = 0.001;
     modelConfig["use_encoding_codistance_loss"] = true;
-    modelConfig["encoding_codistance_loss_weight"] = 0.0005;
+    modelConfig["encoding_codistance_loss_weight"] = 0.004;
     modelConfig["use_covariance_loss"] = false;
     modelConfig["covariance_loss_weight"] = 0.0001;
+    modelConfig["use_encoding_prev_distance_loss"] = true;
+    modelConfig["encoding_prev_distance_loss_weight"] = 0.1;
     modelConfig["initial_loss_level"] = 0.0;
     modelConfig["target_loss"] = 0.2;
 
@@ -113,19 +115,22 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
     _optimizerBeta2                 (0.999),
     _optimizerEpsilon               (1.0e-8),
     _optimizerWeightDecay           (0.0001),
-    _nTrainingIterations            (16*128),
-    _optimizationInterval           (32),
+    _nTrainingCycles                (16),
+    _virtualBatchSize               (32),
     _frameLossWeight                (1.5),
     _frameGradLossWeight            (1.8),
     _frameLaplacianLossWeight       (1.5),
     _useEncodingMeanLoss            (true),
     _encodingMeanLossWeight         (0.001),
     _useEncodingCodistanceLoss      (true),
-    _encodingCodistanceLossWeight   (0.0005),
+    _encodingCodistanceLossWeight   (0.004),
     _useCovarianceLoss              (false),
     _covarianceLossWeight           (0.0001),
+    _useEncodingPrevDistanceLoss    (true),
+    _encodingPrevDistanceLossWeight (0.1),
     _targetLoss                     (0.2),
-    _lossLevel                      (0.0)
+    _lossLevel                      (0.0),
+    _batchPixelDiff                 (1.0)
 {
 }
 
@@ -187,8 +192,8 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     _optimizerBeta2 = modelConfig["optimizer_beta2"];
     _optimizerEpsilon = modelConfig["optimizer_epsilon"];
     _optimizerWeightDecay = modelConfig["optimizer_weight_decay"];
-    _nTrainingIterations = modelConfig["training_iterations"];
-    _optimizationInterval = modelConfig["optimization_interval"];
+    _nTrainingCycles = modelConfig["n_training_cycles"];
+    _virtualBatchSize = modelConfig["virtual_batch_size"];
     _frameLossWeight = modelConfig["frame_loss_weight"];
     _frameGradLossWeight = modelConfig["frame_grad_loss_weight"];
     _frameLaplacianLossWeight = modelConfig["frame_laplacian_loss_weight"];
@@ -198,6 +203,8 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     _encodingCodistanceLossWeight = modelConfig["encoding_codistance_loss_weight"];
     _useCovarianceLoss = modelConfig["use_covariance_loss"];
     _covarianceLossWeight = modelConfig["covariance_loss_weight"];
+    _useEncodingPrevDistanceLoss = modelConfig["use_encoding_prev_distance_loss"];
+    _encodingPrevDistanceLossWeight = modelConfig["encoding_prev_distance_loss_weight"];
     _targetLoss = modelConfig["target_loss"];
     _lossLevel = modelConfig["initial_loss_level"];
 
@@ -229,6 +236,7 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         timeSeriesWriteHandle->addSeries<double>("encodingCodistanceLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingMeanLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("covarianceLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("encodingPrevDistanceLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("loss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("lossLevel", 0.0);
         timeSeriesWriteHandle->addSeries<double>("maxEncodingCodistance", 0.0);
@@ -353,11 +361,27 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     // This model is used solely for training, trainingInfo must never be nullptr
     assert(_trainingInfo != nullptr);
 
+    const auto sequenceLength = storage.length();
+
     // Load the whole storage's pixel data to the GPU
     auto* storageFrames = storage.getSequence<float>("frame");
     assert(storageFrames != nullptr);
     torch::Tensor pixelDataIn = storageFrames->tensor().to(_device);
-    pixelDataIn = pixelDataIn.permute({0, 1, 4, 2, 3});
+    pixelDataIn = pixelDataIn.permute({0, 1, 4, 2, 3}); // permute into TBCHW
+
+    // Random sample the pixel diff to get an approximation
+    for (int i=0; i<8; ++i) {
+        // Select two frames from different sequences on timestep t
+        int t = rnd() % sequenceLength;
+        int b1 = rnd() % doot2::batchSize;
+        int b2 = rnd() % doot2::batchSize;
+        while (b2 == b1)
+            b2 = rnd() % doot2::batchSize;
+
+        // Lowpass filter the diff to prevent sudden changes
+        _batchPixelDiff = _batchPixelDiff*0.95 +
+            0.05 * torch::mean(torch::abs(pixelDataIn.index({t, b1})-pixelDataIn.index({t, b2}))).item<double>();
+    }
 
     // Set training mode on
     _frameEncoder->train(true);
@@ -379,186 +403,213 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     double encodingCodistanceLossAcc = 0.0;
     double encodingMeanLossAcc = 0.0;
     double covarianceLossAcc = 0.0;
+    double encodingPrevDistanceLossAcc = 0.0;
     double maxEncodingCodistance = 1.0; // max distance between encodings
     double maxEncodingCovariance = 1.0; // max value in the covariance matrix
-    const auto sequenceLength = storage.length();
-    for (int64_t ti=0; ti<_nTrainingIterations; ++ti){
-        // frame (time point) to use this iteration
-        int64_t t = rnd() % sequenceLength;
+    int64_t nVirtualBatchesPerCycle = (int64_t)sequenceLength / _virtualBatchSize;
+    for (int64_t c=0; c<_nTrainingCycles; ++c) {
+        for (int64_t v=0; v<nVirtualBatchesPerCycle; ++v) {
+            torch::Tensor in5, in4, in3, in2, in1, in0;
+            torch::Tensor covarianceMatrix, encPrev;
+            for (int64_t b=0; b<_virtualBatchSize; ++b) {
+                // frame (time point) to use this iteration
+                int64_t t = v*_virtualBatchSize + b;
 
-        // Pick random sequence to display
-        size_t displaySeqId = rnd() % storage.batchSize();
+                // Prepare the inputs (original and scaled)
+                in5 = pixelDataIn.index({(int)t});
+                if (_lossLevel > 3.0)
+                    in4 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{240, 320}).mode(kArea));
+                else
+                    in4 = torch::zeros({in5.sizes()[0], 3, 240, 320}, TensorOptions().device(_device));
+                if (_lossLevel > 2.0)
+                    in3 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{120, 160}).mode(kArea));
+                else
+                    in3 = torch::zeros({in5.sizes()[0], 3, 120, 160}, TensorOptions().device(_device));
+                if (_lossLevel > 1.0)
+                    in2 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{60, 80}).mode(kArea));
+                else
+                    in2 = torch::zeros({in5.sizes()[0], 3, 60, 80}, TensorOptions().device(_device));
+                if (_lossLevel > 0.0)
+                    in1 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{30, 40}).mode(kArea));
+                else
+                    in1 = torch::zeros({in5.sizes()[0], 3, 30, 40}, TensorOptions().device(_device));
+                in0 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{15, 20}).mode(kArea));
 
-        // ID of the frame (in sequence) to be used in the training batch
-        torch::Tensor in5 = pixelDataIn.index({(int)t});
-        torch::Tensor in4, in3, in2, in1;
-        if (_lossLevel > 3.0)
-            in4 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{240, 320}).mode(kArea));
-        else
-            in4 = torch::zeros({in5.sizes()[0], 3, 240, 320}, TensorOptions().device(_device));
-        if (_lossLevel > 2.0)
-            in3 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{120, 160}).mode(kArea));
-        else
-            in3 = torch::zeros({in5.sizes()[0], 3, 120, 160}, TensorOptions().device(_device));
-        if (_lossLevel > 1.0)
-            in2 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{60, 80}).mode(kArea));
-        else
-            in2 = torch::zeros({in5.sizes()[0], 3, 60, 80}, TensorOptions().device(_device));
-        if (_lossLevel > 0.0)
-            in1 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{30, 40}).mode(kArea));
-        else
-            in1 = torch::zeros({in5.sizes()[0], 3, 30, 40}, TensorOptions().device(_device));
-        torch::Tensor in0 = tf::interpolate(in5,
-            tf::InterpolateFuncOptions().size(std::vector<long>{15, 20}).mode(kArea));
+                // Frame encode
+                torch::Tensor enc = _frameEncoder->forward(in5, in4, in3, in2, in1, in0, _lossLevel);
 
-        // Frame encode
-        torch::Tensor enc = _frameEncoder->forward(in5, in4, in3, in2, in1, in0, _lossLevel);
+                // Compute distance from encoding mean to origin and encoding mean loss
+                torch::Tensor encodingMeanLoss = torch::zeros({}, TensorOptions().device(_device));
+                torch::Tensor encMean;
+                if (_useEncodingMeanLoss or _useCovarianceLoss)
+                    encMean = enc.mean(0);
+                if (_useEncodingMeanLoss) {
+                    encodingMeanLoss = encMean.norm() * _encodingMeanLossWeight;
+                    encodingMeanLossAcc += encodingMeanLoss.item<double>();
+                }
 
-        // Compute distance from encoding mean to origin and encoding mean loss
-        torch::Tensor encodingMeanLoss, encMean;
-        if (_useEncodingMeanLoss or _useCovarianceLoss)
-            encMean = enc.mean(0);
-        if (_useEncodingMeanLoss) {
-            encodingMeanLoss = encMean.norm() * _encodingMeanLossWeight;
-            encodingMeanLossAcc += encodingMeanLoss.item<double>();
-        }
+                // Compute distances between each encoding and the codistance loss
+                torch::Tensor encodingCodistanceLoss = torch::zeros({}, TensorOptions().device(_device));
+                torch::Tensor codistanceMatrix;
+                if (_useEncodingCodistanceLoss) {
+                    codistanceMatrix = torch::cdist(enc, enc);
+                    maxEncodingCodistance = torch::max(codistanceMatrix).to(torch::kCPU).item<double>();
+                    codistanceMatrix = codistanceMatrix +
+                        torch::eye(doot2::batchSize, TensorOptions().device(_device));
+                    encodingCodistanceLoss = torch::mse_loss(codistanceMatrix, targetDistanceMatrix) *
+                        _encodingCodistanceLossWeight;
+                    encodingCodistanceLossAcc += encodingCodistanceLoss.item<double>();
+                }
 
-        // Compute distances between each encoding and the codistance loss
-        torch::Tensor codistanceMatrix, encodingCodistanceLoss;
-        if (_useEncodingCodistanceLoss) {
-            codistanceMatrix = torch::cdist(enc, enc);
-            maxEncodingCodistance = torch::max(codistanceMatrix).to(torch::kCPU).item<double>();
-            codistanceMatrix = codistanceMatrix + maxEncodingCodistance *
-                torch::eye(doot2::batchSize, TensorOptions().device(_device));
-            encodingCodistanceLoss = torch::mse_loss(codistanceMatrix, targetDistanceMatrix) *
-                _encodingCodistanceLossWeight;
-            encodingCodistanceLossAcc += encodingCodistanceLoss.item<double>();
-        }
+                // Compute covariance matrix and covariance loss
+                torch::Tensor covarianceLoss = torch::zeros({}, TensorOptions().device(_device));
+                if (_useCovarianceLoss) {
+                    torch::Tensor encDev = enc - encMean;
+                    covarianceMatrix = ((encDev.transpose(0, 1).matmul(encDev)) /
+                        (doot2::batchSize - 1.0f)).square();
+                    maxEncodingCovariance = torch::max(covarianceMatrix).item<double>();
+                    covarianceLoss = ((covarianceMatrix.sum() - covarianceMatrix.diagonal().sum()) /
+                        (float) doot2::encodingLength) * _covarianceLossWeight;
+                    covarianceLossAcc += covarianceLoss.item<double>();
+                }
 
-        // Compute covariance matrix and covariance loss
-        torch::Tensor covarianceMatrix, covarianceLoss;
-        if (_useCovarianceLoss) {
-            torch::Tensor encDev = enc - encMean;
-            covarianceMatrix = ((encDev.transpose(0, 1).matmul(encDev)) /
-                (doot2::batchSize - 1.0f)).square();
-            maxEncodingCovariance = torch::max(covarianceMatrix).item<double>();
-            covarianceLoss = ((covarianceMatrix.sum() - covarianceMatrix.diagonal().sum()) /
-                (float) doot2::encodingLength) * _covarianceLossWeight;
-            covarianceLossAcc += covarianceLoss.item<double>();
-        }
+                // Loss from distance to previous encoding
+                torch::Tensor encodingPrevDistanceLoss = torch::zeros({}, TensorOptions().device(_device));
+                if (_useEncodingPrevDistanceLoss && b>0) {
+                    // Use pixel difference to previous frames as a basis for target encoding distance to the previous
+                    torch::Tensor prevPixelDiff = torch::mean(torch::abs(in5-pixelDataIn.index({(int)t-1})), {1, 2, 3});
+                    // Normalize the difference using batchPixelDiff, the intuition being that encodings between
+                    // sequences in the batch should have the distance of 1 from each other, as per mandated by the
+                    // codistance loss.
+                    torch::Tensor prevPixelDiffNormalized = prevPixelDiff / _batchPixelDiff;
+                    torch::Tensor encPrevDistance = torch::linalg_norm(enc-encPrev, torch::nullopt, {1});
+                    // Sometimes pixel diff between subsequent frames can be larger than batchPixelDiff, which will
+                    // cause the normalized distance diff to be over 1. Scaling with 0.1 should give enough slack
+                    // to prevent the individual sequence encoding domains from overlapping.
+                    encodingPrevDistanceLoss = torch::mse_loss(encPrevDistance, prevPixelDiffNormalized*0.1f) *
+                        _encodingPrevDistanceLossWeight *
+                        ((float)_virtualBatchSize / ((float)_virtualBatchSize-1)); // normalize to match the actual v. batch size
+                }
+                encodingPrevDistanceLossAcc += encodingPrevDistanceLoss.item<double>();
+                encPrev = enc.detach(); // stop gradient from flowing to the previous iteration
 
-        // Frame decode
-        auto [out0, out1, out2, out3, out4, out5] = _frameDecoder->forward(enc, _lossLevel);
+                // Frame decode
+                auto [out0, out1, out2, out3, out4, out5] = _frameDecoder->forward(enc, _lossLevel);
 
-        // Frame loss weights
-        float frameLossWeight0 = (float)std::clamp(1.0-_lossLevel, 0.0, 1.0);
-        float frameLossWeight1 = (float)std::clamp(1.0-std::abs(_lossLevel-1.0), 0.0, 1.0);
-        float frameLossWeight2 = (float)std::clamp(1.0-std::abs(_lossLevel-2.0), 0.0, 1.0);
-        float frameLossWeight3 = (float)std::clamp(1.0-std::abs(_lossLevel-3.0), 0.0, 1.0);
-        float frameLossWeight4 = (float)std::clamp(1.0-std::abs(_lossLevel-4.0), 0.0, 1.0);
-        float frameLossWeight5 = (float)std::clamp(_lossLevel-4.0, 0.0, 1.0);
+                // Frame loss weights
+                float frameLossWeight0 = (float)std::clamp(1.0-_lossLevel, 0.0, 1.0);
+                float frameLossWeight1 = (float)std::clamp(1.0-std::abs(_lossLevel-1.0), 0.0, 1.0);
+                float frameLossWeight2 = (float)std::clamp(1.0-std::abs(_lossLevel-2.0), 0.0, 1.0);
+                float frameLossWeight3 = (float)std::clamp(1.0-std::abs(_lossLevel-3.0), 0.0, 1.0);
+                float frameLossWeight4 = (float)std::clamp(1.0-std::abs(_lossLevel-4.0), 0.0, 1.0);
+                float frameLossWeight5 = (float)std::clamp(_lossLevel-4.0, 0.0, 1.0);
 
-        // Frame decoding losses
-        torch::Tensor frameLoss = _frameLossWeight*(
-            frameLossWeight0 * yuvLoss(in0, out0) +
-            (_lossLevel > 0.0 ? frameLossWeight1 * yuvLoss(in1, out1) : zero) +
-            (_lossLevel > 1.0 ? frameLossWeight2 * yuvLoss(in2, out2) : zero) +
-            (_lossLevel > 2.0 ? frameLossWeight3 * yuvLoss(in3, out3) : zero) +
-            (_lossLevel > 3.0 ? frameLossWeight4 * yuvLoss(in4, out4) : zero) +
-            (_lossLevel > 4.0 ? frameLossWeight5 * yuvLoss(in5, out5) : zero));
-        frameLossAcc += frameLoss.item<double>();
-        torch::Tensor frameGradLoss = _frameGradLossWeight*(
-            frameLossWeight0 * imageGradLoss(in0, out0) +
-            (_lossLevel > 0.0 ? frameLossWeight1 * imageGradLoss(in1, out1) : zero) +
-            (_lossLevel > 1.0 ? frameLossWeight2 * imageGradLoss(in2, out2) : zero) +
-            (_lossLevel > 2.0 ? frameLossWeight3 * imageGradLoss(in3, out3) : zero) +
-            (_lossLevel > 3.0 ? frameLossWeight4 * imageGradLoss(in4, out4) : zero) +
-            (_lossLevel > 4.0 ? frameLossWeight5 * imageGradLoss(in5, out5) : zero));
-        frameGradLossAcc += frameGradLoss.item<double>();
-        torch::Tensor frameLaplacianLoss = _frameLaplacianLossWeight*(
-            frameLossWeight0 * imageLaplacianLoss(in0, out0) +
-            (_lossLevel > 0.0 ? frameLossWeight1 * imageLaplacianLoss(in1, out1) : zero) +
-            (_lossLevel > 1.0 ? frameLossWeight2 * imageLaplacianLoss(in2, out2) : zero) +
-            (_lossLevel > 2.0 ? frameLossWeight3 * imageLaplacianLoss(in3, out3) : zero) +
-            (_lossLevel > 3.0 ? frameLossWeight4 * imageLaplacianLoss(in4, out4) : zero) +
-            (_lossLevel > 4.0 ? frameLossWeight5 * imageLaplacianLoss(in5, out5) : zero));
-        frameLaplacianLossAcc += frameLaplacianLoss.item<double>();
+                // Frame decoding losses
+                torch::Tensor frameLoss = _frameLossWeight*(
+                    frameLossWeight0 * yuvLoss(in0, out0) +
+                    (_lossLevel > 0.0 ? frameLossWeight1 * yuvLoss(in1, out1) : zero) +
+                    (_lossLevel > 1.0 ? frameLossWeight2 * yuvLoss(in2, out2) : zero) +
+                    (_lossLevel > 2.0 ? frameLossWeight3 * yuvLoss(in3, out3) : zero) +
+                    (_lossLevel > 3.0 ? frameLossWeight4 * yuvLoss(in4, out4) : zero) +
+                    (_lossLevel > 4.0 ? frameLossWeight5 * yuvLoss(in5, out5) : zero));
+                frameLossAcc += frameLoss.item<double>();
+                torch::Tensor frameGradLoss = _frameGradLossWeight*(
+                    frameLossWeight0 * imageGradLoss(in0, out0) +
+                    (_lossLevel > 0.0 ? frameLossWeight1 * imageGradLoss(in1, out1) : zero) +
+                    (_lossLevel > 1.0 ? frameLossWeight2 * imageGradLoss(in2, out2) : zero) +
+                    (_lossLevel > 2.0 ? frameLossWeight3 * imageGradLoss(in3, out3) : zero) +
+                    (_lossLevel > 3.0 ? frameLossWeight4 * imageGradLoss(in4, out4) : zero) +
+                    (_lossLevel > 4.0 ? frameLossWeight5 * imageGradLoss(in5, out5) : zero));
+                frameGradLossAcc += frameGradLoss.item<double>();
+                torch::Tensor frameLaplacianLoss = _frameLaplacianLossWeight*(
+                    frameLossWeight0 * imageLaplacianLoss(in0, out0) +
+                    (_lossLevel > 0.0 ? frameLossWeight1 * imageLaplacianLoss(in1, out1) : zero) +
+                    (_lossLevel > 1.0 ? frameLossWeight2 * imageLaplacianLoss(in2, out2) : zero) +
+                    (_lossLevel > 2.0 ? frameLossWeight3 * imageLaplacianLoss(in3, out3) : zero) +
+                    (_lossLevel > 3.0 ? frameLossWeight4 * imageLaplacianLoss(in4, out4) : zero) +
+                    (_lossLevel > 4.0 ? frameLossWeight5 * imageLaplacianLoss(in5, out5) : zero));
+                frameLaplacianLossAcc += frameLaplacianLoss.item<double>();
 
-        torch::Tensor loss = frameLoss + frameGradLoss + frameLaplacianLoss + encodingCodistanceLoss +
-            encodingMeanLoss;
+                torch::Tensor loss = encodingCodistanceLoss + encodingMeanLoss + covarianceLoss +
+                    encodingPrevDistanceLoss + frameLoss + frameGradLoss + frameLaplacianLoss;
 
-        lossAcc += loss.item<double>();
+                lossAcc += loss.item<double>();
 
-        // Backward pass
-        loss.backward();
+                // Backward pass
+                loss.backward();
 
-        // Apply gradients
-        if (ti % _optimizationInterval == _optimizationInterval-1) {
+                // Display
+                if (b == 0) {
+                    int displaySeqId = rnd() % doot2::batchSize;
+                    torch::Tensor in5CPU = in5.index({displaySeqId, "..."}).to(torch::kCPU);
+                    torch::Tensor in4CPU = in4.index({displaySeqId, "..."}).to(torch::kCPU);
+                    in4CPU = tf::interpolate(in4CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
+                    torch::Tensor in3CPU = in3.index({displaySeqId, "..."}).to(torch::kCPU);
+                    in3CPU = tf::interpolate(in3CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
+                    torch::Tensor in2CPU = in2.index({displaySeqId, "..."}).to(torch::kCPU);
+                    in2CPU = tf::interpolate(in2CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
+                    torch::Tensor in1CPU = in1.index({displaySeqId, "..."}).to(torch::kCPU);
+                    in1CPU = tf::interpolate(in1CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
+                    torch::Tensor in0CPU = in0.index({displaySeqId, "..."}).to(torch::kCPU);
+                    in0CPU = tf::interpolate(in0CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
+                    torch::Tensor out5CPU = out5.index({displaySeqId, "..."}).to(torch::kCPU);
+                    torch::Tensor out4CPU = out4.index({displaySeqId, "..."}).to(torch::kCPU);
+                    out4CPU = tf::interpolate(out4CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
+                    torch::Tensor out3CPU = out3.index({displaySeqId, "..."}).to(torch::kCPU);
+                    out3CPU = tf::interpolate(out3CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
+                    torch::Tensor out2CPU = out2.index({displaySeqId, "..."}).to(torch::kCPU);
+                    out2CPU = tf::interpolate(out2CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
+                    torch::Tensor out1CPU = out1.index({displaySeqId, "..."}).to(torch::kCPU);
+                    out1CPU = tf::interpolate(out1CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
+                    torch::Tensor out0CPU = out0.index({displaySeqId, "..."}).to(torch::kCPU);
+                    out0CPU = tf::interpolate(out0CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
+                    torch::Tensor codistanceMatrixCPU = codistanceMatrix.to(torch::kCPU);
+                    codistanceMatrixCPU /= maxEncodingCodistance;
+                    codistanceMatrixCPU = tf::interpolate(codistanceMatrixCPU.unsqueeze(0).unsqueeze(0),
+                        tf::InterpolateFuncOptions().size(std::vector<long>{doot2::batchSize*16, doot2::batchSize*16})
+                            .mode(kNearestExact).align_corners(false));
+                    torch::Tensor covarianceMatrixCPU;
+                    if (_useCovarianceLoss) {
+                        covarianceMatrixCPU = covarianceMatrix.to(torch::kCPU);
+                        covarianceMatrixCPU /= maxEncodingCovariance;
+                        covarianceMatrixCPU = tf::interpolate(covarianceMatrixCPU.unsqueeze(0).unsqueeze(0),
+                            tf::InterpolateFuncOptions().size(std::vector<long>{doot2::encodingLength, doot2::encodingLength})
+                                .mode(kNearestExact).align_corners(false));
+                    }
+
+                    _trainingInfo->images["input5"].write()->copyFrom(in5CPU.data_ptr<float>());
+                    _trainingInfo->images["input4"].write()->copyFrom(in4CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
+                    _trainingInfo->images["input3"].write()->copyFrom(in3CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
+                    _trainingInfo->images["input2"].write()->copyFrom(in2CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
+                    _trainingInfo->images["input1"].write()->copyFrom(in1CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
+                    _trainingInfo->images["input0"].write()->copyFrom(in0CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
+                    _trainingInfo->images["prediction5"].write()->copyFrom(out5CPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
+                    _trainingInfo->images["prediction4"].write()->copyFrom(out4CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
+                    _trainingInfo->images["prediction3"].write()->copyFrom(out3CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
+                    _trainingInfo->images["prediction2"].write()->copyFrom(out2CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
+                    _trainingInfo->images["prediction1"].write()->copyFrom(out1CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
+                    _trainingInfo->images["prediction0"].write()->copyFrom(out0CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
+                    if (_useEncodingCodistanceLoss)
+                        _trainingInfo->images["codistance_matrix"].write()->copyFrom(codistanceMatrixCPU.contiguous().data_ptr<float>());
+                    if (_useCovarianceLoss)
+                        _trainingInfo->images["covariance_matrix"].write()->copyFrom(covarianceMatrixCPU.contiguous().data_ptr<float>());
+                }
+            }
+
+            // Apply gradients
             _optimizer->step();
             _frameEncoder->zero_grad();
             _frameDecoder->zero_grad();
 
-            // Display
-            torch::Tensor in5CPU = in5.index({(int)displaySeqId, "..."}).to(torch::kCPU);
-            torch::Tensor in4CPU = in4.index({(int)displaySeqId, "..."}).to(torch::kCPU);
-            in4CPU = tf::interpolate(in4CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-            torch::Tensor in3CPU = in3.index({(int)displaySeqId, "..."}).to(torch::kCPU);
-            in3CPU = tf::interpolate(in3CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-            torch::Tensor in2CPU = in2.index({(int)displaySeqId, "..."}).to(torch::kCPU);
-            in2CPU = tf::interpolate(in2CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-            torch::Tensor in1CPU = in1.index({(int)displaySeqId, "..."}).to(torch::kCPU);
-            in1CPU = tf::interpolate(in1CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-            torch::Tensor in0CPU = in0.index({(int)displaySeqId, "..."}).to(torch::kCPU);
-            in0CPU = tf::interpolate(in0CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-            torch::Tensor out5CPU = out5.index({(int)displaySeqId, "..."}).to(torch::kCPU);
-            torch::Tensor out4CPU = out4.index({(int)displaySeqId, "..."}).to(torch::kCPU);
-            out4CPU = tf::interpolate(out4CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-            torch::Tensor out3CPU = out3.index({(int)displaySeqId, "..."}).to(torch::kCPU);
-            out3CPU = tf::interpolate(out3CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-            torch::Tensor out2CPU = out2.index({(int)displaySeqId, "..."}).to(torch::kCPU);
-            out2CPU = tf::interpolate(out2CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-            torch::Tensor out1CPU = out1.index({(int)displaySeqId, "..."}).to(torch::kCPU);
-            out1CPU = tf::interpolate(out1CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-            torch::Tensor out0CPU = out0.index({(int)displaySeqId, "..."}).to(torch::kCPU);
-            out0CPU = tf::interpolate(out0CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-            torch::Tensor codistanceMatrixCPU = codistanceMatrix.to(torch::kCPU);
-            codistanceMatrixCPU /= maxEncodingCodistance;
-            codistanceMatrixCPU = tf::interpolate(codistanceMatrixCPU.unsqueeze(0).unsqueeze(0),
-                tf::InterpolateFuncOptions().size(std::vector<long>{doot2::batchSize*16, doot2::batchSize*16})
-                .mode(kNearestExact).align_corners(false));
-            torch::Tensor covarianceMatrixCPU;
-            if (_useCovarianceLoss) {
-                covarianceMatrixCPU = covarianceMatrix.to(torch::kCPU);
-                covarianceMatrixCPU /= maxEncodingCovariance;
-                covarianceMatrixCPU = tf::interpolate(covarianceMatrixCPU.unsqueeze(0).unsqueeze(0),
-                    tf::InterpolateFuncOptions().size(std::vector<long>{doot2::encodingLength, doot2::encodingLength})
-                        .mode(kNearestExact).align_corners(false));
-            }
 
-            _trainingInfo->images["input5"].write()->copyFrom(in5CPU.data_ptr<float>());
-            _trainingInfo->images["input4"].write()->copyFrom(in4CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
-            _trainingInfo->images["input3"].write()->copyFrom(in3CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
-            _trainingInfo->images["input2"].write()->copyFrom(in2CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
-            _trainingInfo->images["input1"].write()->copyFrom(in1CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
-            _trainingInfo->images["input0"].write()->copyFrom(in0CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
-            _trainingInfo->images["prediction5"].write()->copyFrom(out5CPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
-            _trainingInfo->images["prediction4"].write()->copyFrom(out4CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
-            _trainingInfo->images["prediction3"].write()->copyFrom(out3CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
-            _trainingInfo->images["prediction2"].write()->copyFrom(out2CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
-            _trainingInfo->images["prediction1"].write()->copyFrom(out1CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
-            _trainingInfo->images["prediction0"].write()->copyFrom(out0CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
-            if (_useEncodingCodistanceLoss)
-                _trainingInfo->images["codistance_matrix"].write()->copyFrom(codistanceMatrixCPU.contiguous().data_ptr<float>());
-            if (_useCovarianceLoss)
-                _trainingInfo->images["covariance_matrix"].write()->copyFrom(covarianceMatrixCPU.contiguous().data_ptr<float>());
-
-            lossAcc /= (double)_optimizationInterval;
-            frameLossAcc /= (double)_optimizationInterval;
-            frameGradLossAcc /= (double)_optimizationInterval;
-            frameLaplacianLossAcc /= (double)_optimizationInterval;
-            encodingCodistanceLossAcc /= (double)_optimizationInterval;
-            encodingMeanLossAcc /= (double)_optimizationInterval;
-            covarianceLossAcc /= (double)_optimizationInterval;
+            lossAcc /= (double)_virtualBatchSize;
+            frameLossAcc /= (double)_virtualBatchSize;
+            frameGradLossAcc /= (double)_virtualBatchSize;
+            frameLaplacianLossAcc /= (double)_virtualBatchSize;
+            encodingCodistanceLossAcc /= (double)_virtualBatchSize;
+            encodingMeanLossAcc /= (double)_virtualBatchSize;
+            covarianceLossAcc /= (double)_virtualBatchSize;
+            encodingPrevDistanceLossAcc /= (double)_virtualBatchSize;
 
             // Loss level adjustment
             constexpr double controlP = 0.01;
@@ -580,6 +631,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     "encodingCodistanceLoss", encodingCodistanceLossAcc,
                     "encodingMeanLoss", encodingMeanLossAcc,
                     "covarianceLoss", covarianceLossAcc,
+                    "encodingPrevDistanceLoss", encodingPrevDistanceLossAcc,
                     "loss", lossAcc,
                     "lossLevel", _lossLevel,
                     "maxEncodingCodistance", maxEncodingCodistance,
@@ -594,9 +646,10 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
             encodingCodistanceLossAcc = 0.0;
             encodingMeanLossAcc = 0.0;
             covarianceLossAcc = 0.0;
-        }
+            encodingPrevDistanceLossAcc = 0.0;
 
-        if (_abortTraining)
-            break;
+            if (_abortTraining)
+                break;
+        }
     }
 }
