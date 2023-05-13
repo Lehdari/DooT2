@@ -542,28 +542,19 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 // Display
                 if (b == 0) {
                     int displaySeqId = rnd() % doot2::batchSize;
-                    torch::Tensor in5CPU = in5.index({displaySeqId, "..."}).to(torch::kCPU);
-                    torch::Tensor in4CPU = in4.index({displaySeqId, "..."}).to(torch::kCPU);
-                    in4CPU = tf::interpolate(in4CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-                    torch::Tensor in3CPU = in3.index({displaySeqId, "..."}).to(torch::kCPU);
-                    in3CPU = tf::interpolate(in3CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-                    torch::Tensor in2CPU = in2.index({displaySeqId, "..."}).to(torch::kCPU);
-                    in2CPU = tf::interpolate(in2CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-                    torch::Tensor in1CPU = in1.index({displaySeqId, "..."}).to(torch::kCPU);
-                    in1CPU = tf::interpolate(in1CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-                    torch::Tensor in0CPU = in0.index({displaySeqId, "..."}).to(torch::kCPU);
-                    in0CPU = tf::interpolate(in0CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-                    torch::Tensor out5CPU = out5.index({displaySeqId, "..."}).to(torch::kCPU);
-                    torch::Tensor out4CPU = out4.index({displaySeqId, "..."}).to(torch::kCPU);
-                    out4CPU = tf::interpolate(out4CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-                    torch::Tensor out3CPU = out3.index({displaySeqId, "..."}).to(torch::kCPU);
-                    out3CPU = tf::interpolate(out3CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-                    torch::Tensor out2CPU = out2.index({displaySeqId, "..."}).to(torch::kCPU);
-                    out2CPU = tf::interpolate(out2CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-                    torch::Tensor out1CPU = out1.index({displaySeqId, "..."}).to(torch::kCPU);
-                    out1CPU = tf::interpolate(out1CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-                    torch::Tensor out0CPU = out0.index({displaySeqId, "..."}).to(torch::kCPU);
-                    out0CPU = tf::interpolate(out0CPU.unsqueeze(0), tf::InterpolateFuncOptions().size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
+                    torch::Tensor inImage0, inImage1, inImage2, inImage3, inImage4, inImage5;
+                    torch::Tensor outImage0, outImage1, outImage2, outImage3, outImage4, outImage5;
+                    scaleDisplayImages(
+                        in0.index({displaySeqId}), in1.index({displaySeqId}), in2.index({displaySeqId}),
+                        in3.index({displaySeqId}), in4.index({displaySeqId}), in5.index({displaySeqId}),
+                        inImage0, inImage1, inImage2, inImage3, inImage4, inImage5, torch::kCPU
+                    );
+                    scaleDisplayImages(
+                        out0.index({displaySeqId}), out1.index({displaySeqId}), out2.index({displaySeqId}),
+                        out3.index({displaySeqId}), out4.index({displaySeqId}), out5.index({displaySeqId}),
+                        outImage0, outImage1, outImage2, outImage3, outImage4, outImage5, torch::kCPU
+                    );
+
                     torch::Tensor codistanceMatrixCPU = codistanceMatrix.to(torch::kCPU);
                     codistanceMatrixCPU /= maxEncodingCodistance;
                     codistanceMatrixCPU = tf::interpolate(codistanceMatrixCPU.unsqueeze(0).unsqueeze(0),
@@ -578,18 +569,18 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                                 .mode(kNearestExact).align_corners(false));
                     }
 
-                    _trainingInfo->images["input5"].write()->copyFrom(in5CPU.data_ptr<float>());
-                    _trainingInfo->images["input4"].write()->copyFrom(in4CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
-                    _trainingInfo->images["input3"].write()->copyFrom(in3CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
-                    _trainingInfo->images["input2"].write()->copyFrom(in2CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
-                    _trainingInfo->images["input1"].write()->copyFrom(in1CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
-                    _trainingInfo->images["input0"].write()->copyFrom(in0CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
-                    _trainingInfo->images["prediction5"].write()->copyFrom(out5CPU.permute({1, 2, 0}).contiguous().data_ptr<float>());
-                    _trainingInfo->images["prediction4"].write()->copyFrom(out4CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
-                    _trainingInfo->images["prediction3"].write()->copyFrom(out3CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
-                    _trainingInfo->images["prediction2"].write()->copyFrom(out2CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
-                    _trainingInfo->images["prediction1"].write()->copyFrom(out1CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
-                    _trainingInfo->images["prediction0"].write()->copyFrom(out0CPU.permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
+                    _trainingInfo->images["input5"].write()->copyFrom(inImage5.data_ptr<float>());
+                    _trainingInfo->images["input4"].write()->copyFrom(inImage4.data_ptr<float>());
+                    _trainingInfo->images["input3"].write()->copyFrom(inImage3.data_ptr<float>());
+                    _trainingInfo->images["input2"].write()->copyFrom(inImage2.data_ptr<float>());
+                    _trainingInfo->images["input1"].write()->copyFrom(inImage1.data_ptr<float>());
+                    _trainingInfo->images["input0"].write()->copyFrom(inImage0.data_ptr<float>());
+                    _trainingInfo->images["prediction5"].write()->copyFrom(outImage5.data_ptr<float>());
+                    _trainingInfo->images["prediction4"].write()->copyFrom(outImage4.data_ptr<float>());
+                    _trainingInfo->images["prediction3"].write()->copyFrom(outImage3.data_ptr<float>());
+                    _trainingInfo->images["prediction2"].write()->copyFrom(outImage2.data_ptr<float>());
+                    _trainingInfo->images["prediction1"].write()->copyFrom(outImage1.data_ptr<float>());
+                    _trainingInfo->images["prediction0"].write()->copyFrom(outImage0.data_ptr<float>());
                     if (_useEncodingCodistanceLoss)
                         _trainingInfo->images["codistance_matrix"].write()->copyFrom(codistanceMatrixCPU.contiguous().data_ptr<float>());
                     if (_useCovarianceLoss)
@@ -655,4 +646,28 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         if (_abortTraining)
             break;
     }
+}
+
+void MultiLevelAutoEncoderModel::scaleDisplayImages(
+    const Tensor& orig0, const Tensor& orig1, const Tensor& orig2,
+    const Tensor& orig3, const Tensor& orig4, const Tensor& orig5,
+    Tensor& image0, Tensor& image1, Tensor& image2, Tensor& image3, Tensor& image4, Tensor& image5,
+    torch::DeviceType device)
+{
+    image0 = tf::interpolate(orig0.unsqueeze(0), tf::InterpolateFuncOptions()
+        .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
+        .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
+    image1 = tf::interpolate(orig1.unsqueeze(0), tf::InterpolateFuncOptions()
+        .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
+        .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
+    image2 = tf::interpolate(orig2.unsqueeze(0), tf::InterpolateFuncOptions()
+        .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
+        .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
+    image3 = tf::interpolate(orig3.unsqueeze(0), tf::InterpolateFuncOptions()
+        .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
+        .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
+    image4 = tf::interpolate(orig4.unsqueeze(0), tf::InterpolateFuncOptions()
+        .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
+        .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
+    image5 = orig5.permute({1, 2, 0}).contiguous().to(device);
 }
