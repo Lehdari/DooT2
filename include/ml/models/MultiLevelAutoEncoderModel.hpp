@@ -13,6 +13,7 @@
 #include "ml/Model.hpp"
 #include "ml/modules/MultiLevelFrameEncoder.hpp"
 #include "ml/modules/MultiLevelFrameDecoder.hpp"
+#include "ml/modules/Discriminator.hpp"
 
 #include <chrono>
 
@@ -46,6 +47,7 @@ private:
     // Configuration variables and hyperparameters
     std::filesystem::path                   _frameEncoderFilename;
     std::filesystem::path                   _frameDecoderFilename;
+    std::filesystem::path                   _discriminatorFilename;
     double                                  _optimizerLearningRate;
     double                                  _optimizerBeta1;
     double                                  _optimizerBeta2;
@@ -71,6 +73,7 @@ private:
 
     MultiLevelFrameEncoder                  _frameEncoder;
     MultiLevelFrameDecoder                  _frameDecoder;
+    Discriminator                           _discriminator;
     std::unique_ptr<torch::optim::AdamW>    _optimizer;
     torch::Device                           _device;
     TimePoint                               _trainingStartTime;

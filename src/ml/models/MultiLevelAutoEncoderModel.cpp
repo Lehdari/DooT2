@@ -81,6 +81,7 @@ nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
 
     modelConfig["frame_encoder_filename"] = "frame_encoder.pt";
     modelConfig["frame_decoder_filename"] = "frame_decoder.pt";
+    modelConfig["discriminator_filename"] = "discriminator.pt";
     modelConfig["optimizer_learning_rate"] = 0.001;
     modelConfig["optimizer_beta1"] = 0.9;
     modelConfig["optimizer_beta2"] = 0.999;
@@ -148,14 +149,21 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     if (modelConfig.contains("frame_decoder_filename"))
         _frameDecoderFilename = experimentRoot / modelConfig["frame_decoder_filename"].get<fs::path>();
 
+    _discriminatorFilename = experimentRoot / "discriminator.pt";
+    if (modelConfig.contains("discriminator_filename"))
+        _discriminatorFilename = experimentRoot / modelConfig["discriminator_filename"].get<fs::path>();
+
     // Separate loading paths in case a base experiment is specified
     fs::path frameEncoderFilename = _frameEncoderFilename;
     fs::path frameDecoderFilename = _frameDecoderFilename;
+    fs::path discriminatorFilename = _discriminatorFilename;
     if (experimentConfig.contains("experiment_base_root") && experimentConfig.contains("base_model_config")) {
         frameEncoderFilename = experimentConfig["experiment_base_root"].get<fs::path>() /
             experimentConfig["base_model_config"]["frame_encoder_filename"].get<fs::path>();
         frameDecoderFilename = experimentConfig["experiment_base_root"].get<fs::path>() /
             experimentConfig["base_model_config"]["frame_decoder_filename"].get<fs::path>();
+        discriminatorFilename = experimentConfig["experiment_base_root"].get<fs::path>() /
+            experimentConfig["base_model_config"]["discriminator_filename"].get<fs::path>();
     }
 
     // Load frame encoder
@@ -182,9 +190,22 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
         *_frameDecoder = MultiLevelFrameDecoderImpl();
     }
 
+    // Load discriminator
+    if (fs::exists(discriminatorFilename)) {
+        printf("Loading frame decoder model from %s\n", discriminatorFilename.c_str()); // TODO logging
+        serialize::InputArchive inputArchive;
+        inputArchive.load_from(discriminatorFilename);
+        _discriminator->load(inputArchive);
+    }
+    else {
+        printf("No %s found. Initializing new discriminator model.\n", discriminatorFilename.c_str()); // TODO logging
+        *_discriminator = DiscriminatorImpl();
+    }
+
     // Move model parameters to GPU if it's used
     _frameEncoder->to(_device);
     _frameDecoder->to(_device);
+    _discriminator->to(_device);
 
     // Setup hyperparameters
     _optimizerLearningRate = modelConfig["optimizer_learning_rate"];
@@ -210,7 +231,7 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
 
     // Setup optimizer
     _optimizer = std::make_unique<torch::optim::AdamW>(std::vector<optim::OptimizerParamGroup>
-        {_frameEncoder->parameters(), _frameDecoder->parameters()});
+        {_frameEncoder->parameters(), _frameDecoder->parameters(), _discriminator->parameters()});
     dynamic_cast<torch::optim::AdamWOptions&>(_optimizer->param_groups()[0].options())
         .lr(_optimizerLearningRate)
         .betas({_optimizerBeta1, _optimizerBeta2})
@@ -237,6 +258,8 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         timeSeriesWriteHandle->addSeries<double>("encodingMeanLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("covarianceLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingPrevDistanceLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("discriminationLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("discriminatorLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("loss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("lossLevel", 0.0);
         timeSeriesWriteHandle->addSeries<double>("maxEncodingCodistance", 0.0);
@@ -281,6 +304,12 @@ void MultiLevelAutoEncoderModel::save()
             serialize::OutputArchive outputArchive;
             _frameDecoder->save(outputArchive);
             outputArchive.save_to(_frameDecoderFilename);
+        }
+        {
+            printf("Saving discriminator model to %s\n", _discriminatorFilename.c_str());
+            serialize::OutputArchive outputArchive;
+            _discriminator->save(outputArchive);
+            outputArchive.save_to(_discriminatorFilename);
         }
     }
     catch (const std::exception& e) {
@@ -386,10 +415,12 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     // Set training mode on
     _frameEncoder->train(true);
     _frameDecoder->train(true);
+    _discriminator->train(true);
 
     // Zero out the gradients
     _frameEncoder->zero_grad();
     _frameDecoder->zero_grad();
+    _discriminator->zero_grad();
 
     // Used as a target for encoding distance matrix (try to get all encoding codistances to 1)
     torch::Tensor targetDistanceMatrix = torch::ones({doot2::batchSize, doot2::batchSize},
@@ -404,6 +435,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     double encodingMeanLossAcc = 0.0;
     double covarianceLossAcc = 0.0;
     double encodingPrevDistanceLossAcc = 0.0;
+    double discriminationLossAcc = 0.0;
+    double discriminatorLossAcc = 0.0;
     double maxEncodingCodistance = 1.0; // max distance between encodings
     double maxEncodingCovariance = 1.0; // max value in the covariance matrix
     int64_t nVirtualBatchesPerCycle = (int64_t)sequenceLength / _virtualBatchSize;
@@ -437,7 +470,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 in0 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{15, 20}).mode(kArea));
 
                 // Frame encode
-                torch::Tensor enc = _frameEncoder->forward(in5, in4, in3, in2, in1, in0, _lossLevel);
+                torch::Tensor enc = _frameEncoder(in5, in4, in3, in2, in1, in0, _lossLevel);
 
                 // Compute distance from encoding mean to origin and encoding mean loss
                 torch::Tensor encodingMeanLoss = torch::zeros({}, TensorOptions().device(_device));
@@ -495,7 +528,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 encPrev = enc.detach(); // stop gradient from flowing to the previous iteration
 
                 // Frame decode
-                auto [out0, out1, out2, out3, out4, out5] = _frameDecoder->forward(enc, _lossLevel);
+                auto [out0, out1, out2, out3, out4, out5] = _frameDecoder(enc, _lossLevel);
 
                 // Frame loss weights
                 float frameLossWeight0 = (float)std::clamp(1.0-_lossLevel, 0.0, 1.0);
@@ -531,8 +564,32 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     (_lossLevel > 4.0 ? frameLossWeight5 * imageLaplacianLoss(in5, out5) : zero));
                 frameLaplacianLossAcc += frameLaplacianLoss.item<double>();
 
+                // Discriminator training pass
+                // Real (input) images
+                _discriminator->train(true);
+                torch::Tensor discriminationReal = _discriminator(in5, in4, in3, in2, in1, in0, _lossLevel);
+                torch::Tensor discriminatorLoss = l1_loss(discriminationReal,
+                    torch::ones_like(discriminationReal));
+                // Fake (decoded) images - detach required to prevent gradient from flowing back to decoder
+                // as we don't want the discriminator loss to affect the decoded images
+                torch::Tensor discriminationFake = _discriminator(
+                    out5.detach(), out4.detach(), out3.detach(), out2.detach(), out1.detach(), out0.detach(),
+                    _lossLevel);
+                discriminatorLoss += l1_loss(discriminationFake, torch::zeros_like(discriminationReal));
+                discriminatorLossAcc += discriminatorLoss.item<double>();
+                discriminatorLoss.backward();
+
+                // Decoder discrimination loss
+                _discriminator->train(false);
+                torch::Tensor discriminationLoss = torch::l1_loss( // try to pass the decoded images as originals
+                    torch::ones({doot2::batchSize}, TensorOptions().device(_device)),
+                    _discriminator(out5, out4, out3, out2, out1, out0, _lossLevel));
+                discriminationLossAcc += discriminationLoss.item<double>();
+
+                // Total loss
                 torch::Tensor loss = encodingCodistanceLoss + encodingMeanLoss + covarianceLoss +
-                    encodingPrevDistanceLoss + frameLoss + frameGradLoss + frameLaplacianLoss;
+                    encodingPrevDistanceLoss + frameLoss + frameGradLoss + frameLaplacianLoss +
+                    discriminationLoss;
 
                 lossAcc += loss.item<double>();
 
@@ -592,6 +649,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
             _optimizer->step();
             _frameEncoder->zero_grad();
             _frameDecoder->zero_grad();
+            _discriminator->zero_grad();
 
             if (_abortTraining)
                 break;
@@ -605,6 +663,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         encodingMeanLossAcc /= framesPerCycle;
         covarianceLossAcc /= framesPerCycle;
         encodingPrevDistanceLossAcc /= framesPerCycle;
+        discriminationLossAcc /= framesPerCycle;
+        discriminatorLossAcc /= framesPerCycle;
 
         // Loss level adjustment
         constexpr double controlP = 0.01;
@@ -627,6 +687,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 "encodingMeanLoss", encodingMeanLossAcc,
                 "covarianceLoss", covarianceLossAcc,
                 "encodingPrevDistanceLoss", encodingPrevDistanceLossAcc,
+                "discriminationLoss", discriminationLossAcc,
+                "discriminatorLoss", discriminatorLossAcc,
                 "loss", lossAcc,
                 "lossLevel", _lossLevel,
                 "maxEncodingCodistance", maxEncodingCodistance,
@@ -642,6 +704,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         encodingMeanLossAcc = 0.0;
         covarianceLossAcc = 0.0;
         encodingPrevDistanceLossAcc = 0.0;
+        discriminationLossAcc = 0.0;
+        discriminatorLossAcc = 0.0;
 
         if (_abortTraining)
             break;
