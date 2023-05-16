@@ -110,6 +110,9 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
     _optimizer                      (std::make_unique<torch::optim::AdamW>(
                                      std::vector<optim::OptimizerParamGroup>
                                      {_frameEncoder->parameters(), _frameDecoder->parameters()})),
+    _discriminatorOptimizer         (std::make_unique<torch::optim::AdamW>(
+                                     std::vector<optim::OptimizerParamGroup>
+                                     {_discriminator->parameters()})),
     _device                         (torch::cuda::is_available() ? torch::kCUDA : torch::kCPU),
     _optimizerLearningRate          (0.001),
     _optimizerBeta1                 (0.9),
@@ -229,9 +232,17 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     _targetLoss = modelConfig["target_loss"];
     _lossLevel = modelConfig["initial_loss_level"];
 
-    // Setup optimizer
+    // Setup optimizers
     _optimizer = std::make_unique<torch::optim::AdamW>(std::vector<optim::OptimizerParamGroup>
-        {_frameEncoder->parameters(), _frameDecoder->parameters(), _discriminator->parameters()});
+        {_frameEncoder->parameters(), _frameDecoder->parameters()});
+    dynamic_cast<torch::optim::AdamWOptions&>(_optimizer->param_groups()[0].options())
+        .lr(_optimizerLearningRate)
+        .betas({_optimizerBeta1, _optimizerBeta2})
+        .eps(_optimizerEpsilon)
+        .weight_decay(_optimizerWeightDecay);
+
+    _discriminatorOptimizer = std::make_unique<torch::optim::AdamW>(std::vector<optim::OptimizerParamGroup>
+        {_discriminator->parameters()});
     dynamic_cast<torch::optim::AdamWOptions&>(_optimizer->param_groups()[0].options())
         .lr(_optimizerLearningRate)
         .betas({_optimizerBeta1, _optimizerBeta2})
@@ -450,7 +461,9 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     for (int64_t c=0; c<_nTrainingCycles; ++c) {
         for (int64_t v=0; v<nVirtualBatchesPerCycle; ++v) {
             torch::Tensor in5, in4, in3, in2, in1, in0;
+            torch::Tensor rOut0, rOut1, rOut2, rOut3, rOut4, rOut5;
             torch::Tensor covarianceMatrix, encPrev;
+            _discriminator->train(true);
             for (int64_t b=0; b<_virtualBatchSize; ++b) {
                 // frame (time point) to use this iteration
                 int64_t t = v*_virtualBatchSize + b;
@@ -570,42 +583,16 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     (_lossLevel > 4.0 ? frameLossWeight5 * imageLaplacianLoss(in5, out5) : zero));
                 frameLaplacianLossAcc += frameLaplacianLoss.item<double>();
 
-                // Discriminator training pass
-                // Real (input) images
-                _discriminator->train(true);
-                torch::Tensor discriminationReal = _discriminator(in5, in4, in3, in2, in1, in0, _lossLevel);
-                torch::Tensor discriminatorLoss = l1_loss(discriminationReal,
-                    torch::ones_like(discriminationReal));
-                torch::Tensor discriminationFake;
-                // Fake (decoded) images - detach required to prevent gradient from flowing back to decoder
-                // as we don't want the discriminator loss to affect the decoded images
-                if (b % 2 == 0) {
-                    torch::Tensor randomEnc = torch::randn({doot2::batchSize, 2048}, TensorOptions().device(_device));
-                    auto [rOut0, rOut1, rOut2, rOut3, rOut4, rOut5] = _frameDecoder(randomEnc, _lossLevel);
-                    discriminationFake = _discriminator(
-                        rOut5.detach(), rOut4.detach(), rOut3.detach(), rOut2.detach(), rOut1.detach(), rOut0.detach(),
-                        _lossLevel);
-                }
-                else {
-                    discriminationFake = _discriminator(
-                        out5.detach(), out4.detach(), out3.detach(), out2.detach(), out1.detach(), out0.detach(),
-                        _lossLevel);
-                }
-                discriminatorLoss += l1_loss(discriminationFake, torch::zeros_like(discriminationReal));
-                discriminatorLossAcc += discriminatorLoss.item<double>();
-                discriminatorLoss.backward();
-
                 // Decoder discrimination loss
-                _discriminator->train(false);
-                torch::Tensor discriminationLoss = torch::l1_loss( // try to pass the decoded images as originals
-                    torch::ones({doot2::batchSize}, TensorOptions().device(_device)),
-                    _discriminator(out5, out4, out3, out2, out1, out0, _lossLevel));
-                torch::Tensor randomEnc = torch::randn({doot2::batchSize, 2048}, TensorOptions().device(_device)); // generate also random images
-                auto [rOut0, rOut1, rOut2, rOut3, rOut4, rOut5] = _frameDecoder(randomEnc, _lossLevel);
-                discriminationLoss += torch::l1_loss(torch::ones({doot2::batchSize}, TensorOptions().device(_device)),
-                    _discriminator(
-                    rOut5.detach(), rOut4.detach(), rOut3.detach(), rOut2.detach(), rOut1.detach(), rOut0.detach(),
-                    _lossLevel));
+                torch::Tensor discriminationLoss;
+                {
+                    torch::Tensor randomEnc = createRandomEncodingInterpolations(enc);
+                    std::tie(rOut0, rOut1, rOut2, rOut3, rOut4, rOut5) = _frameDecoder(randomEnc, _lossLevel);
+                    constexpr double discriminationLossWeight = 0.1; // TODO make a hyperparameter
+                    discriminationLoss = discriminationLossWeight * torch::l1_loss(torch::ones({doot2::batchSize},
+                            TensorOptions().device(_device)),
+                        _discriminator(rOut5, rOut4, rOut3, rOut2, rOut1, rOut0, _lossLevel));
+                }
                 discriminationLossAcc += discriminationLoss.item<double>();
 
                 // Total loss
@@ -614,8 +601,30 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     discriminationLoss;
                 lossAcc += loss.item<double>();
 
-                // Backward pass
+                // Encoder-decoder backward pass
                 loss.backward();
+
+                // Discriminator training passes
+                constexpr int discriminatorTrainingIterations = 2; // TODO make a hyperparameter
+                for (int d=0; d<discriminatorTrainingIterations; ++d) {
+                    _discriminator->zero_grad();
+                    // Real (input) images
+                    torch::Tensor discriminationReal = _discriminator(in5, in4, in3, in2, in1, in0, _lossLevel);
+                    torch::Tensor discriminatorLoss = l1_loss(discriminationReal,
+                        torch::ones_like(discriminationReal));
+                    torch::Tensor discriminationFake;
+                    // Fake (decoded) images
+                    torch::Tensor randomEnc = createRandomEncodingInterpolations(
+                        enc); // create new set of random interpolations
+                    std::tie(rOut0, rOut1, rOut2, rOut3, rOut4, rOut5) = _frameDecoder(randomEnc, _lossLevel);
+                    discriminationFake = _discriminator(
+                        rOut5.detach(), rOut4.detach(), rOut3.detach(), rOut2.detach(), rOut1.detach(), rOut0.detach(),
+                        _lossLevel);
+                    discriminatorLoss += l1_loss(discriminationFake, torch::zeros_like(discriminationFake));
+                    discriminatorLossAcc += discriminatorLoss.item<double>() / discriminatorTrainingIterations;
+                    discriminatorLoss.backward();
+                    _discriminatorOptimizer->step();
+                }
 
                 // Display
                 if (b == 0) {

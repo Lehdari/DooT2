@@ -75,6 +75,7 @@ private:
     MultiLevelFrameDecoder                  _frameDecoder;
     Discriminator                           _discriminator;
     std::unique_ptr<torch::optim::AdamW>    _optimizer;
+    std::unique_ptr<torch::optim::AdamW>    _discriminatorOptimizer;
     torch::Device                           _device;
     TimePoint                               _trainingStartTime;
 
