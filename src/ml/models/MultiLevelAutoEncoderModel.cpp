@@ -271,6 +271,7 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         timeSeriesWriteHandle->addSeries<double>("encodingPrevDistanceLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("discriminationLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("discriminatorLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("encodingCircularLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("loss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("lossLevel", 0.0);
         timeSeriesWriteHandle->addSeries<double>("maxEncodingCodistance", 0.0);
@@ -454,6 +455,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     double encodingPrevDistanceLossAcc = 0.0;
     double discriminationLossAcc = 0.0;
     double discriminatorLossAcc = 0.0;
+    double encodingCircularLossAcc = 0.0;
     double maxEncodingCodistance = 1.0; // max distance between encodings
     double maxEncodingCovariance = 1.0; // max value in the covariance matrix
     int64_t nVirtualBatchesPerCycle = (int64_t)sequenceLength / _virtualBatchSize;
@@ -462,7 +464,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         for (int64_t v=0; v<nVirtualBatchesPerCycle; ++v) {
             torch::Tensor in5, in4, in3, in2, in1, in0;
             torch::Tensor rOut0, rOut1, rOut2, rOut3, rOut4, rOut5;
-            torch::Tensor covarianceMatrix, encPrev;
+            torch::Tensor covarianceMatrix, encPrev, encRandom;
             _discriminator->train(true);
             for (int64_t b=0; b<_virtualBatchSize; ++b) {
                 // frame (time point) to use this iteration
@@ -584,10 +586,10 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 frameLaplacianLossAcc += frameLaplacianLoss.item<double>();
 
                 // Decoder discrimination loss
-                torch::Tensor discriminationLoss;
+                torch::Tensor discriminationLoss = torch::zeros({}, TensorOptions().device(_device));
                 {
-                    torch::Tensor randomEnc = createRandomEncodingInterpolations(enc);
-                    std::tie(rOut0, rOut1, rOut2, rOut3, rOut4, rOut5) = _frameDecoder(randomEnc, _lossLevel);
+                    encRandom = createRandomEncodingInterpolations(enc);
+                    std::tie(rOut0, rOut1, rOut2, rOut3, rOut4, rOut5) = _frameDecoder(encRandom, _lossLevel);
                     constexpr double discriminationLossWeight = 0.1; // TODO make a hyperparameter
                     discriminationLoss = discriminationLossWeight * torch::l1_loss(torch::ones({doot2::batchSize},
                             TensorOptions().device(_device)),
@@ -595,10 +597,18 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 }
                 discriminationLossAcc += discriminationLoss.item<double>();
 
+                // Circular encoding loss
+                torch::Tensor encodingCircularLoss = torch::zeros({}, TensorOptions().device(_device));
+                {
+                    torch::Tensor encCircular = _frameEncoder(rOut5, rOut4, rOut3, rOut2, rOut1, rOut0, _lossLevel);
+                    encodingCircularLoss = torch::mean(torch::norm(encCircular-encRandom, 2.0, 1));
+                }
+                encodingCircularLossAcc += encodingCircularLoss.item<double>();
+
                 // Total loss
                 torch::Tensor loss = encodingCodistanceLoss + encodingMeanLoss + covarianceLoss +
                     encodingPrevDistanceLoss + frameLoss + frameGradLoss + frameLaplacianLoss +
-                    discriminationLoss;
+                    discriminationLoss + encodingCircularLoss;
                 lossAcc += loss.item<double>();
 
                 // Encoder-decoder backward pass
@@ -614,9 +624,9 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                         torch::ones_like(discriminationReal));
                     torch::Tensor discriminationFake;
                     // Fake (decoded) images
-                    torch::Tensor randomEnc = createRandomEncodingInterpolations(
+                    encRandom = createRandomEncodingInterpolations(
                         enc); // create new set of random interpolations
-                    std::tie(rOut0, rOut1, rOut2, rOut3, rOut4, rOut5) = _frameDecoder(randomEnc, _lossLevel);
+                    std::tie(rOut0, rOut1, rOut2, rOut3, rOut4, rOut5) = _frameDecoder(encRandom, _lossLevel);
                     discriminationFake = _discriminator(
                         rOut5.detach(), rOut4.detach(), rOut3.detach(), rOut2.detach(), rOut1.detach(), rOut0.detach(),
                         _lossLevel);
@@ -707,6 +717,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         encodingPrevDistanceLossAcc /= framesPerCycle;
         discriminationLossAcc /= framesPerCycle;
         discriminatorLossAcc /= framesPerCycle;
+        encodingCircularLossAcc /= framesPerCycle;
 
         // Loss level adjustment
         constexpr double controlP = 0.01;
@@ -731,6 +742,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 "encodingPrevDistanceLoss", encodingPrevDistanceLossAcc,
                 "discriminationLoss", discriminationLossAcc,
                 "discriminatorLoss", discriminatorLossAcc,
+                "encodingCircularLoss", encodingCircularLossAcc,
                 "loss", lossAcc,
                 "lossLevel", _lossLevel,
                 "maxEncodingCodistance", maxEncodingCodistance,
@@ -748,6 +760,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         encodingPrevDistanceLossAcc = 0.0;
         discriminationLossAcc = 0.0;
         discriminatorLossAcc = 0.0;
+        encodingCircularLossAcc = 0.0;
 
         if (_abortTraining)
             break;
