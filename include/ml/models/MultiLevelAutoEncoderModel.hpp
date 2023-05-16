@@ -95,6 +95,8 @@ private:
         torch::Tensor& image5,
         torch::DeviceType device
     );
+
+    static torch::Tensor createRandomEncodingInterpolations(const torch::Tensor& enc, double extrapolation=0.2);
 };
 
 } // namespace ml

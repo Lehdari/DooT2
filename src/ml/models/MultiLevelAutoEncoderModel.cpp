@@ -768,3 +768,21 @@ void MultiLevelAutoEncoderModel::scaleDisplayImages(
         .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
     image5 = orig5.permute({1, 2, 0}).contiguous().to(device);
 }
+
+torch::Tensor MultiLevelAutoEncoderModel::createRandomEncodingInterpolations(const Tensor& enc, double extrapolation)
+{
+    assert(extrapolation >= 0.0);
+
+    // Squaring the random matrix creates more encodings closer to some of the original encodings.
+    // Otherwise most of the interpolated entries would be close to an "average" encoding.
+    torch::Tensor positiveBasis = tf::softmax(torch::pow(torch::randn({doot2::batchSize, doot2::batchSize},
+        TensorOptions().device(enc.device())), 2.0f),
+        tf::SoftmaxFuncOptions(1));
+    // Domain extrapolation can be achieved by adding negative encoding contributions
+    torch::Tensor negativeBasis = tf::softmax(torch::randn({doot2::batchSize, doot2::batchSize},
+            TensorOptions().device(enc.device())),
+        tf::SoftmaxFuncOptions(1));
+
+    torch::Tensor basis = positiveBasis*(1.0+2.0*extrapolation) - negativeBasis*(2.0*extrapolation);
+    return basis.matmul(enc);
+}
