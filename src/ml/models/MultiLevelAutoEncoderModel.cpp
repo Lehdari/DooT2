@@ -95,13 +95,13 @@ nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
     modelConfig["use_encoding_mean_loss"] = true;
     modelConfig["encoding_mean_loss_weight"] = 0.001;
     modelConfig["use_encoding_codistance_loss"] = true;
-    modelConfig["encoding_codistance_loss_weight"] = 0.004;
+    modelConfig["encoding_codistance_loss_weight"] = 0.4;
     modelConfig["use_covariance_loss"] = false;
     modelConfig["covariance_loss_weight"] = 0.0001;
     modelConfig["use_encoding_prev_distance_loss"] = true;
-    modelConfig["encoding_prev_distance_loss_weight"] = 0.1;
+    modelConfig["encoding_prev_distance_loss_weight"] = 0.2;
     modelConfig["initial_loss_level"] = 0.0;
-    modelConfig["target_loss"] = 0.3;
+    modelConfig["target_loss"] = 0.35;
 
     return modelConfig;
 }
@@ -127,12 +127,12 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
     _useEncodingMeanLoss            (true),
     _encodingMeanLossWeight         (0.001),
     _useEncodingCodistanceLoss      (true),
-    _encodingCodistanceLossWeight   (0.004),
+    _encodingCodistanceLossWeight   (0.4),
     _useCovarianceLoss              (false),
     _covarianceLossWeight           (0.0001),
     _useEncodingPrevDistanceLoss    (true),
-    _encodingPrevDistanceLossWeight (0.1),
-    _targetLoss                     (0.3),
+    _encodingPrevDistanceLossWeight (0.2),
+    _targetLoss                     (0.35),
     _lossLevel                      (0.0),
     _batchPixelDiff                 (1.0)
 {
