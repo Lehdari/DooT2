@@ -88,7 +88,7 @@ nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
     modelConfig["optimizer_epsilon"] = 1.0e-8;
     modelConfig["optimizer_weight_decay"] = 0.0001;
     modelConfig["n_training_cycles"] = 16;
-    modelConfig["virtual_batch_size"] = 32;
+    modelConfig["virtual_batch_size"] = 8;
     modelConfig["frame_loss_weight"] = 2.0;
     modelConfig["frame_grad_loss_weight"] = 1.5;
     modelConfig["frame_laplacian_loss_weight"] = 1.5;
@@ -100,8 +100,11 @@ nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
     modelConfig["covariance_loss_weight"] = 0.0001;
     modelConfig["use_encoding_prev_distance_loss"] = true;
     modelConfig["encoding_prev_distance_loss_weight"] = 0.2;
+    modelConfig["use_discriminator"] = true;
+    modelConfig["discrimination_loss_weight"] = 0.4;
+    modelConfig["discriminator_virtual_batch_size"] = 8;
     modelConfig["initial_loss_level"] = 0.0;
-    modelConfig["target_loss"] = 0.35;
+    modelConfig["target_loss"] = 0.5;
 
     return modelConfig;
 }
@@ -120,7 +123,7 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
     _optimizerEpsilon               (1.0e-8),
     _optimizerWeightDecay           (0.0001),
     _nTrainingCycles                (16),
-    _virtualBatchSize               (32),
+    _virtualBatchSize               (8),
     _frameLossWeight                (2.0),
     _frameGradLossWeight            (1.5),
     _frameLaplacianLossWeight       (1.5),
@@ -132,7 +135,10 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
     _covarianceLossWeight           (0.0001),
     _useEncodingPrevDistanceLoss    (true),
     _encodingPrevDistanceLossWeight (0.2),
-    _targetLoss                     (0.35),
+    _useDiscriminator               (true),
+    _discriminationLossWeight       (0.4),
+    _discriminatorVirtualBatchSize  (8),
+    _targetLoss                     (0.5),
     _lossLevel                      (0.0),
     _batchPixelDiff                 (1.0)
 {
@@ -142,6 +148,31 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
 {
     auto& modelConfig = experimentConfig["model_config"];
     fs::path experimentRoot = doot2::experimentsDirectory / experimentConfig["experiment_root"].get<fs::path>();
+
+    // Setup hyperparameters
+    _optimizerLearningRate = modelConfig["optimizer_learning_rate"];
+    _optimizerBeta1 = modelConfig["optimizer_beta1"];
+    _optimizerBeta2 = modelConfig["optimizer_beta2"];
+    _optimizerEpsilon = modelConfig["optimizer_epsilon"];
+    _optimizerWeightDecay = modelConfig["optimizer_weight_decay"];
+    _nTrainingCycles = modelConfig["n_training_cycles"];
+    _virtualBatchSize = modelConfig["virtual_batch_size"];
+    _frameLossWeight = modelConfig["frame_loss_weight"];
+    _frameGradLossWeight = modelConfig["frame_grad_loss_weight"];
+    _frameLaplacianLossWeight = modelConfig["frame_laplacian_loss_weight"];
+    _useEncodingMeanLoss = modelConfig["use_encoding_mean_loss"];
+    _encodingMeanLossWeight = modelConfig["encoding_mean_loss_weight"];
+    _useEncodingCodistanceLoss = modelConfig["use_encoding_codistance_loss"];
+    _encodingCodistanceLossWeight = modelConfig["encoding_codistance_loss_weight"];
+    _useCovarianceLoss = modelConfig["use_covariance_loss"];
+    _covarianceLossWeight = modelConfig["covariance_loss_weight"];
+    _useEncodingPrevDistanceLoss = modelConfig["use_encoding_prev_distance_loss"];
+    _encodingPrevDistanceLossWeight = modelConfig["encoding_prev_distance_loss_weight"];
+    _useDiscriminator = modelConfig["use_discriminator"];
+    _discriminationLossWeight = modelConfig["discrimination_loss_weight"];
+    _discriminatorVirtualBatchSize = modelConfig["discriminator_virtual_batch_size"];
+    _targetLoss = modelConfig["target_loss"];
+    _lossLevel = modelConfig["initial_loss_level"];
 
     // Load torch model file names from the model config
     _frameEncoderFilename = experimentRoot / "frame_encoder.pt";
@@ -194,43 +225,23 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     }
 
     // Load discriminator
-    if (fs::exists(discriminatorFilename)) {
-        printf("Loading frame decoder model from %s\n", discriminatorFilename.c_str()); // TODO logging
-        serialize::InputArchive inputArchive;
-        inputArchive.load_from(discriminatorFilename);
-        _discriminator->load(inputArchive);
-    }
-    else {
-        printf("No %s found. Initializing new discriminator model.\n", discriminatorFilename.c_str()); // TODO logging
-        *_discriminator = DiscriminatorImpl();
+    if (_useDiscriminator) {
+        if (fs::exists(discriminatorFilename)) {
+            printf("Loading frame decoder model from %s\n", discriminatorFilename.c_str()); // TODO logging
+            serialize::InputArchive inputArchive;
+            inputArchive.load_from(discriminatorFilename);
+            _discriminator->load(inputArchive);
+        } else {
+            printf("No %s found. Initializing new discriminator model.\n",
+                discriminatorFilename.c_str()); // TODO logging
+            *_discriminator = DiscriminatorImpl();
+        }
     }
 
     // Move model parameters to GPU if it's used
     _frameEncoder->to(_device);
     _frameDecoder->to(_device);
     _discriminator->to(_device);
-
-    // Setup hyperparameters
-    _optimizerLearningRate = modelConfig["optimizer_learning_rate"];
-    _optimizerBeta1 = modelConfig["optimizer_beta1"];
-    _optimizerBeta2 = modelConfig["optimizer_beta2"];
-    _optimizerEpsilon = modelConfig["optimizer_epsilon"];
-    _optimizerWeightDecay = modelConfig["optimizer_weight_decay"];
-    _nTrainingCycles = modelConfig["n_training_cycles"];
-    _virtualBatchSize = modelConfig["virtual_batch_size"];
-    _frameLossWeight = modelConfig["frame_loss_weight"];
-    _frameGradLossWeight = modelConfig["frame_grad_loss_weight"];
-    _frameLaplacianLossWeight = modelConfig["frame_laplacian_loss_weight"];
-    _useEncodingMeanLoss = modelConfig["use_encoding_mean_loss"];
-    _encodingMeanLossWeight = modelConfig["encoding_mean_loss_weight"];
-    _useEncodingCodistanceLoss = modelConfig["use_encoding_codistance_loss"];
-    _encodingCodistanceLossWeight = modelConfig["encoding_codistance_loss_weight"];
-    _useCovarianceLoss = modelConfig["use_covariance_loss"];
-    _covarianceLossWeight = modelConfig["covariance_loss_weight"];
-    _useEncodingPrevDistanceLoss = modelConfig["use_encoding_prev_distance_loss"];
-    _encodingPrevDistanceLossWeight = modelConfig["encoding_prev_distance_loss_weight"];
-    _targetLoss = modelConfig["target_loss"];
-    _lossLevel = modelConfig["initial_loss_level"];
 
     // Setup optimizers
     _optimizer = std::make_unique<torch::optim::AdamW>(std::vector<optim::OptimizerParamGroup>
@@ -241,14 +252,17 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
         .eps(_optimizerEpsilon)
         .weight_decay(_optimizerWeightDecay);
 
-    _discriminatorOptimizer = std::make_unique<torch::optim::AdamW>(std::vector<optim::OptimizerParamGroup>
-        {_discriminator->parameters()});
-    dynamic_cast<torch::optim::AdamWOptions&>(_optimizer->param_groups()[0].options())
-        .lr(_optimizerLearningRate)
-        .betas({_optimizerBeta1, _optimizerBeta2})
-        .eps(_optimizerEpsilon)
-        .weight_decay(_optimizerWeightDecay);
+    if (_useDiscriminator) {
+        _discriminatorOptimizer = std::make_unique<torch::optim::AdamW>(std::vector<optim::OptimizerParamGroup>
+            {_discriminator->parameters()});
+        dynamic_cast<torch::optim::AdamWOptions&>(_optimizer->param_groups()[0].options())
+            .lr(_optimizerLearningRate)
+            .betas({_optimizerBeta1, _optimizerBeta2})
+            .eps(_optimizerEpsilon)
+            .weight_decay(_optimizerWeightDecay);
+    }
 
+    // TODO move to Model base class
     _trainingStartTime = high_resolution_clock::now();
 }
 
@@ -408,13 +422,39 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     // This model is used solely for training, trainingInfo must never be nullptr
     assert(_trainingInfo != nullptr);
 
-    const auto sequenceLength = storage.length();
+    const int sequenceLength = (int)storage.length();
 
     // Load the whole storage's pixel data to the GPU
     auto* storageFrames = storage.getSequence<float>("frame");
     assert(storageFrames != nullptr);
-    torch::Tensor pixelDataIn = storageFrames->tensor().to(_device);
-    pixelDataIn = pixelDataIn.permute({0, 1, 4, 2, 3}); // permute into TBCHW
+    torch::Tensor seq5 = storageFrames->tensor().to(_device).permute({0, 1, 4, 2, 3}); // permute into TBCHW
+    assert(seq5.sizes()[0] == sequenceLength);
+    // Create scaled sequence data
+    torch::Tensor seq4 = torch::zeros({sequenceLength, seq5.sizes()[1], seq5.sizes()[2], 240, 320},
+        TensorOptions().device(_device));
+    torch::Tensor seq3 = torch::zeros({sequenceLength, seq5.sizes()[1], seq5.sizes()[2], 120, 160},
+        TensorOptions().device(_device));
+    torch::Tensor seq2 = torch::zeros({sequenceLength, seq5.sizes()[1], seq5.sizes()[2], 60, 80},
+        TensorOptions().device(_device));
+    torch::Tensor seq1 = torch::zeros({sequenceLength, seq5.sizes()[1], seq5.sizes()[2], 30, 40},
+        TensorOptions().device(_device));
+    torch::Tensor seq0 = torch::zeros({sequenceLength, seq5.sizes()[1], seq5.sizes()[2], 15, 20},
+        TensorOptions().device(_device));
+    for (int t=0; t<sequenceLength; ++t) {
+        if (_lossLevel > 2.0) // these limits are intentionally 1 less than elsewhere because lossLevel may increase during training
+            seq4.index_put_({t}, tf::interpolate(seq5.index({t}), tf::InterpolateFuncOptions()
+                .size(std::vector<long>{240, 320}).mode(kArea)));
+        if (_lossLevel > 1.0)
+            seq3.index_put_({t}, tf::interpolate(seq5.index({t}), tf::InterpolateFuncOptions()
+                .size(std::vector<long>{120, 160}).mode(kArea)));
+        if (_lossLevel > 0.0)
+            seq2.index_put_({t}, tf::interpolate(seq5.index({t}), tf::InterpolateFuncOptions()
+                .size(std::vector<long>{60, 80}).mode(kArea)));
+        seq1.index_put_({t}, tf::interpolate(seq5.index({t}), tf::InterpolateFuncOptions()
+            .size(std::vector<long>{30, 40}).mode(kArea)));
+        seq0.index_put_({t}, tf::interpolate(seq5.index({t}), tf::InterpolateFuncOptions()
+            .size(std::vector<long>{15, 20}).mode(kArea)));
+    }
 
     // Random sample the pixel diff to get an approximation
     for (int i=0; i<8; ++i) {
@@ -427,7 +467,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
         // Lowpass filter the diff to prevent sudden changes
         _batchPixelDiff = _batchPixelDiff*0.95 +
-            0.05 * torch::mean(torch::abs(pixelDataIn.index({t, b1})-pixelDataIn.index({t, b2}))).item<double>();
+            0.05 * torch::mean(torch::abs(seq5.index({t, b1})-seq5.index({t, b2}))).item<double>();
     }
 
     // Set training mode on
@@ -465,30 +505,52 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
             torch::Tensor in5, in4, in3, in2, in1, in0;
             torch::Tensor rOut0, rOut1, rOut2, rOut3, rOut4, rOut5;
             torch::Tensor covarianceMatrix, encPrev, encRandom;
-            _discriminator->train(true);
+
+            // Discriminator training passes
+            if (_useDiscriminator) {
+                for (int d = 0; d < _discriminatorVirtualBatchSize; ++d) {
+                    int t = rnd() % sequenceLength;
+
+                    // Prepare the inputs (original and scaled)
+                    in5 = seq5.index({(int) t});
+                    in4 = seq4.index({(int) t});
+                    in3 = seq3.index({(int) t});
+                    in2 = seq2.index({(int) t});
+                    in1 = seq1.index({(int) t});
+                    in0 = seq0.index({(int) t});
+
+                    // Frame encode
+                    torch::Tensor enc = _frameEncoder(in5, in4, in3, in2, in1, in0, _lossLevel);
+
+                    // Real (input) images
+                    torch::Tensor discriminationReal = _discriminator(in5, in4, in3, in2, in1, in0, _lossLevel);
+                    torch::Tensor discriminatorLoss = l1_loss(discriminationReal,
+                        torch::ones_like(discriminationReal));
+                    torch::Tensor discriminationFake;
+                    // Fake (decoded) images
+                    encRandom = createRandomEncodingInterpolations(
+                        enc); // create new set of random interpolations
+                    std::tie(rOut0, rOut1, rOut2, rOut3, rOut4, rOut5) = _frameDecoder(encRandom, _lossLevel);
+                    discriminationFake = _discriminator(
+                        rOut5.detach(), rOut4.detach(), rOut3.detach(), rOut2.detach(), rOut1.detach(), rOut0.detach(),
+                        _lossLevel);
+                    discriminatorLoss += l1_loss(discriminationFake, torch::zeros_like(discriminationFake));
+                    discriminatorLossAcc += discriminatorLoss.item<double>();
+                    discriminatorLoss.backward();
+                }
+            }
+
             for (int64_t b=0; b<_virtualBatchSize; ++b) {
                 // frame (time point) to use this iteration
-                int64_t t = v*_virtualBatchSize + b;
+                int t = v*_virtualBatchSize + b;
 
                 // Prepare the inputs (original and scaled)
-                in5 = pixelDataIn.index({(int)t});
-                if (_lossLevel > 3.0)
-                    in4 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{240, 320}).mode(kArea));
-                else
-                    in4 = torch::zeros({in5.sizes()[0], 3, 240, 320}, TensorOptions().device(_device));
-                if (_lossLevel > 2.0)
-                    in3 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{120, 160}).mode(kArea));
-                else
-                    in3 = torch::zeros({in5.sizes()[0], 3, 120, 160}, TensorOptions().device(_device));
-                if (_lossLevel > 1.0)
-                    in2 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{60, 80}).mode(kArea));
-                else
-                    in2 = torch::zeros({in5.sizes()[0], 3, 60, 80}, TensorOptions().device(_device));
-                if (_lossLevel > 0.0)
-                    in1 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{30, 40}).mode(kArea));
-                else
-                    in1 = torch::zeros({in5.sizes()[0], 3, 30, 40}, TensorOptions().device(_device));
-                in0 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{15, 20}).mode(kArea));
+                in5 = seq5.index({(int)t});
+                in4 = seq4.index({(int)t});
+                in3 = seq3.index({(int)t});
+                in2 = seq2.index({(int)t});
+                in1 = seq1.index({(int)t});
+                in0 = seq0.index({(int)t});
 
                 // Frame encode
                 torch::Tensor enc = _frameEncoder(in5, in4, in3, in2, in1, in0, _lossLevel);
@@ -532,7 +594,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 torch::Tensor encodingPrevDistanceLoss = torch::zeros({}, TensorOptions().device(_device));
                 if (_useEncodingPrevDistanceLoss && b>0) {
                     // Use pixel difference to previous frames as a basis for target encoding distance to the previous
-                    torch::Tensor prevPixelDiff = torch::mean(torch::abs(in5-pixelDataIn.index({(int)t-1})), {1, 2, 3});
+                    torch::Tensor prevPixelDiff = torch::mean(torch::abs(in5-seq5.index({(int)t-1})), {1, 2, 3});
                     // Normalize the difference using batchPixelDiff, the intuition being that encodings between
                     // sequences in the batch should have the distance of 1 from each other, as per mandated by the
                     // codistance loss.
@@ -587,15 +649,14 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
                 // Decoder discrimination loss
                 torch::Tensor discriminationLoss = torch::zeros({}, TensorOptions().device(_device));
-                {
+                if (_useDiscriminator) {
                     encRandom = createRandomEncodingInterpolations(enc);
                     std::tie(rOut0, rOut1, rOut2, rOut3, rOut4, rOut5) = _frameDecoder(encRandom, _lossLevel);
-                    constexpr double discriminationLossWeight = 0.1; // TODO make a hyperparameter
-                    discriminationLoss = discriminationLossWeight * torch::l1_loss(torch::ones({doot2::batchSize},
+                    discriminationLoss = _discriminationLossWeight * torch::l1_loss(torch::ones({doot2::batchSize},
                             TensorOptions().device(_device)),
                         _discriminator(rOut5, rOut4, rOut3, rOut2, rOut1, rOut0, _lossLevel));
+                    discriminationLossAcc += discriminationLoss.item<double>();
                 }
-                discriminationLossAcc += discriminationLoss.item<double>();
 
                 // Circular encoding loss
                 torch::Tensor encodingCircularLoss = torch::zeros({}, TensorOptions().device(_device));
@@ -613,28 +674,6 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
                 // Encoder-decoder backward pass
                 loss.backward();
-
-                // Discriminator training passes
-                constexpr int discriminatorTrainingIterations = 2; // TODO make a hyperparameter
-                for (int d=0; d<discriminatorTrainingIterations; ++d) {
-                    _discriminator->zero_grad();
-                    // Real (input) images
-                    torch::Tensor discriminationReal = _discriminator(in5, in4, in3, in2, in1, in0, _lossLevel);
-                    torch::Tensor discriminatorLoss = l1_loss(discriminationReal,
-                        torch::ones_like(discriminationReal));
-                    torch::Tensor discriminationFake;
-                    // Fake (decoded) images
-                    encRandom = createRandomEncodingInterpolations(
-                        enc); // create new set of random interpolations
-                    std::tie(rOut0, rOut1, rOut2, rOut3, rOut4, rOut5) = _frameDecoder(encRandom, _lossLevel);
-                    discriminationFake = _discriminator(
-                        rOut5.detach(), rOut4.detach(), rOut3.detach(), rOut2.detach(), rOut1.detach(), rOut0.detach(),
-                        _lossLevel);
-                    discriminatorLoss += l1_loss(discriminationFake, torch::zeros_like(discriminationFake));
-                    discriminatorLossAcc += discriminatorLoss.item<double>() / discriminatorTrainingIterations;
-                    discriminatorLoss.backward();
-                    _discriminatorOptimizer->step();
-                }
 
                 // Display
                 if (b == 0) {
@@ -699,6 +738,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
             // Apply gradients
             _optimizer->step();
+            _discriminatorOptimizer->step();
             _frameEncoder->zero_grad();
             _frameDecoder->zero_grad();
             _discriminator->zero_grad();
@@ -716,7 +756,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         covarianceLossAcc /= framesPerCycle;
         encodingPrevDistanceLossAcc /= framesPerCycle;
         discriminationLossAcc /= framesPerCycle;
-        discriminatorLossAcc /= framesPerCycle;
+        discriminatorLossAcc /= (double)nVirtualBatchesPerCycle*(double)_discriminatorVirtualBatchSize;
         encodingCircularLossAcc /= framesPerCycle;
 
         // Loss level adjustment
