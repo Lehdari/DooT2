@@ -67,6 +67,13 @@ MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl() :
     register_module("conv7", _conv7);
     register_module("bn7", _bn7);
     register_module("conv8", _conv8);
+
+    auto* w = _conv8->named_parameters(false).find("weight");
+    if (w == nullptr) throw std::runtime_error("Unable to find layer weights");
+    torch::nn::init::normal_(*w, 0.0, 0.0001);
+    w = _conv8->named_parameters(false).find("bias");
+    if (w == nullptr) throw std::runtime_error("Unable to find layer biases");
+    torch::nn::init::zeros_(*w);
 }
 
 torch::Tensor MultiLevelFrameEncoderImpl::forward(
