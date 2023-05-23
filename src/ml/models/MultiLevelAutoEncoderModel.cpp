@@ -148,7 +148,8 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
     _discriminatorVirtualBatchSize  (8),
     _targetLoss                     (0.5),
     _lossLevel                      (0.0),
-    _batchPixelDiff                 (1.0)
+    _batchPixelDiff                 (1.0),
+    _batchEncDiff                   (sqrt(doot2::encodingLength))
 {
 }
 
@@ -483,6 +484,12 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         // Lowpass filter the diff to prevent sudden changes
         _batchPixelDiff = _batchPixelDiff*0.95 +
             0.05 * torch::mean(torch::abs(seq5.index({t, b1})-seq5.index({t, b2}))).item<double>();
+
+        torch::Tensor enc = _frameEncoder(
+            seq5.index({t}), seq4.index({t}), seq3.index({t}),
+            seq2.index({t}), seq1.index({t}), seq0.index({t}),
+            _lossLevel);
+        _batchEncDiff = _batchEncDiff*0.95 + 0.05*torch::norm(enc.index({b1})-enc.index({b2})).item<double>();
     }
 
     // Set training mode on
@@ -626,16 +633,11 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 torch::Tensor encodingPrevDistanceLoss = zero;
                 if (_useEncodingPrevDistanceLoss && b>0) {
                     // Use pixel difference to previous frames as a basis for target encoding distance to the previous
-                    torch::Tensor prevPixelDiff = torch::mean(torch::abs(in5-seq5.index({(int)t-1})), {1, 2, 3});
-                    // Normalize the difference using batchPixelDiff, the intuition being that encodings between
-                    // sequences in the batch should have the distance of 1 from each other, as per mandated by the
-                    // codistance loss.
+                    torch::Tensor prevPixelDiff = (in5-seq5.index({(int)t-1})).abs().mean({1, 2, 3});
                     torch::Tensor prevPixelDiffNormalized = prevPixelDiff / _batchPixelDiff;
-                    torch::Tensor encPrevDistance = torch::linalg_norm(enc-encPrev, torch::nullopt, {1});
-                    // Sometimes pixel diff between subsequent frames can be larger than batchPixelDiff, which will
-                    // cause the normalized distance diff to be over 1. Scaling with 0.1 should give enough slack
-                    // to prevent the individual sequence encoding domains from overlapping.
-                    encodingPrevDistanceLoss = torch::mse_loss(encPrevDistance, prevPixelDiffNormalized*0.1f) *
+                    torch::Tensor encPrevDistanceNormalized = torch::linalg_norm(enc-encPrev, torch::nullopt, {1}) /
+                        _batchEncDiff;
+                    encodingPrevDistanceLoss = torch::mse_loss(encPrevDistanceNormalized, prevPixelDiffNormalized) *
                         _encodingPrevDistanceLossWeight *
                         ((float)_virtualBatchSize / ((float)_virtualBatchSize-1)); // normalize to match the actual v. batch size
                 }

@@ -77,6 +77,7 @@ private:
 
     double                                  _lossLevel; // determines the resolution the encoder
     double                                  _batchPixelDiff; // estimate for average pixel difference between frames from different sequences
+    double                                  _batchEncDiff; // estimate for average encoding distance between frames from different sequences
 
     MultiLevelFrameEncoder                  _frameEncoder;
     MultiLevelFrameDecoder                  _frameDecoder;
