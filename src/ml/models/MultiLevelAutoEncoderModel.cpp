@@ -327,6 +327,7 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         *(_trainingInfo->images)["random2"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["random1"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["random0"].write() = Image<float>(width, height, ImageFormat::YUV);
+        *(_trainingInfo->images)["encoding"].write() = Image<float>(64*8, 32*8, ImageFormat::GRAY);
         if (_useEncodingCodistanceLoss) {
             *(_trainingInfo->images)["codistance_matrix"].write() = Image<float>(
                 doot2::batchSize*16, doot2::batchSize*16, ImageFormat::GRAY);
@@ -532,7 +533,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         for (int64_t v=0; v<nVirtualBatchesPerCycle; ++v) {
             torch::Tensor in5, in4, in3, in2, in1, in0;
             torch::Tensor rOut0, rOut1, rOut2, rOut3, rOut4, rOut5;
-            torch::Tensor covarianceMatrix, encPrev, encRandom;
+            torch::Tensor covarianceMatrix, enc, encPrev, encRandom;
 
             // Discriminator training passes
             if (_useDiscriminator) {
@@ -548,7 +549,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     in0 = seq0.index({(int) t});
 
                     // Frame encode
-                    torch::Tensor enc = _frameEncoder(in5, in4, in3, in2, in1, in0, _lossLevel);
+                    enc = _frameEncoder(in5, in4, in3, in2, in1, in0, _lossLevel);
 
                     // Real (input) images
                     torch::Tensor discriminationReal = _discriminator(in5, in4, in3, in2, in1, in0, _lossLevel);
@@ -581,7 +582,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 in0 = seq0.index({(int)t});
 
                 // Frame encode
-                torch::Tensor enc = _frameEncoder(in5, in4, in3, in2, in1, in0, _lossLevel);
+                enc = _frameEncoder(in5, in4, in3, in2, in1, in0, _lossLevel);
 
                 // Compute distance from encoding mean to origin and encoding mean loss
                 torch::Tensor encodingMeanLoss = zero;
@@ -767,23 +768,35 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                         codistanceMatrixCPU = codistanceMatrix.to(torch::kCPU);
                         codistanceMatrixCPU /= maxEncodingCodistance;
                         codistanceMatrixCPU = tf::interpolate(codistanceMatrixCPU.unsqueeze(0).unsqueeze(0),
-                            tf::InterpolateFuncOptions().size(
-                                    std::vector<long>{doot2::batchSize * 16, doot2::batchSize * 16})
-                                .mode(kNearestExact).align_corners(false));
+                            tf::InterpolateFuncOptions()
+                                .size(std::vector<long>{doot2::batchSize * 16, doot2::batchSize * 16})
+                                .mode(kNearestExact).align_corners(false)
+                        );
                     }
                     torch::Tensor covarianceMatrixCPU;
                     if (_useEncodingCovarianceLoss) {
                         covarianceMatrixCPU = covarianceMatrix.to(torch::kCPU);
                         covarianceMatrixCPU /= maxEncodingCovariance;
                         covarianceMatrixCPU = tf::interpolate(covarianceMatrixCPU.unsqueeze(0).unsqueeze(0),
-                            tf::InterpolateFuncOptions().size(std::vector<long>{doot2::encodingLength, doot2::encodingLength})
-                                .mode(kNearestExact).align_corners(false));
+                            tf::InterpolateFuncOptions()
+                                .size(std::vector<long>{doot2::encodingLength, doot2::encodingLength})
+                                .mode(kNearestExact).align_corners(false)
+                        );
                     }
 
                     if (_useEncodingCodistanceLoss)
                         _trainingInfo->images["codistance_matrix"].write()->copyFrom(codistanceMatrixCPU.contiguous().data_ptr<float>());
                     if (_useEncodingCovarianceLoss)
                         _trainingInfo->images["covariance_matrix"].write()->copyFrom(covarianceMatrixCPU.contiguous().data_ptr<float>());
+
+                    torch::Tensor encodingImage;
+                    encodingImage = enc.index({displaySeqId}).to(torch::kCPU).reshape({32, 64}) + 0.5;
+                    encodingImage = tf::interpolate(encodingImage.unsqueeze(0).unsqueeze(0),
+                        tf::InterpolateFuncOptions()
+                            .size(std::vector<long>{32*8, 64*8})
+                            .mode(kNearestExact).align_corners(false)
+                    );
+                    _trainingInfo->images["encoding"].write()->copyFrom(encodingImage.contiguous().data_ptr<float>());
                 }
             }
 
