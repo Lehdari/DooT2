@@ -99,7 +99,7 @@ nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
     modelConfig["use_encoding_distance_loss"] = true;
     modelConfig["encoding_distance_loss_weight"] = 0.001;
     modelConfig["use_encoding_covariance_loss"] = false;
-    modelConfig["encoding_covariance_loss_weight"] = 0.0001;
+    modelConfig["encoding_covariance_loss_weight"] = 0.01;
     modelConfig["use_encoding_prev_distance_loss"] = true;
     modelConfig["encoding_prev_distance_loss_weight"] = 0.2;
     modelConfig["use_encoding_circular_loss"] = true;
@@ -138,7 +138,7 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
     _useEncodingDistanceLoss        (true),
     _encodingDistanceLossWeight     (0.001),
     _useEncodingCovarianceLoss      (false),
-    _encodingCovarianceLossWeight   (0.0001),
+    _encodingCovarianceLossWeight   (0.01),
     _useEncodingPrevDistanceLoss    (true),
     _encodingPrevDistanceLossWeight (0.2),
     _useEncodingCircularLoss        (true),
@@ -500,6 +500,11 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         TensorOptions().device(_device));
     torch::Tensor zero = torch::zeros({}, TensorOptions().device(_device));
 
+    // Target covariance matrix
+    torch::Tensor targetCovarianceMatrix;
+    if (_useEncodingCovarianceLoss)
+        targetCovarianceMatrix = torch::eye(doot2::encodingLength, TensorOptions().device(_device));
+
     double lossAcc = 0.0; // accumulate loss over the optimization interval to compute average
     double frameLossAcc = 0.0;
     double frameGradLossAcc = 0.0;
@@ -572,17 +577,17 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 torch::Tensor enc = _frameEncoder(in5, in4, in3, in2, in1, in0, _lossLevel);
 
                 // Compute distance from encoding mean to origin and encoding mean loss
-                torch::Tensor encodingMeanLoss = torch::zeros({}, TensorOptions().device(_device));
+                torch::Tensor encodingMeanLoss = zero;
                 torch::Tensor encMean;
                 if (_useEncodingMeanLoss or _useEncodingCovarianceLoss)
                     encMean = enc.mean(0);
                 if (_useEncodingMeanLoss) {
-                    encodingMeanLoss = encMean.norm() * _encodingMeanLossWeight;
+                    encodingMeanLoss = encMean.square().sum() * _encodingMeanLossWeight;
                     encodingMeanLossAcc += encodingMeanLoss.item<double>();
                 }
 
                 // Compute distances between each encoding and the codistance loss
-                torch::Tensor encodingCodistanceLoss = torch::zeros({}, TensorOptions().device(_device));
+                torch::Tensor encodingCodistanceLoss = zero;
                 torch::Tensor codistanceMatrix = torch::zeros({doot2::batchSize, doot2::batchSize},
                     TensorOptions().device(_device));
                 if (_useEncodingCodistanceLoss) {
@@ -606,19 +611,19 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 }
 
                 // Compute covariance matrix and covariance loss
-                torch::Tensor encodingCovarianceLoss = torch::zeros({}, TensorOptions().device(_device));
+                torch::Tensor encodingCovarianceLoss = zero;
                 if (_useEncodingCovarianceLoss) {
                     torch::Tensor encDev = enc - encMean;
-                    covarianceMatrix = ((encDev.transpose(0, 1).matmul(encDev)) /
-                        (doot2::batchSize - 1.0f)).square();
+                    covarianceMatrix = (encDev.transpose(0, 1).matmul(encDev)) / (doot2::batchSize - 1.0f);
                     maxEncodingCovariance = torch::max(covarianceMatrix).item<double>();
-                    encodingCovarianceLoss = ((covarianceMatrix.sum() - covarianceMatrix.diagonal().sum()) /
-                        (float) doot2::encodingLength) * _encodingCovarianceLossWeight;
+                    torch::Tensor covarianceMatrixSquaredDiff = (covarianceMatrix - targetCovarianceMatrix).square();
+                    encodingCovarianceLoss = _encodingCovarianceLossWeight * (covarianceMatrixSquaredDiff.mean() +
+                        covarianceMatrixSquaredDiff.max().sqrt());
                     encodingCovarianceLossAcc += encodingCovarianceLoss.item<double>();
                 }
 
                 // Loss from distance to previous encoding
-                torch::Tensor encodingPrevDistanceLoss = torch::zeros({}, TensorOptions().device(_device));
+                torch::Tensor encodingPrevDistanceLoss = zero;
                 if (_useEncodingPrevDistanceLoss && b>0) {
                     // Use pixel difference to previous frames as a basis for target encoding distance to the previous
                     torch::Tensor prevPixelDiff = torch::mean(torch::abs(in5-seq5.index({(int)t-1})), {1, 2, 3});
@@ -680,7 +685,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 }
 
                 // Decoder discrimination loss
-                torch::Tensor discriminationLoss = torch::zeros({}, TensorOptions().device(_device));
+                torch::Tensor discriminationLoss = zero;
                 if (_useDiscriminator) {
                     discriminationLoss = _discriminationLossWeight * torch::l1_loss(torch::ones({doot2::batchSize},
                             TensorOptions().device(_device)),
@@ -689,7 +694,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 }
 
                 // Circular encoding loss (demand that random encodings match after decode-encode)
-                torch::Tensor encodingCircularLoss = torch::zeros({}, TensorOptions().device(_device));
+                torch::Tensor encodingCircularLoss = zero;
                 if (_useEncodingCircularLoss) {
                     torch::Tensor encCircular = _frameEncoder(rOut5, rOut4, rOut3, rOut2, rOut1, rOut0, _lossLevel);
                     encodingCircularLoss = _encodingCircularLossWeight*
