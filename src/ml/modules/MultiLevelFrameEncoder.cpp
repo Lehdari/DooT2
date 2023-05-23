@@ -40,7 +40,11 @@ MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl() :
     _bn6            (nn::BatchNorm2dOptions(512)),
     _conv7          (nn::Conv2dOptions(512, 512, {2, 2}).bias(false)),
     _bn7            (nn::BatchNorm2dOptions(512)),
-    _conv8          (nn::Conv2dOptions(512, 128, {1, 1}))
+    _conv8          (nn::Conv2dOptions(512, 128, {1, 1}).bias(false)),
+    _bn8            (nn::BatchNorm1dOptions(2048)),
+    _linear1        (nn::LinearOptions(2048, 1024)),
+    _bn9            (nn::BatchNorm1dOptions(1024)),
+    _linear2        (nn::LinearOptions(1024, 2048))
 {
     register_module("conv1", _conv1);
     register_module("bn1", _bn1);
@@ -67,11 +71,18 @@ MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl() :
     register_module("conv7", _conv7);
     register_module("bn7", _bn7);
     register_module("conv8", _conv8);
+    register_module("bn8", _bn8);
+    register_module("linear1", _linear1);
+    register_module("bn9", _bn9);
+    register_module("linear2", _linear2);
 
     auto* w = _conv8->named_parameters(false).find("weight");
     if (w == nullptr) throw std::runtime_error("Unable to find layer weights");
     torch::nn::init::normal_(*w, 0.0, 0.0001);
-    w = _conv8->named_parameters(false).find("bias");
+    w = _linear2->named_parameters(false).find("weight");
+    if (w == nullptr) throw std::runtime_error("Unable to find layer weights");
+    torch::nn::init::normal_(*w, 0.0, 0.0001);
+    w = _linear2->named_parameters(false).find("bias");
     if (w == nullptr) throw std::runtime_error("Unable to find layer biases");
     torch::nn::init::zeros_(*w);
 }
@@ -139,7 +150,11 @@ torch::Tensor MultiLevelFrameEncoderImpl::forward(
     x = torch::leaky_relu(_bn6(_conv6(x)), leakyReluNegativeSlope); // 5x5x512
     x = torch::leaky_relu(_bn7(_conv7(x)), leakyReluNegativeSlope); // 4x4x512
     x = _conv8(x); // 4x4x128
-    x = torch::reshape(x, {-1, 2048});
+    x = torch::reshape(x, {-1, 2048}); // 2048
+
+    // linear residual block
+    torch::Tensor y = torch::leaky_relu(_bn8(x), leakyReluNegativeSlope);
+    x = x + _linear2(torch::leaky_relu(_bn9(_linear1(y)), leakyReluNegativeSlope));
 
     return x;
 }

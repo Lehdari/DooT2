@@ -32,6 +32,10 @@ public:
     ReturnType forward(torch::Tensor x, double lossLevel);
 
 private:
+    torch::nn::Linear           _linear1;
+    torch::nn::BatchNorm1d      _bn0_1;
+    torch::nn::Linear           _linear2;
+    torch::nn::BatchNorm1d      _bn0_2;
     ResNeXtModule               _resNext1a;
     ResNeXtModule               _resNext1b;
     torch::nn::ConvTranspose2d  _convTranspose1;

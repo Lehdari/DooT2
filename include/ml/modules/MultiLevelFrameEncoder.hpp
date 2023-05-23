@@ -55,6 +55,10 @@ private:
     torch::nn::Conv2d           _conv7;
     torch::nn::BatchNorm2d      _bn7;
     torch::nn::Conv2d           _conv8;
+    torch::nn::BatchNorm1d      _bn8;
+    torch::nn::Linear           _linear1;
+    torch::nn::BatchNorm1d      _bn9;
+    torch::nn::Linear           _linear2;
 };
 TORCH_MODULE(MultiLevelFrameEncoder);
 

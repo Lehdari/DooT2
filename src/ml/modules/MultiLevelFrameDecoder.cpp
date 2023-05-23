@@ -22,6 +22,10 @@ inline torch::Tensor maxLoss(const torch::Tensor& target, const torch::Tensor& p
 
 
 MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
+    _linear1            (nn::LinearOptions(2048, 1024).bias(false)),
+    _bn0_1              (nn::BatchNorm1dOptions(1024)),
+    _linear2            (nn::LinearOptions(1024, 2048).bias(false)),
+    _bn0_2              (nn::BatchNorm1dOptions(2048)),
     _resNext1a          (128, 256, 8, 64),
     _resNext1b          (256, 512, 8, 128),
     _convTranspose1     (nn::ConvTranspose2dOptions(512, 1024, {2, 2}).bias(false)),
@@ -75,6 +79,10 @@ MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
     _conv7_Y            (nn::Conv2dOptions(16, 1, {1, 1})),
     _conv7_UV           (nn::Conv2dOptions(16, 2, {1, 1}))
 {
+    register_module("linear0_1", _linear1);
+    register_module("bn0_1", _bn0_1);
+    register_module("linear0_2", _linear2);
+    register_module("bn0_2", _bn0_2);
     register_module("resNext1a", _resNext1a);
     register_module("resNext1b", _resNext1b);
     register_module("convTranspose1", _convTranspose1);
@@ -213,6 +221,10 @@ MultiLevelFrameDecoderImpl::ReturnType MultiLevelFrameDecoderImpl::forward(torch
     auto device = x.device();
 
     // Decoder
+    // Linear residual block
+    torch::Tensor y = torch::leaky_relu(_bn0_1(_linear1(x)), leakyReluNegativeSlope);
+    x = torch::leaky_relu(_bn0_2(_linear2(y) + x), leakyReluNegativeSlope);
+
     x = torch::reshape(x, {batchSize, 128, 4, 4});
     x = _resNext1a(x);
     x = torch::leaky_relu(_bn1(_convTranspose1(_resNext1b(x))), leakyReluNegativeSlope); // 5x5x1024
