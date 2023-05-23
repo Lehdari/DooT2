@@ -270,8 +270,8 @@ void Trainer::setupExperiment()
         _trainingInfo.evaluationTimeSeries.write()->addSeries<double>("performanceMin", 0.0);
     }
 
-    _model->setTrainingInfo(&_trainingInfo);
     _model->init(_experimentConfig);
+    _model->setTrainingInfo(&_trainingInfo);
     _finished = false;
 }
 
