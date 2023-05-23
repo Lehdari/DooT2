@@ -62,10 +62,12 @@ private:
     double                                  _encodingMeanLossWeight;
     bool                                    _useEncodingCodistanceLoss;
     double                                  _encodingCodistanceLossWeight;
-    bool                                    _useCovarianceLoss;
-    double                                  _covarianceLossWeight;
+    bool                                    _useEncodingCovarianceLoss;
+    double                                  _encodingCovarianceLossWeight;
     bool                                    _useEncodingPrevDistanceLoss;
     double                                  _encodingPrevDistanceLossWeight;
+    bool                                    _useEncodingCircularLoss;
+    double                                  _encodingCircularLossWeight;
     bool                                    _useDiscriminator;
     double                                  _discriminationLossWeight;
     int64_t                                 _discriminatorVirtualBatchSize;
