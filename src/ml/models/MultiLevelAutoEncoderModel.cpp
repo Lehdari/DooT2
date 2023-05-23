@@ -96,6 +96,8 @@ nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
     modelConfig["encoding_mean_loss_weight"] = 0.001;
     modelConfig["use_encoding_codistance_loss"] = true;
     modelConfig["encoding_codistance_loss_weight"] = 0.4;
+    modelConfig["use_encoding_distance_loss"] = true;
+    modelConfig["encoding_distance_loss_weight"] = 0.001;
     modelConfig["use_encoding_covariance_loss"] = false;
     modelConfig["encoding_covariance_loss_weight"] = 0.0001;
     modelConfig["use_encoding_prev_distance_loss"] = true;
@@ -133,6 +135,8 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
     _encodingMeanLossWeight         (0.001),
     _useEncodingCodistanceLoss      (true),
     _encodingCodistanceLossWeight   (0.4),
+    _useEncodingDistanceLoss        (true),
+    _encodingDistanceLossWeight     (0.001),
     _useEncodingCovarianceLoss      (false),
     _encodingCovarianceLossWeight   (0.0001),
     _useEncodingPrevDistanceLoss    (true),
@@ -168,6 +172,8 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     _encodingMeanLossWeight = modelConfig["encoding_mean_loss_weight"];
     _useEncodingCodistanceLoss = modelConfig["use_encoding_codistance_loss"];
     _encodingCodistanceLossWeight = modelConfig["encoding_codistance_loss_weight"];
+    _useEncodingDistanceLoss = modelConfig["use_encoding_distance_loss"];
+    _encodingDistanceLossWeight = modelConfig["encoding_distance_loss_weight"];
     _useEncodingCovarianceLoss = modelConfig["use_encoding_covariance_loss"];
     _encodingCovarianceLossWeight = modelConfig["encoding_covariance_loss_weight"];
     _useEncodingPrevDistanceLoss = modelConfig["use_encoding_prev_distance_loss"];
@@ -286,6 +292,7 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         timeSeriesWriteHandle->addSeries<double>("frameGradLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("frameLaplacianLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingCodistanceLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("encodingDistanceLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingMeanLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingCovarianceLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingPrevDistanceLoss", 0.0);
@@ -498,6 +505,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     double frameGradLossAcc = 0.0;
     double frameLaplacianLossAcc = 0.0;
     double encodingCodistanceLossAcc = 0.0;
+    double encodingDistanceLossAcc = 0.0;
     double encodingMeanLossAcc = 0.0;
     double encodingCovarianceLossAcc = 0.0;
     double encodingPrevDistanceLossAcc = 0.0;
@@ -585,6 +593,16 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     encodingCodistanceLoss = torch::mse_loss(codistanceMatrix, targetDistanceMatrix) *
                         _encodingCodistanceLossWeight;
                     encodingCodistanceLossAcc += encodingCodistanceLoss.item<double>();
+                }
+
+                // Compute mean encoding distance to origin loss
+                torch::Tensor encodingDistanceLoss = zero;
+                if (_useEncodingDistanceLoss) {
+                    torch::Tensor squaredDistances = enc.square().sum({1});
+                    encodingDistanceLoss = torch::mse_loss(squaredDistances.mean(),
+                        torch::ones({}, TensorOptions().device(_device)) * (double)doot2::encodingLength) *
+                        (_encodingDistanceLossWeight / doot2::encodingLength);
+                    encodingDistanceLossAcc += encodingDistanceLoss.item<double>();
                 }
 
                 // Compute covariance matrix and covariance loss
@@ -680,8 +698,9 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 encodingCircularLossAcc += encodingCircularLoss.item<double>();
 
                 // Total loss
-                torch::Tensor loss = encodingCodistanceLoss + encodingMeanLoss + encodingCovarianceLoss +
-                    encodingPrevDistanceLoss + frameLoss + frameGradLoss + frameLaplacianLoss +
+                torch::Tensor loss = encodingCodistanceLoss + encodingDistanceLoss + encodingMeanLoss +
+                    encodingCovarianceLoss + encodingPrevDistanceLoss +
+                    frameLoss + frameGradLoss + frameLaplacianLoss +
                     discriminationLoss + encodingCircularLoss;
                 lossAcc += loss.item<double>();
 
@@ -777,6 +796,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         frameGradLossAcc /= framesPerCycle;
         frameLaplacianLossAcc /= framesPerCycle;
         encodingCodistanceLossAcc /= framesPerCycle;
+        encodingDistanceLossAcc /= framesPerCycle;
         encodingMeanLossAcc /= framesPerCycle;
         encodingCovarianceLossAcc /= framesPerCycle;
         encodingPrevDistanceLossAcc /= framesPerCycle;
@@ -802,6 +822,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 "frameGradLoss", frameGradLossAcc,
                 "frameLaplacianLoss", frameLaplacianLossAcc,
                 "encodingCodistanceLoss", encodingCodistanceLossAcc,
+                "encodingDistanceLoss", encodingDistanceLossAcc,
                 "encodingMeanLoss", encodingMeanLossAcc,
                 "encodingCovarianceLoss", encodingCovarianceLossAcc,
                 "encodingPrevDistanceLoss", encodingPrevDistanceLossAcc,
@@ -820,6 +841,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         frameGradLossAcc = 0.0;
         frameLaplacianLossAcc = 0.0;
         encodingCodistanceLossAcc = 0.0;
+        encodingDistanceLossAcc = 0.0;
         encodingMeanLossAcc = 0.0;
         encodingCovarianceLossAcc = 0.0;
         encodingPrevDistanceLossAcc = 0.0;

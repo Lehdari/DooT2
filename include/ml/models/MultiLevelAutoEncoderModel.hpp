@@ -62,6 +62,8 @@ private:
     double                                  _encodingMeanLossWeight;
     bool                                    _useEncodingCodistanceLoss;
     double                                  _encodingCodistanceLossWeight;
+    bool                                    _useEncodingDistanceLoss;
+    double                                  _encodingDistanceLossWeight;
     bool                                    _useEncodingCovarianceLoss;
     double                                  _encodingCovarianceLossWeight;
     bool                                    _useEncodingPrevDistanceLoss;
