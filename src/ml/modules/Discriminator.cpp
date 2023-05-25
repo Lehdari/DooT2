@@ -34,17 +34,10 @@ ml::DiscriminatorImpl::DiscriminatorImpl() :
     torch::nn::init::zeros_(*w);
 }
 
-torch::Tensor ml::DiscriminatorImpl::forward(
-    const torch::Tensor& x5,
-    const torch::Tensor& x4,
-    const torch::Tensor& x3,
-    const torch::Tensor& x2,
-    const torch::Tensor& x1,
-    const torch::Tensor& x0,
-    double lossLevel)
+torch::Tensor ml::DiscriminatorImpl::forward(const MultiLevelImage& img)
 {
     constexpr double leakyReluNegativeSlope = 0.01;
 
-    torch::Tensor x = torch::leaky_relu(_bn1(_encoder(x5, x4, x3, x2, x1, x0, lossLevel)), leakyReluNegativeSlope);
+    torch::Tensor x = torch::leaky_relu(_bn1(_encoder(img)), leakyReluNegativeSlope);
     return 0.5f + torch::tanh(_linear2(torch::leaky_relu(_bn2(_linear1(x)), leakyReluNegativeSlope)))*0.55f;
 }

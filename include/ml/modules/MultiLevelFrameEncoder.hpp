@@ -10,6 +10,9 @@
 
 #pragma once
 
+#include "ml/MultiLevelImage.hpp"
+#include "ml/modules/MultiLevelEncoderModule.hpp"
+
 #include <torch/torch.h>
 
 
@@ -19,45 +22,22 @@ class MultiLevelFrameEncoderImpl : public torch::nn::Module {
 public:
     MultiLevelFrameEncoderImpl();
 
-    torch::Tensor forward(
-        torch::Tensor x5,
-        torch::Tensor x4,
-        torch::Tensor x3,
-        torch::Tensor x2,
-        torch::Tensor x1,
-        torch::Tensor x0,
-        double lossLevel
-    );
+    torch::Tensor forward(const MultiLevelImage& img);
 
 private:
+    MultiLevelEncoderModule     _encoder1;
+    MultiLevelEncoderModule     _encoder2;
+    MultiLevelEncoderModule     _encoder3;
+    MultiLevelEncoderModule     _encoder4;
+    MultiLevelEncoderModule     _encoder5;
+    MultiLevelEncoderModule     _encoder6;
+    MultiLevelEncoderModule     _encoder7;
     torch::nn::Conv2d           _conv1;
     torch::nn::BatchNorm2d      _bn1;
-    torch::nn::Conv2d           _conv1b;
-    torch::nn::BatchNorm2d      _bn1b;
     torch::nn::Conv2d           _conv2;
-    torch::nn::BatchNorm2d      _bn2;
-    torch::nn::Conv2d           _conv2b;
-    torch::nn::BatchNorm2d      _bn2b;
-    torch::nn::Conv2d           _conv3;
-    torch::nn::BatchNorm2d      _bn3;
-    torch::nn::Conv2d           _conv3b;
-    torch::nn::BatchNorm2d      _bn3b;
-    torch::nn::Conv2d           _conv4;
-    torch::nn::BatchNorm2d      _bn4;
-    torch::nn::Conv2d           _conv4b;
-    torch::nn::BatchNorm2d      _bn4b;
-    torch::nn::Conv2d           _conv5;
-    torch::nn::BatchNorm2d      _bn5;
-    torch::nn::Conv2d           _conv5b;
-    torch::nn::BatchNorm2d      _bn5b;
-    torch::nn::Conv2d           _conv6;
-    torch::nn::BatchNorm2d      _bn6;
-    torch::nn::Conv2d           _conv7;
-    torch::nn::BatchNorm2d      _bn7;
-    torch::nn::Conv2d           _conv8;
-    torch::nn::BatchNorm1d      _bn8;
+    torch::nn::BatchNorm1d      _bn2;
     torch::nn::Linear           _linear1;
-    torch::nn::BatchNorm1d      _bn9;
+    torch::nn::BatchNorm1d      _bn3;
     torch::nn::Linear           _linear2;
 };
 TORCH_MODULE(MultiLevelFrameEncoder);

@@ -21,15 +21,7 @@ class DiscriminatorImpl : public torch::nn::Module {
 public:
     DiscriminatorImpl();
 
-    torch::Tensor forward(
-        const torch::Tensor& x5,
-        const torch::Tensor& x4,
-        const torch::Tensor& x3,
-        const torch::Tensor& x2,
-        const torch::Tensor& x1,
-        const torch::Tensor& x0,
-        double lossLevel
-    );
+    torch::Tensor forward(const MultiLevelImage& img);
 
 private:
     MultiLevelFrameEncoder  _encoder;

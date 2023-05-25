@@ -14,6 +14,7 @@
 #include "ml/modules/MultiLevelFrameEncoder.hpp"
 #include "ml/modules/MultiLevelFrameDecoder.hpp"
 #include "ml/modules/Discriminator.hpp"
+#include "ml/MultiLevelImage.hpp"
 
 #include <chrono>
 
@@ -89,21 +90,9 @@ private:
 
     void trainImpl(SequenceStorage& storage) override;
 
-    void scaleDisplayImages(
-        const torch::Tensor& orig0,
-        const torch::Tensor& orig1,
-        const torch::Tensor& orig2,
-        const torch::Tensor& orig3,
-        const torch::Tensor& orig4,
-        const torch::Tensor& orig5,
-        torch::Tensor& image0,
-        torch::Tensor& image1,
-        torch::Tensor& image2,
-        torch::Tensor& image3,
-        torch::Tensor& image4,
-        torch::Tensor& image5,
-        torch::DeviceType device
-    );
+    MultiLevelImage scaleSequences(const Sequence<float>* storageFrames, int sequenceLength);
+
+    static void scaleDisplayImages(const MultiLevelImage& orig, MultiLevelImage& image, torch::DeviceType device);
 
     static torch::Tensor createRandomEncodingInterpolations(const torch::Tensor& enc, double extrapolation=0.2);
 };

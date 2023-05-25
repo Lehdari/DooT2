@@ -309,18 +309,24 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
     {
         auto width = doomGame.getScreenWidth();
         auto height = doomGame.getScreenHeight();
+        *(_trainingInfo->images)["input7"].write() = Image<float>(width, height, ImageFormat::YUV);
+        *(_trainingInfo->images)["input6"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["input5"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["input4"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["input3"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["input2"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["input1"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["input0"].write() = Image<float>(width, height, ImageFormat::YUV);
+        *(_trainingInfo->images)["prediction7"].write() = Image<float>(width, height, ImageFormat::YUV);
+        *(_trainingInfo->images)["prediction6"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["prediction5"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["prediction4"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["prediction3"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["prediction2"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["prediction1"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["prediction0"].write() = Image<float>(width, height, ImageFormat::YUV);
+        *(_trainingInfo->images)["random7"].write() = Image<float>(width, height, ImageFormat::YUV);
+        *(_trainingInfo->images)["random6"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["random5"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["random4"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["random3"].write() = Image<float>(width, height, ImageFormat::YUV);
@@ -371,32 +377,41 @@ void MultiLevelAutoEncoderModel::infer(const TensorVector& input, TensorVector& 
     _frameEncoder->train(false);
     _frameDecoder->train(false);
 
-    torch::Tensor in5 = input[0].to(_device);
-    torch::Tensor in4, in3, in2, in1;
+    MultiLevelImage in;
+    in.img7 = input[0].to(_device);
+    if (_lossLevel > 5.0)
+        in.img6 = tf::interpolate(in.img7, tf::InterpolateFuncOptions().size(std::vector<long>{240, 320}).mode(kArea));
+    else
+        in.img6 = torch::zeros({in.img7.sizes()[0], 3, 240, 320}, TensorOptions().device(_device));
+    if (_lossLevel > 4.0)
+        in.img5 = tf::interpolate(in.img7, tf::InterpolateFuncOptions().size(std::vector<long>{120, 160}).mode(kArea));
+    else
+        in.img5 = torch::zeros({in.img7.sizes()[0], 3, 120, 160}, TensorOptions().device(_device));
     if (_lossLevel > 3.0)
-        in4 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{240, 320}).mode(kArea));
+        in.img4 = tf::interpolate(in.img7, tf::InterpolateFuncOptions().size(std::vector<long>{60, 80}).mode(kArea));
     else
-        in4 = torch::zeros({in5.sizes()[0], 3, 240, 320}, TensorOptions().device(_device));
+        in.img4 = torch::zeros({in.img7.sizes()[0], 3, 60, 80}, TensorOptions().device(_device));
     if (_lossLevel > 2.0)
-        in3 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{120, 160}).mode(kArea));
+        in.img3 = tf::interpolate(in.img7, tf::InterpolateFuncOptions().size(std::vector<long>{30, 40}).mode(kArea));
     else
-        in3 = torch::zeros({in5.sizes()[0], 3, 120, 160}, TensorOptions().device(_device));
+        in.img3 = torch::zeros({in.img7.sizes()[0], 3, 30, 40}, TensorOptions().device(_device));
     if (_lossLevel > 1.0)
-        in2 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{60, 80}).mode(kArea));
+        in.img2 = tf::interpolate(in.img7, tf::InterpolateFuncOptions().size(std::vector<long>{15, 20}).mode(kArea));
     else
-        in2 = torch::zeros({in5.sizes()[0], 3, 60, 80}, TensorOptions().device(_device));
+        in.img2 = torch::zeros({in.img7.sizes()[0], 3, 15, 20}, TensorOptions().device(_device));
     if (_lossLevel > 0.0)
-        in1 = tf::interpolate(in5, tf::InterpolateFuncOptions().size(std::vector<long>{30, 40}).mode(kArea));
+        in.img1 = tf::interpolate(in.img7, tf::InterpolateFuncOptions().size(std::vector<long>{15, 10}).mode(kArea));
     else
-        in1 = torch::zeros({in5.sizes()[0], 3, 30, 40}, TensorOptions().device(_device));
-    torch::Tensor in0 = tf::interpolate(in5,
-        tf::InterpolateFuncOptions().size(std::vector<long>{15, 20}).mode(kArea));
+        in.img1 = torch::zeros({in.img7.sizes()[0], 3, 15, 10}, TensorOptions().device(_device));
+    in.img0 = tf::interpolate(in.img7,
+        tf::InterpolateFuncOptions().size(std::vector<long>{5, 5}).mode(kArea));
+    in.level = _lossLevel;
 
     // Frame encode
-    torch::Tensor enc = _frameEncoder->forward(in5, in4, in3, in2, in1, in0, _lossLevel);
+    torch::Tensor enc = _frameEncoder->forward(in);
 
     // Frame decode
-    auto [out0, out1, out2, out3, out4, out5] = _frameDecoder->forward(enc, _lossLevel);
+    auto out = _frameDecoder->forward(enc, _lossLevel);
 
     // Level weights
     float levelWeight0 = (float)std::clamp(1.0-_lossLevel, 0.0, 1.0);
@@ -404,30 +419,36 @@ void MultiLevelAutoEncoderModel::infer(const TensorVector& input, TensorVector& 
     float levelWeight2 = (float)std::clamp(1.0-std::abs(_lossLevel-2.0), 0.0, 1.0);
     float levelWeight3 = (float)std::clamp(1.0-std::abs(_lossLevel-3.0), 0.0, 1.0);
     float levelWeight4 = (float)std::clamp(1.0-std::abs(_lossLevel-4.0), 0.0, 1.0);
-    float levelWeight5 = (float)std::clamp(_lossLevel-4.0, 0.0, 1.0);
+    float levelWeight5 = (float)std::clamp(1.0-std::abs(_lossLevel-5.0), 0.0, 1.0);
+    float levelWeight6 = (float)std::clamp(1.0-std::abs(_lossLevel-6.0), 0.0, 1.0);
+    float levelWeight7 = (float)std::clamp(_lossLevel-6.0, 0.0, 1.0);
 
     // Resize outputs
-    out0 = tf::interpolate(out0, tf::InterpolateFuncOptions()
+    out.img0 = tf::interpolate(out.img0, tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-    out1 = tf::interpolate(out1, tf::InterpolateFuncOptions()
+    out.img1 = tf::interpolate(out.img1, tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-    out2 = tf::interpolate(out2, tf::InterpolateFuncOptions()
+    out.img2 = tf::interpolate(out.img2, tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-    out3 = tf::interpolate(out3, tf::InterpolateFuncOptions()
+    out.img3 = tf::interpolate(out.img3, tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-    out4 = tf::interpolate(out4, tf::InterpolateFuncOptions()
+    out.img4 = tf::interpolate(out.img4, tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
-    out5 = tf::interpolate(out5, tf::InterpolateFuncOptions()
+    out.img5 = tf::interpolate(out.img5, tf::InterpolateFuncOptions()
+        .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
+    out.img6 = tf::interpolate(out.img6, tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
 
     output.clear();
     output.push_back((
-        levelWeight0 * out0 +
-        levelWeight1 * out1 +
-        levelWeight2 * out2 +
-        levelWeight3 * out3 +
-        levelWeight4 * out4 +
-        levelWeight5 * out5)
+        levelWeight0 * out.img0 +
+        levelWeight1 * out.img1 +
+        levelWeight2 * out.img2 +
+        levelWeight3 * out.img3 +
+        levelWeight4 * out.img4 +
+        levelWeight5 * out.img5 +
+        levelWeight6 * out.img6 +
+        levelWeight7 * out.img7)
         .to(input[0].device()));
 }
 
@@ -443,35 +464,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
     // Load the whole storage's pixel data to the GPU
     auto* storageFrames = storage.getSequence<float>("frame");
-    assert(storageFrames != nullptr);
-    torch::Tensor seq5 = storageFrames->tensor().to(_device).permute({0, 1, 4, 2, 3}); // permute into TBCHW
-    assert(seq5.sizes()[0] == sequenceLength);
-    // Create scaled sequence data
-    torch::Tensor seq4 = torch::zeros({sequenceLength, seq5.sizes()[1], seq5.sizes()[2], 240, 320},
-        TensorOptions().device(_device));
-    torch::Tensor seq3 = torch::zeros({sequenceLength, seq5.sizes()[1], seq5.sizes()[2], 120, 160},
-        TensorOptions().device(_device));
-    torch::Tensor seq2 = torch::zeros({sequenceLength, seq5.sizes()[1], seq5.sizes()[2], 60, 80},
-        TensorOptions().device(_device));
-    torch::Tensor seq1 = torch::zeros({sequenceLength, seq5.sizes()[1], seq5.sizes()[2], 30, 40},
-        TensorOptions().device(_device));
-    torch::Tensor seq0 = torch::zeros({sequenceLength, seq5.sizes()[1], seq5.sizes()[2], 15, 20},
-        TensorOptions().device(_device));
-    for (int t=0; t<sequenceLength; ++t) {
-        if (_lossLevel > 2.0) // these limits are intentionally 1 less than elsewhere because lossLevel may increase during training
-            seq4.index_put_({t}, tf::interpolate(seq5.index({t}), tf::InterpolateFuncOptions()
-                .size(std::vector<long>{240, 320}).mode(kArea)));
-        if (_lossLevel > 1.0)
-            seq3.index_put_({t}, tf::interpolate(seq5.index({t}), tf::InterpolateFuncOptions()
-                .size(std::vector<long>{120, 160}).mode(kArea)));
-        if (_lossLevel > 0.0)
-            seq2.index_put_({t}, tf::interpolate(seq5.index({t}), tf::InterpolateFuncOptions()
-                .size(std::vector<long>{60, 80}).mode(kArea)));
-        seq1.index_put_({t}, tf::interpolate(seq5.index({t}), tf::InterpolateFuncOptions()
-            .size(std::vector<long>{30, 40}).mode(kArea)));
-        seq0.index_put_({t}, tf::interpolate(seq5.index({t}), tf::InterpolateFuncOptions()
-            .size(std::vector<long>{15, 20}).mode(kArea)));
-    }
+    auto seq = scaleSequences(storageFrames, sequenceLength);
 
     // Random sample the pixel diff to get an approximation
     for (int i=0; i<8; ++i) {
@@ -484,12 +477,20 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
         // Lowpass filter the diff to prevent sudden changes
         _batchPixelDiff = _batchPixelDiff*0.95 +
-            0.05 * torch::mean(torch::abs(seq5.index({t, b1})-seq5.index({t, b2}))).item<double>();
+            0.05 * torch::mean(torch::abs(seq.img7.index({t, b1})-seq.img7.index({t, b2}))).item<double>();
 
-        torch::Tensor enc = _frameEncoder(
-            seq5.index({t}), seq4.index({t}), seq3.index({t}),
-            seq2.index({t}), seq1.index({t}), seq0.index({t}),
-            _lossLevel);
+        MultiLevelImage in {
+            seq.img0.index({(int)t}),
+            seq.img1.index({(int)t}),
+            seq.img2.index({(int)t}),
+            seq.img3.index({(int)t}),
+            seq.img4.index({(int)t}),
+            seq.img5.index({(int)t}),
+            seq.img6.index({(int)t}),
+            seq.img7.index({(int)t}),
+            _lossLevel
+        };
+        torch::Tensor enc = _frameEncoder(in);
         _batchEncDiff = _batchEncDiff*0.95 + 0.05*torch::norm(enc.index({b1})-enc.index({b2})).item<double>();
     }
 
@@ -531,8 +532,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     const double framesPerCycle = (double)nVirtualBatchesPerCycle * _virtualBatchSize;
     for (int64_t c=0; c<_nTrainingCycles; ++c) {
         for (int64_t v=0; v<nVirtualBatchesPerCycle; ++v) {
-            torch::Tensor in5, in4, in3, in2, in1, in0;
-            torch::Tensor rOut0, rOut1, rOut2, rOut3, rOut4, rOut5;
+            MultiLevelImage rOut;
             torch::Tensor covarianceMatrix, enc, encPrev, encRandom;
 
             // Discriminator training passes
@@ -541,28 +541,42 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     int t = rnd() % sequenceLength;
 
                     // Prepare the inputs (original and scaled)
-                    in5 = seq5.index({(int) t});
-                    in4 = seq4.index({(int) t});
-                    in3 = seq3.index({(int) t});
-                    in2 = seq2.index({(int) t});
-                    in1 = seq1.index({(int) t});
-                    in0 = seq0.index({(int) t});
+                    MultiLevelImage in {
+                        seq.img0.index({(int)t}),
+                        seq.img1.index({(int)t}),
+                        seq.img2.index({(int)t}),
+                        seq.img3.index({(int)t}),
+                        seq.img4.index({(int)t}),
+                        seq.img5.index({(int)t}),
+                        seq.img6.index({(int)t}),
+                        seq.img7.index({(int)t}),
+                        _lossLevel
+                    };
 
                     // Frame encode
-                    enc = _frameEncoder(in5, in4, in3, in2, in1, in0, _lossLevel);
+                    enc = _frameEncoder(in);
 
                     // Real (input) images
-                    torch::Tensor discriminationReal = _discriminator(in5, in4, in3, in2, in1, in0, _lossLevel);
+                    torch::Tensor discriminationReal = _discriminator(in);
                     torch::Tensor discriminatorLoss = l1_loss(discriminationReal,
                         torch::ones_like(discriminationReal));
                     torch::Tensor discriminationFake;
                     // Fake (decoded) images
                     encRandom = createRandomEncodingInterpolations(
                         enc); // create new set of random interpolations
-                    std::tie(rOut0, rOut1, rOut2, rOut3, rOut4, rOut5) = _frameDecoder(encRandom, _lossLevel);
-                    discriminationFake = _discriminator(
-                        rOut5.detach(), rOut4.detach(), rOut3.detach(), rOut2.detach(), rOut1.detach(), rOut0.detach(),
-                        _lossLevel);
+                    rOut = _frameDecoder(encRandom, _lossLevel);
+                    MultiLevelImage rOutDetached {
+                        rOut.img0.detach(),
+                        rOut.img1.detach(),
+                        rOut.img2.detach(),
+                        rOut.img3.detach(),
+                        rOut.img4.detach(),
+                        rOut.img5.detach(),
+                        rOut.img6.detach(),
+                        rOut.img7.detach(),
+                        _lossLevel
+                    };
+                    discriminationFake = _discriminator(rOutDetached);
                     discriminatorLoss += l1_loss(discriminationFake, torch::zeros_like(discriminationFake));
                     discriminatorLossAcc += discriminatorLoss.item<double>();
                     discriminatorLoss.backward();
@@ -574,15 +588,20 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 int t = v*_virtualBatchSize + b;
 
                 // Prepare the inputs (original and scaled)
-                in5 = seq5.index({(int)t});
-                in4 = seq4.index({(int)t});
-                in3 = seq3.index({(int)t});
-                in2 = seq2.index({(int)t});
-                in1 = seq1.index({(int)t});
-                in0 = seq0.index({(int)t});
+                MultiLevelImage in {
+                    seq.img0.index({(int)t}),
+                    seq.img1.index({(int)t}),
+                    seq.img2.index({(int)t}),
+                    seq.img3.index({(int)t}),
+                    seq.img4.index({(int)t}),
+                    seq.img5.index({(int)t}),
+                    seq.img6.index({(int)t}),
+                    seq.img7.index({(int)t}),
+                    _lossLevel
+                };
 
                 // Frame encode
-                enc = _frameEncoder(in5, in4, in3, in2, in1, in0, _lossLevel);
+                enc = _frameEncoder(in);
 
                 // Compute distance from encoding mean to origin and encoding mean loss
                 torch::Tensor encodingMeanLoss = zero;
@@ -634,7 +653,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 torch::Tensor encodingPrevDistanceLoss = zero;
                 if (_useEncodingPrevDistanceLoss && b>0) {
                     // Use pixel difference to previous frames as a basis for target encoding distance to the previous
-                    torch::Tensor prevPixelDiff = (in5-seq5.index({(int)t-1})).abs().mean({1, 2, 3});
+                    torch::Tensor prevPixelDiff = (in.img7-seq.img7.index({(int)t-1})).abs().mean({1, 2, 3});
                     torch::Tensor prevPixelDiffNormalized = prevPixelDiff / _batchPixelDiff;
                     torch::Tensor encPrevDistanceNormalized = torch::linalg_norm(enc-encPrev, torch::nullopt, {1}) /
                         _batchEncDiff;
@@ -646,7 +665,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 encPrev = enc.detach(); // stop gradient from flowing to the previous iteration
 
                 // Frame decode
-                auto [out0, out1, out2, out3, out4, out5] = _frameDecoder(enc, _lossLevel);
+                auto out = _frameDecoder(enc, _lossLevel);
 
                 // Frame loss weights
                 float frameLossWeight0 = (float)std::clamp(1.0-_lossLevel, 0.0, 1.0);
@@ -654,52 +673,59 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 float frameLossWeight2 = (float)std::clamp(1.0-std::abs(_lossLevel-2.0), 0.0, 1.0);
                 float frameLossWeight3 = (float)std::clamp(1.0-std::abs(_lossLevel-3.0), 0.0, 1.0);
                 float frameLossWeight4 = (float)std::clamp(1.0-std::abs(_lossLevel-4.0), 0.0, 1.0);
-                float frameLossWeight5 = (float)std::clamp(_lossLevel-4.0, 0.0, 1.0);
+                float frameLossWeight5 = (float)std::clamp(1.0-std::abs(_lossLevel-5.0), 0.0, 1.0);
+                float frameLossWeight6 = (float)std::clamp(1.0-std::abs(_lossLevel-6.0), 0.0, 1.0);
+                float frameLossWeight7 = (float)std::clamp(_lossLevel-6.0, 0.0, 1.0);
 
                 // Frame decoding losses
                 torch::Tensor frameLoss = _frameLossWeight*(
-                    frameLossWeight0 * yuvLoss(in0, out0) +
-                    (_lossLevel > 0.0 ? frameLossWeight1 * yuvLoss(in1, out1) : zero) +
-                    (_lossLevel > 1.0 ? frameLossWeight2 * yuvLoss(in2, out2) : zero) +
-                    (_lossLevel > 2.0 ? frameLossWeight3 * yuvLoss(in3, out3) : zero) +
-                    (_lossLevel > 3.0 ? frameLossWeight4 * yuvLoss(in4, out4) : zero) +
-                    (_lossLevel > 4.0 ? frameLossWeight5 * yuvLoss(in5, out5) : zero));
+                    frameLossWeight0 * yuvLoss(in.img0, out.img0) +
+                    (_lossLevel > 0.0 ? frameLossWeight1 * yuvLoss(in.img1, out.img1) : zero) +
+                    (_lossLevel > 1.0 ? frameLossWeight2 * yuvLoss(in.img2, out.img2) : zero) +
+                    (_lossLevel > 2.0 ? frameLossWeight3 * yuvLoss(in.img3, out.img3) : zero) +
+                    (_lossLevel > 3.0 ? frameLossWeight4 * yuvLoss(in.img4, out.img4) : zero) +
+                    (_lossLevel > 4.0 ? frameLossWeight5 * yuvLoss(in.img5, out.img5) : zero) +
+                    (_lossLevel > 4.0 ? frameLossWeight6 * yuvLoss(in.img6, out.img6) : zero) +
+                    (_lossLevel > 4.0 ? frameLossWeight7 * yuvLoss(in.img7, out.img7) : zero));
                 frameLossAcc += frameLoss.item<double>();
                 torch::Tensor frameGradLoss = _frameGradLossWeight*(
-                    frameLossWeight0 * imageGradLoss(in0, out0) +
-                    (_lossLevel > 0.0 ? frameLossWeight1 * imageGradLoss(in1, out1) : zero) +
-                    (_lossLevel > 1.0 ? frameLossWeight2 * imageGradLoss(in2, out2) : zero) +
-                    (_lossLevel > 2.0 ? frameLossWeight3 * imageGradLoss(in3, out3) : zero) +
-                    (_lossLevel > 3.0 ? frameLossWeight4 * imageGradLoss(in4, out4) : zero) +
-                    (_lossLevel > 4.0 ? frameLossWeight5 * imageGradLoss(in5, out5) : zero));
+                    frameLossWeight0 * imageGradLoss(in.img0, out.img0) +
+                    (_lossLevel > 0.0 ? frameLossWeight1 * imageGradLoss(in.img1, out.img1) : zero) +
+                    (_lossLevel > 1.0 ? frameLossWeight2 * imageGradLoss(in.img2, out.img2) : zero) +
+                    (_lossLevel > 2.0 ? frameLossWeight3 * imageGradLoss(in.img3, out.img3) : zero) +
+                    (_lossLevel > 3.0 ? frameLossWeight4 * imageGradLoss(in.img4, out.img4) : zero) +
+                    (_lossLevel > 4.0 ? frameLossWeight5 * imageGradLoss(in.img5, out.img5) : zero) +
+                    (_lossLevel > 4.0 ? frameLossWeight6 * imageGradLoss(in.img6, out.img6) : zero) +
+                    (_lossLevel > 4.0 ? frameLossWeight7 * imageGradLoss(in.img7, out.img7) : zero));
                 frameGradLossAcc += frameGradLoss.item<double>();
                 torch::Tensor frameLaplacianLoss = _frameLaplacianLossWeight*(
-                    frameLossWeight0 * imageLaplacianLoss(in0, out0) +
-                    (_lossLevel > 0.0 ? frameLossWeight1 * imageLaplacianLoss(in1, out1) : zero) +
-                    (_lossLevel > 1.0 ? frameLossWeight2 * imageLaplacianLoss(in2, out2) : zero) +
-                    (_lossLevel > 2.0 ? frameLossWeight3 * imageLaplacianLoss(in3, out3) : zero) +
-                    (_lossLevel > 3.0 ? frameLossWeight4 * imageLaplacianLoss(in4, out4) : zero) +
-                    (_lossLevel > 4.0 ? frameLossWeight5 * imageLaplacianLoss(in5, out5) : zero));
+                    frameLossWeight0 * imageLaplacianLoss(in.img0, out.img0) +
+                    (_lossLevel > 0.0 ? frameLossWeight1 * imageLaplacianLoss(in.img1, out.img1) : zero) +
+                    (_lossLevel > 1.0 ? frameLossWeight2 * imageLaplacianLoss(in.img2, out.img2) : zero) +
+                    (_lossLevel > 2.0 ? frameLossWeight3 * imageLaplacianLoss(in.img3, out.img3) : zero) +
+                    (_lossLevel > 3.0 ? frameLossWeight4 * imageLaplacianLoss(in.img4, out.img4) : zero) +
+                    (_lossLevel > 4.0 ? frameLossWeight5 * imageLaplacianLoss(in.img5, out.img5) : zero) +
+                    (_lossLevel > 4.0 ? frameLossWeight6 * imageLaplacianLoss(in.img6, out.img6) : zero) +
+                    (_lossLevel > 4.0 ? frameLossWeight7 * imageLaplacianLoss(in.img7, out.img7) : zero));
                 frameLaplacianLossAcc += frameLaplacianLoss.item<double>();
 
                 if (_useDiscriminator && _useEncodingCircularLoss) {
                     encRandom = createRandomEncodingInterpolations(enc);
-                    std::tie(rOut0, rOut1, rOut2, rOut3, rOut4, rOut5) = _frameDecoder(encRandom, _lossLevel);
+                    rOut = _frameDecoder(encRandom, _lossLevel);
                 }
 
                 // Decoder discrimination loss
                 torch::Tensor discriminationLoss = zero;
                 if (_useDiscriminator) {
                     discriminationLoss = _discriminationLossWeight * torch::l1_loss(torch::ones({doot2::batchSize},
-                            TensorOptions().device(_device)),
-                        _discriminator(rOut5, rOut4, rOut3, rOut2, rOut1, rOut0, _lossLevel));
+                            TensorOptions().device(_device)), _discriminator(rOut));
                     discriminationLossAcc += discriminationLoss.item<double>();
                 }
 
                 // Circular encoding loss (demand that random encodings match after decode-encode)
                 torch::Tensor encodingCircularLoss = zero;
                 if (_useEncodingCircularLoss) {
-                    torch::Tensor encCircular = _frameEncoder(rOut5, rOut4, rOut3, rOut2, rOut1, rOut0, _lossLevel);
+                    torch::Tensor encCircular = _frameEncoder(rOut);
                     encodingCircularLoss = _encodingCircularLossWeight*
                         torch::mean(torch::norm(encCircular-encRandom, 2.0, 1));
                 }
@@ -720,47 +746,65 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     int displaySeqId = rnd() % doot2::batchSize;
 
                     // Input images
-                    torch::Tensor inImage0, inImage1, inImage2, inImage3, inImage4, inImage5;
+                    MultiLevelImage inImage;
                     scaleDisplayImages(
-                        in0.index({displaySeqId}), in1.index({displaySeqId}), in2.index({displaySeqId}),
-                        in3.index({displaySeqId}), in4.index({displaySeqId}), in5.index({displaySeqId}),
-                        inImage0, inImage1, inImage2, inImage3, inImage4, inImage5, torch::kCPU
+                        MultiLevelImage {
+                            in.img0.index({displaySeqId}), in.img1.index({displaySeqId}),
+                            in.img2.index({displaySeqId}), in.img3.index({displaySeqId}),
+                            in.img4.index({displaySeqId}), in.img5.index({displaySeqId}),
+                            in.img6.index({displaySeqId}), in.img7.index({displaySeqId}), 0.0
+                        },
+                        inImage, torch::kCPU
                     );
-                    _trainingInfo->images["input5"].write()->copyFrom(inImage5.data_ptr<float>());
-                    _trainingInfo->images["input4"].write()->copyFrom(inImage4.data_ptr<float>());
-                    _trainingInfo->images["input3"].write()->copyFrom(inImage3.data_ptr<float>());
-                    _trainingInfo->images["input2"].write()->copyFrom(inImage2.data_ptr<float>());
-                    _trainingInfo->images["input1"].write()->copyFrom(inImage1.data_ptr<float>());
-                    _trainingInfo->images["input0"].write()->copyFrom(inImage0.data_ptr<float>());
+                    _trainingInfo->images["input7"].write()->copyFrom(inImage.img7.data_ptr<float>());
+                    _trainingInfo->images["input6"].write()->copyFrom(inImage.img6.data_ptr<float>());
+                    _trainingInfo->images["input5"].write()->copyFrom(inImage.img5.data_ptr<float>());
+                    _trainingInfo->images["input4"].write()->copyFrom(inImage.img4.data_ptr<float>());
+                    _trainingInfo->images["input3"].write()->copyFrom(inImage.img3.data_ptr<float>());
+                    _trainingInfo->images["input2"].write()->copyFrom(inImage.img2.data_ptr<float>());
+                    _trainingInfo->images["input1"].write()->copyFrom(inImage.img1.data_ptr<float>());
+                    _trainingInfo->images["input0"].write()->copyFrom(inImage.img0.data_ptr<float>());
 
                     // Output images
-                    torch::Tensor outImage0, outImage1, outImage2, outImage3, outImage4, outImage5;
+                    MultiLevelImage outImage;
                     scaleDisplayImages(
-                        out0.index({displaySeqId}), out1.index({displaySeqId}), out2.index({displaySeqId}),
-                        out3.index({displaySeqId}), out4.index({displaySeqId}), out5.index({displaySeqId}),
-                        outImage0, outImage1, outImage2, outImage3, outImage4, outImage5, torch::kCPU
+                        MultiLevelImage {
+                            out.img0.index({displaySeqId}), out.img1.index({displaySeqId}),
+                            out.img2.index({displaySeqId}), out.img3.index({displaySeqId}),
+                            out.img4.index({displaySeqId}), out.img5.index({displaySeqId}),
+                            out.img6.index({displaySeqId}), out.img7.index({displaySeqId}), 0.0
+                        },
+                        outImage, torch::kCPU
                     );
-                    _trainingInfo->images["prediction5"].write()->copyFrom(outImage5.data_ptr<float>());
-                    _trainingInfo->images["prediction4"].write()->copyFrom(outImage4.data_ptr<float>());
-                    _trainingInfo->images["prediction3"].write()->copyFrom(outImage3.data_ptr<float>());
-                    _trainingInfo->images["prediction2"].write()->copyFrom(outImage2.data_ptr<float>());
-                    _trainingInfo->images["prediction1"].write()->copyFrom(outImage1.data_ptr<float>());
-                    _trainingInfo->images["prediction0"].write()->copyFrom(outImage0.data_ptr<float>());
+                    _trainingInfo->images["prediction7"].write()->copyFrom(outImage.img7.data_ptr<float>());
+                    _trainingInfo->images["prediction6"].write()->copyFrom(outImage.img6.data_ptr<float>());
+                    _trainingInfo->images["prediction5"].write()->copyFrom(outImage.img5.data_ptr<float>());
+                    _trainingInfo->images["prediction4"].write()->copyFrom(outImage.img4.data_ptr<float>());
+                    _trainingInfo->images["prediction3"].write()->copyFrom(outImage.img3.data_ptr<float>());
+                    _trainingInfo->images["prediction2"].write()->copyFrom(outImage.img2.data_ptr<float>());
+                    _trainingInfo->images["prediction1"].write()->copyFrom(outImage.img1.data_ptr<float>());
+                    _trainingInfo->images["prediction0"].write()->copyFrom(outImage.img0.data_ptr<float>());
 
                     // Output images decoded from random encodings
                     if (_useDiscriminator) {
-                        torch::Tensor rOutImage0, rOutImage1, rOutImage2, rOutImage3, rOutImage4, rOutImage5;
+                        MultiLevelImage rOutImage;
                         scaleDisplayImages(
-                            rOut0.index({displaySeqId}), rOut1.index({displaySeqId}), rOut2.index({displaySeqId}),
-                            rOut3.index({displaySeqId}), rOut4.index({displaySeqId}), rOut5.index({displaySeqId}),
-                            rOutImage0, rOutImage1, rOutImage2, rOutImage3, rOutImage4, rOutImage5, torch::kCPU
+                            MultiLevelImage {
+                                rOut.img0.index({displaySeqId}), rOut.img1.index({displaySeqId}),
+                                rOut.img2.index({displaySeqId}), rOut.img3.index({displaySeqId}),
+                                rOut.img4.index({displaySeqId}), rOut.img5.index({displaySeqId}),
+                                rOut.img6.index({displaySeqId}), rOut.img7.index({displaySeqId}), 0.0
+                            },
+                            rOutImage, torch::kCPU
                         );
-                        _trainingInfo->images["random5"].write()->copyFrom(rOutImage5.data_ptr<float>());
-                        _trainingInfo->images["random4"].write()->copyFrom(rOutImage4.data_ptr<float>());
-                        _trainingInfo->images["random3"].write()->copyFrom(rOutImage3.data_ptr<float>());
-                        _trainingInfo->images["random2"].write()->copyFrom(rOutImage2.data_ptr<float>());
-                        _trainingInfo->images["random1"].write()->copyFrom(rOutImage1.data_ptr<float>());
-                        _trainingInfo->images["random0"].write()->copyFrom(rOutImage0.data_ptr<float>());
+                        _trainingInfo->images["random7"].write()->copyFrom(rOutImage.img7.data_ptr<float>());
+                        _trainingInfo->images["random6"].write()->copyFrom(rOutImage.img6.data_ptr<float>());
+                        _trainingInfo->images["random5"].write()->copyFrom(rOutImage.img5.data_ptr<float>());
+                        _trainingInfo->images["random4"].write()->copyFrom(rOutImage.img4.data_ptr<float>());
+                        _trainingInfo->images["random3"].write()->copyFrom(rOutImage.img3.data_ptr<float>());
+                        _trainingInfo->images["random2"].write()->copyFrom(rOutImage.img2.data_ptr<float>());
+                        _trainingInfo->images["random1"].write()->copyFrom(rOutImage.img1.data_ptr<float>());
+                        _trainingInfo->images["random0"].write()->copyFrom(rOutImage.img0.data_ptr<float>());
                     }
 
                     torch::Tensor codistanceMatrixCPU;
@@ -829,7 +873,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         // use hyperbolic error metric (asymptotically larger adjustments when loss approaches 0)
         double error = 1.0 - (_targetLoss / (lossAcc + 1.0e-8));
         _lossLevel -= error*controlP; // P control should suffice
-        _lossLevel = std::clamp(_lossLevel, 0.0, 5.0);
+        _lossLevel = std::clamp(_lossLevel, 0.0, 7.0);
 
         // Write the time series
         {
@@ -874,28 +918,82 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     }
 }
 
-void MultiLevelAutoEncoderModel::scaleDisplayImages(
-    const Tensor& orig0, const Tensor& orig1, const Tensor& orig2,
-    const Tensor& orig3, const Tensor& orig4, const Tensor& orig5,
-    Tensor& image0, Tensor& image1, Tensor& image2, Tensor& image3, Tensor& image4, Tensor& image5,
-    torch::DeviceType device)
+MultiLevelImage MultiLevelAutoEncoderModel::scaleSequences(
+    const Sequence<float>* storageFrames, int sequenceLength)
 {
-    image0 = tf::interpolate(orig0.unsqueeze(0), tf::InterpolateFuncOptions()
+    assert(storageFrames != nullptr);
+    MultiLevelImage image;
+    image.img7 = storageFrames->tensor().to(_device).permute({0, 1, 4, 2, 3}); // permute into TBCHW
+    assert(image.img7.sizes()[0] == sequenceLength);
+
+    // Create scaled sequence data
+    // Initialize to zeros
+    image.img6 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 240, 320},
+        TensorOptions().device(_device));
+    image.img5 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 120, 160},
+        TensorOptions().device(_device));
+    image.img4 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 60, 80},
+        TensorOptions().device(_device));
+    image.img3 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 30, 40},
+        TensorOptions().device(_device));
+    image.img2 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 15, 20},
+        TensorOptions().device(_device));
+    image.img1 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 15, 10},
+        TensorOptions().device(_device));
+    image.img0 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 5, 5},
+        TensorOptions().device(_device));
+
+    for (int t=0; t<sequenceLength; ++t) {
+        if (_lossLevel > 4.0) // these limits are intentionally 1 less than elsewhere because lossLevel may increase during training
+            image.img6.index_put_({t}, tf::interpolate(image.img7.index({t}), tf::InterpolateFuncOptions()
+                .size(std::vector<long>{240, 320}).mode(kArea)));
+        if (_lossLevel > 3.0)
+            image.img5.index_put_({t}, tf::interpolate(image.img7.index({t}), tf::InterpolateFuncOptions()
+                .size(std::vector<long>{120, 160}).mode(kArea)));
+        if (_lossLevel > 2.0)
+            image.img4.index_put_({t}, tf::interpolate(image.img7.index({t}), tf::InterpolateFuncOptions()
+                .size(std::vector<long>{60, 80}).mode(kArea)));
+        if (_lossLevel > 1.0)
+            image.img3.index_put_({t}, tf::interpolate(image.img7.index({t}), tf::InterpolateFuncOptions()
+                .size(std::vector<long>{30, 40}).mode(kArea)));
+        if (_lossLevel > 0.0)
+            image.img2.index_put_({t}, tf::interpolate(image.img7.index({t}), tf::InterpolateFuncOptions()
+                .size(std::vector<long>{15, 20}).mode(kArea)));
+        image.img1.index_put_({t}, tf::interpolate(image.img7.index({t}), tf::InterpolateFuncOptions()
+            .size(std::vector<long>{15, 10}).mode(kArea)));
+        image.img0.index_put_({t}, tf::interpolate(image.img7.index({t}), tf::InterpolateFuncOptions()
+            .size(std::vector<long>{5, 5}).mode(kArea)));
+    }
+
+    image.level = _lossLevel;
+    return image;
+}
+
+void MultiLevelAutoEncoderModel::scaleDisplayImages(
+    const MultiLevelImage& orig, MultiLevelImage& image, torch::DeviceType device)
+{
+    image.img0 = tf::interpolate(orig.img0.unsqueeze(0), tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
         .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
-    image1 = tf::interpolate(orig1.unsqueeze(0), tf::InterpolateFuncOptions()
+    image.img1 = tf::interpolate(orig.img1.unsqueeze(0), tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
         .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
-    image2 = tf::interpolate(orig2.unsqueeze(0), tf::InterpolateFuncOptions()
+    image.img2 = tf::interpolate(orig.img2.unsqueeze(0), tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
         .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
-    image3 = tf::interpolate(orig3.unsqueeze(0), tf::InterpolateFuncOptions()
+    image.img3 = tf::interpolate(orig.img3.unsqueeze(0), tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
         .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
-    image4 = tf::interpolate(orig4.unsqueeze(0), tf::InterpolateFuncOptions()
+    image.img4 = tf::interpolate(orig.img4.unsqueeze(0), tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
         .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
-    image5 = orig5.permute({1, 2, 0}).contiguous().to(device);
+    image.img5 = tf::interpolate(orig.img5.unsqueeze(0), tf::InterpolateFuncOptions()
+        .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
+        .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
+    image.img6 = tf::interpolate(orig.img6.unsqueeze(0), tf::InterpolateFuncOptions()
+        .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
+        .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
+    image.img7 = orig.img7.permute({1, 2, 0}).contiguous().to(device);
 }
 
 torch::Tensor MultiLevelAutoEncoderModel::createRandomEncodingInterpolations(const Tensor& enc, double extrapolation)
