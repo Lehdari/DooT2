@@ -15,21 +15,22 @@ using namespace ml;
 using namespace torch;
 
 
-MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl() :
-    _encoder1       (6.0, 3, 16, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}), // 320x240
-    _encoder2       (5.0, 16, 32, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}), // 160x120
-    _encoder3       (4.0, 32, 64, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}), // 80x60
-    _encoder4       (3.0, 64, 128, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}), // 40x30
-    _encoder5       (2.0, 128, 256, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}), // 20x15
-    _encoder6       (1.0, 256, 512, ExpandingArray<2>{3,4}, ExpandingArray<2>{1,2}), // 10x15
-    _encoder7       (0.0, 512, 1024, ExpandingArray<2>{5,4}, ExpandingArray<2>{3,2}), // 5x5
-    _conv1          (nn::Conv2dOptions(1024, 512, {2, 2}).bias(false)),
-    _bn1            (nn::BatchNorm2dOptions(512)),
-    _conv2          (nn::Conv2dOptions(512, 128, {1, 1}).bias(false)),
-    _bn2            (nn::BatchNorm1dOptions(2048)),
-    _linear1        (nn::LinearOptions(2048, 1024)),
-    _bn3            (nn::BatchNorm1dOptions(1024)),
-    _linear2        (nn::LinearOptions(1024, 2048))
+MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl(int featureMultiplier, bool useLinearResBlock) :
+    _useLinearResBlock  (useLinearResBlock),
+    _encoder1           (6.0, 3, 4*featureMultiplier, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}), // 320x240
+    _encoder2           (5.0, 4*featureMultiplier, 8*featureMultiplier, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}), // 160x120
+    _encoder3           (4.0, 8*featureMultiplier, 16*featureMultiplier, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}), // 80x60
+    _encoder4           (3.0, 16*featureMultiplier, 32*featureMultiplier, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}), // 40x30
+    _encoder5           (2.0, 32*featureMultiplier, 64*featureMultiplier, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}), // 20x15
+    _encoder6           (1.0, 64*featureMultiplier, 128*featureMultiplier, ExpandingArray<2>{3,4}, ExpandingArray<2>{1,2}), // 10x15
+    _encoder7           (0.0, 128*featureMultiplier, 256*featureMultiplier, ExpandingArray<2>{5,4}, ExpandingArray<2>{3,2}), // 5x5
+    _conv1              (nn::Conv2dOptions(256*featureMultiplier, 128*featureMultiplier, {2, 2}).bias(false)),
+    _bn1                (nn::BatchNorm2dOptions(128*featureMultiplier)),
+    _conv2              (nn::Conv2dOptions(128*featureMultiplier, 128, {1, 1}).bias(false)),
+    _bn2                (nn::BatchNorm1dOptions(2048)),
+    _linear1            (nn::LinearOptions(2048, 1024)),
+    _bn3                (nn::BatchNorm1dOptions(1024)),
+    _linear2            (nn::LinearOptions(1024, 2048))
 {
     register_module("encoder1", _encoder1);
     register_module("encoder2", _encoder2);
@@ -41,20 +42,24 @@ MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl() :
     register_module("conv1", _conv1);
     register_module("bn1", _bn1);
     register_module("conv2", _conv2);
-    register_module("bn2", _bn2);
-    register_module("linear1", _linear1);
-    register_module("bn3", _bn3);
-    register_module("linear2", _linear2);
+    if (_useLinearResBlock) {
+        register_module("bn2", _bn2);
+        register_module("linear1", _linear1);
+        register_module("bn3", _bn3);
+        register_module("linear2", _linear2);
+    }
 
     auto* w = _conv2->named_parameters(false).find("weight");
     if (w == nullptr) throw std::runtime_error("Unable to find layer weights");
     torch::nn::init::normal_(*w, 0.0, 0.0001);
-    w = _linear2->named_parameters(false).find("weight");
-    if (w == nullptr) throw std::runtime_error("Unable to find layer weights");
-    torch::nn::init::normal_(*w, 0.0, 0.0001);
-    w = _linear2->named_parameters(false).find("bias");
-    if (w == nullptr) throw std::runtime_error("Unable to find layer biases");
-    torch::nn::init::zeros_(*w);
+    if (_useLinearResBlock) {
+        w = _linear2->named_parameters(false).find("weight");
+        if (w == nullptr) throw std::runtime_error("Unable to find layer weights");
+        torch::nn::init::normal_(*w, 0.0, 0.0001);
+        w = _linear2->named_parameters(false).find("bias");
+        if (w == nullptr) throw std::runtime_error("Unable to find layer biases");
+        torch::nn::init::zeros_(*w);
+    }
 }
 
 torch::Tensor MultiLevelFrameEncoderImpl::forward(const MultiLevelImage& img)
@@ -76,8 +81,9 @@ torch::Tensor MultiLevelFrameEncoderImpl::forward(const MultiLevelImage& img)
     x = torch::reshape(x, {-1, 2048}); // 2048
 
     // linear residual block
-    torch::Tensor y = torch::leaky_relu(_bn2(x), leakyReluNegativeSlope);
-    x = x + _linear2(torch::leaky_relu(_bn3(_linear1(y)), leakyReluNegativeSlope));
-
+    if (_useLinearResBlock) {
+        torch::Tensor y = torch::leaky_relu(_bn2(x), leakyReluNegativeSlope);
+        x = x + _linear2(torch::leaky_relu(_bn3(_linear1(y)), leakyReluNegativeSlope));
+    }
     return x;
 }

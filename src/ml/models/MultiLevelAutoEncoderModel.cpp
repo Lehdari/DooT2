@@ -12,6 +12,8 @@
 #include "ml/TrainingInfo.hpp"
 #include "Constants.hpp"
 
+#include <ATen/autocast_mode.h>
+#include <c10/cuda/CUDACachingAllocator.h>
 #include <gvizdoom/DoomGame.hpp>
 
 #include <filesystem>
@@ -87,9 +89,9 @@ nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
     modelConfig["optimizer_beta2"] = 0.999;
     modelConfig["optimizer_epsilon"] = 1.0e-8;
     modelConfig["optimizer_weight_decay"] = 0.0001;
-    modelConfig["n_training_cycles"] = 16;
+    modelConfig["n_training_cycles"] = 4;
     modelConfig["virtual_batch_size"] = 8;
-    modelConfig["frame_loss_weight"] = 2.0;
+    modelConfig["frame_loss_weight"] = 3.0;
     modelConfig["frame_grad_loss_weight"] = 1.5;
     modelConfig["frame_laplacian_loss_weight"] = 1.5;
     modelConfig["use_encoding_mean_loss"] = true;
@@ -103,12 +105,12 @@ nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
     modelConfig["use_encoding_prev_distance_loss"] = true;
     modelConfig["encoding_prev_distance_loss_weight"] = 0.2;
     modelConfig["use_encoding_circular_loss"] = true;
-    modelConfig["encoding_circular_loss_weight"] = 0.5;
+    modelConfig["encoding_circular_loss_weight"] = 0.25;
     modelConfig["use_discriminator"] = true;
     modelConfig["discrimination_loss_weight"] = 0.4;
     modelConfig["discriminator_virtual_batch_size"] = 8;
     modelConfig["initial_loss_level"] = 0.0;
-    modelConfig["target_loss"] = 0.5;
+    modelConfig["target_loss"] = 0.35;
 
     return modelConfig;
 }
@@ -126,9 +128,9 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
     _optimizerBeta2                 (0.999),
     _optimizerEpsilon               (1.0e-8),
     _optimizerWeightDecay           (0.0001),
-    _nTrainingCycles                (16),
+    _nTrainingCycles                (4),
     _virtualBatchSize               (8),
-    _frameLossWeight                (2.0),
+    _frameLossWeight                (3.0),
     _frameGradLossWeight            (1.5),
     _frameLaplacianLossWeight       (1.5),
     _useEncodingMeanLoss            (true),
@@ -142,14 +144,15 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
     _useEncodingPrevDistanceLoss    (true),
     _encodingPrevDistanceLossWeight (0.2),
     _useEncodingCircularLoss        (true),
-    _encodingCircularLossWeight     (0.5),
+    _encodingCircularLossWeight     (0.25),
     _useDiscriminator               (true),
     _discriminationLossWeight       (0.4),
     _discriminatorVirtualBatchSize  (8),
-    _targetLoss                     (0.5),
+    _targetLoss                     (0.35),
     _lossLevel                      (0.0),
     _batchPixelDiff                 (1.0),
-    _batchEncDiff                   (sqrt(doot2::encodingLength))
+    _batchEncDiff                   (sqrt(doot2::encodingLength)),
+    _frameEncoder                   (4, true)
 {
 }
 
@@ -222,7 +225,7 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     }
     else {
         printf("No %s found. Initializing new frame encoder model.\n", frameEncoderFilename.c_str()); // TODO logging
-        *_frameEncoder = MultiLevelFrameEncoderImpl();
+        *_frameEncoder = MultiLevelFrameEncoderImpl(4, true);
     }
 
     // Load frame decoder
@@ -252,9 +255,9 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     }
 
     // Move model parameters to GPU if it's used
-    _frameEncoder->to(_device);
-    _frameDecoder->to(_device);
-    _discriminator->to(_device);
+    _frameEncoder->to(_device, torch::kBFloat16);
+    _frameDecoder->to(_device, torch::kBFloat16);
+    _discriminator->to(_device, torch::kBFloat16);
 
     // Setup optimizers
     _optimizer = std::make_unique<torch::optim::AdamW>(std::vector<optim::OptimizerParamGroup>
@@ -406,6 +409,18 @@ void MultiLevelAutoEncoderModel::infer(const TensorVector& input, TensorVector& 
     in.img0 = tf::interpolate(in.img7,
         tf::InterpolateFuncOptions().size(std::vector<long>{5, 5}).mode(kArea));
     in.level = _lossLevel;
+//
+//    in.img7 = in.img7.to(torch::kBFloat16);
+//    in.img6 = in.img6.to(torch::kBFloat16);
+//    in.img5 = in.img5.to(torch::kBFloat16);
+//    in.img4 = in.img4.to(torch::kBFloat16);
+//    in.img3 = in.img3.to(torch::kBFloat16);
+//    in.img2 = in.img2.to(torch::kBFloat16);
+//    in.img1 = in.img1.to(torch::kBFloat16);
+//    in.img0 = in.img0.to(torch::kBFloat16);
+
+    _frameEncoder->to(torch::kFloat32);
+    _frameDecoder->to(torch::kFloat32);
 
     // Frame encode
     torch::Tensor enc = _frameEncoder->forward(in);
@@ -460,6 +475,9 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     // This model is used solely for training, trainingInfo must never be nullptr
     assert(_trainingInfo != nullptr);
 
+    at::autocast::set_autocast_gpu_dtype(torch::kBFloat16);
+    at::autocast::set_enabled(true);
+
     const int sequenceLength = (int)storage.length();
 
     // Load the whole storage's pixel data to the GPU
@@ -498,6 +516,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     _frameEncoder->train(true);
     _frameDecoder->train(true);
     _discriminator->train(true);
+    _frameEncoder->to(torch::kBFloat16);
+    _frameDecoder->to(torch::kBFloat16);
 
     // Zero out the gradients
     _frameEncoder->zero_grad();
@@ -540,47 +560,47 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 for (int d = 0; d < _discriminatorVirtualBatchSize; ++d) {
                     int t = rnd() % sequenceLength;
 
-                    // Prepare the inputs (original and scaled)
-                    MultiLevelImage in {
-                        seq.img0.index({(int)t}),
-                        seq.img1.index({(int)t}),
-                        seq.img2.index({(int)t}),
-                        seq.img3.index({(int)t}),
-                        seq.img4.index({(int)t}),
-                        seq.img5.index({(int)t}),
-                        seq.img6.index({(int)t}),
-                        seq.img7.index({(int)t}),
-                        _lossLevel
-                    };
+                    torch::Tensor discriminatorLoss;
+                    {   // Real (input) images
+                        // Prepare the inputs (original and scaled)
+                        MultiLevelImage in{
+                            seq.img0.index({(int) t}),
+                            seq.img1.index({(int) t}),
+                            seq.img2.index({(int) t}),
+                            seq.img3.index({(int) t}),
+                            seq.img4.index({(int) t}),
+                            seq.img5.index({(int) t}),
+                            seq.img6.index({(int) t}),
+                            seq.img7.index({(int) t}),
+                            _lossLevel
+                        };
 
-                    // Frame encode
-                    enc = _frameEncoder(in);
-
-                    // Real (input) images
-                    torch::Tensor discriminationReal = _discriminator(in);
-                    torch::Tensor discriminatorLoss = l1_loss(discriminationReal,
-                        torch::ones_like(discriminationReal));
-                    torch::Tensor discriminationFake;
-                    // Fake (decoded) images
-                    encRandom = createRandomEncodingInterpolations(
-                        enc); // create new set of random interpolations
-                    rOut = _frameDecoder(encRandom, _lossLevel);
-                    MultiLevelImage rOutDetached {
-                        rOut.img0.detach(),
-                        rOut.img1.detach(),
-                        rOut.img2.detach(),
-                        rOut.img3.detach(),
-                        rOut.img4.detach(),
-                        rOut.img5.detach(),
-                        rOut.img6.detach(),
-                        rOut.img7.detach(),
-                        _lossLevel
-                    };
-                    discriminationFake = _discriminator(rOutDetached);
-                    discriminatorLoss += l1_loss(discriminationFake, torch::zeros_like(discriminationFake));
+                        torch::Tensor discriminationReal = _discriminator(in);
+                        discriminatorLoss = l1_loss(discriminationReal,
+                            torch::ones_like(discriminationReal));
+                    }
+                    {   // Fake (decoded) images
+                        encRandom = torch::randn({doot2::batchSize, doot2::encodingLength},
+                            TensorOptions().device(_device).dtype(torch::kBFloat16));
+                        MultiLevelImage rOut2 = _frameDecoder(encRandom, _lossLevel);
+                        MultiLevelImage rOutDetached{
+                            rOut2.img0.detach(),
+                            rOut2.img1.detach(),
+                            rOut2.img2.detach(),
+                            rOut2.img3.detach(),
+                            rOut2.img4.detach(),
+                            rOut2.img5.detach(),
+                            rOut2.img6.detach(),
+                            rOut2.img7.detach(),
+                            _lossLevel
+                        };
+                        torch::Tensor discriminationFake = _discriminator(rOutDetached);
+                        discriminatorLoss += l1_loss(discriminationFake, torch::zeros_like(discriminationFake));
+                    }
                     discriminatorLossAcc += discriminatorLoss.item<double>();
                     discriminatorLoss.backward();
                 }
+                _frameDecoder->zero_grad();
             }
 
             for (int64_t b=0; b<_virtualBatchSize; ++b) {
@@ -619,7 +639,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     TensorOptions().device(_device));
                 if (_useEncodingCodistanceLoss) {
                     codistanceMatrix = torch::cdist(enc, enc);
-                    maxEncodingCodistance = torch::max(codistanceMatrix).to(torch::kCPU).item<double>();
+                    maxEncodingCodistance = torch::max(codistanceMatrix).to(torch::kCPU, torch::kFloat32).item<double>();
                     codistanceMatrix = codistanceMatrix +
                         torch::eye(doot2::batchSize, TensorOptions().device(_device));
                     encodingCodistanceLoss = torch::mse_loss(codistanceMatrix, targetDistanceMatrix) *
@@ -709,8 +729,9 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     (_lossLevel > 4.0 ? frameLossWeight7 * imageLaplacianLoss(in.img7, out.img7) : zero));
                 frameLaplacianLossAcc += frameLaplacianLoss.item<double>();
 
-                if (_useDiscriminator && _useEncodingCircularLoss) {
-                    encRandom = createRandomEncodingInterpolations(enc);
+                if (_useDiscriminator || _useEncodingCircularLoss) {
+                    encRandom = torch::randn({doot2::batchSize, doot2::encodingLength},
+                        TensorOptions().device(_device).dtype(torch::kBFloat16));
                     rOut = _frameDecoder(encRandom, _lossLevel);
                 }
 
@@ -727,7 +748,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 if (_useEncodingCircularLoss) {
                     torch::Tensor encCircular = _frameEncoder(rOut);
                     encodingCircularLoss = _encodingCircularLossWeight*
-                        torch::mean(torch::norm(encCircular-encRandom, 2.0, 1));
+                        torch::mean(torch::norm(encCircular-encRandom, 2.0, 1) / _batchEncDiff);
                 }
                 encodingCircularLossAcc += encodingCircularLoss.item<double>();
 
@@ -809,7 +830,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
                     torch::Tensor codistanceMatrixCPU;
                     if (_useEncodingCodistanceLoss) {
-                        codistanceMatrixCPU = codistanceMatrix.to(torch::kCPU);
+                        codistanceMatrixCPU = codistanceMatrix.to(torch::kCPU, torch::kFloat32);
                         codistanceMatrixCPU /= maxEncodingCodistance;
                         codistanceMatrixCPU = tf::interpolate(codistanceMatrixCPU.unsqueeze(0).unsqueeze(0),
                             tf::InterpolateFuncOptions()
@@ -819,7 +840,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     }
                     torch::Tensor covarianceMatrixCPU;
                     if (_useEncodingCovarianceLoss) {
-                        covarianceMatrixCPU = covarianceMatrix.to(torch::kCPU);
+                        covarianceMatrixCPU = covarianceMatrix.to(torch::kCPU, torch::kFloat32);
                         covarianceMatrixCPU /= maxEncodingCovariance;
                         covarianceMatrixCPU = tf::interpolate(covarianceMatrixCPU.unsqueeze(0).unsqueeze(0),
                             tf::InterpolateFuncOptions()
@@ -834,7 +855,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                         _trainingInfo->images["covariance_matrix"].write()->copyFrom(covarianceMatrixCPU.contiguous().data_ptr<float>());
 
                     torch::Tensor encodingImage;
-                    encodingImage = enc.index({displaySeqId}).to(torch::kCPU).reshape({32, 64}) + 0.5;
+                    encodingImage = enc.index({displaySeqId}).to(torch::kCPU, torch::kFloat32).reshape({32, 64}) + 0.5;
                     encodingImage = tf::interpolate(encodingImage.unsqueeze(0).unsqueeze(0),
                         tf::InterpolateFuncOptions()
                             .size(std::vector<long>{32*8, 64*8})
@@ -842,6 +863,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     );
                     _trainingInfo->images["encoding"].write()->copyFrom(encodingImage.contiguous().data_ptr<float>());
                 }
+
+                c10::cuda::CUDACachingAllocator::emptyCache();
             }
 
             // Apply gradients
@@ -916,6 +939,9 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         if (_abortTraining)
             break;
     }
+
+    at::autocast::clear_cache();
+    at::autocast::set_enabled(false);
 }
 
 MultiLevelImage MultiLevelAutoEncoderModel::scaleSequences(
@@ -923,45 +949,45 @@ MultiLevelImage MultiLevelAutoEncoderModel::scaleSequences(
 {
     assert(storageFrames != nullptr);
     MultiLevelImage image;
-    image.img7 = storageFrames->tensor().to(_device).permute({0, 1, 4, 2, 3}); // permute into TBCHW
+    image.img7 = storageFrames->tensor().to(_device, torch::kBFloat16).permute({0, 1, 4, 2, 3}); // permute into TBCHW
     assert(image.img7.sizes()[0] == sequenceLength);
 
     // Create scaled sequence data
     // Initialize to zeros
     image.img6 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 240, 320},
-        TensorOptions().device(_device));
+        TensorOptions().device(_device).dtype(torch::kBFloat16));
     image.img5 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 120, 160},
-        TensorOptions().device(_device));
+        TensorOptions().device(_device).dtype(torch::kBFloat16));
     image.img4 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 60, 80},
-        TensorOptions().device(_device));
+        TensorOptions().device(_device).dtype(torch::kBFloat16));
     image.img3 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 30, 40},
-        TensorOptions().device(_device));
+        TensorOptions().device(_device).dtype(torch::kBFloat16));
     image.img2 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 15, 20},
-        TensorOptions().device(_device));
+        TensorOptions().device(_device).dtype(torch::kBFloat16));
     image.img1 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 15, 10},
-        TensorOptions().device(_device));
+        TensorOptions().device(_device).dtype(torch::kBFloat16));
     image.img0 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 5, 5},
-        TensorOptions().device(_device));
+        TensorOptions().device(_device).dtype(torch::kBFloat16));
 
     for (int t=0; t<sequenceLength; ++t) {
-        if (_lossLevel > 4.0) // these limits are intentionally 1 less than elsewhere because lossLevel may increase during training
+//        if (_lossLevel > 4.0) // these limits are intentionally 1 less than elsewhere because lossLevel may increase during training
             image.img6.index_put_({t}, tf::interpolate(image.img7.index({t}), tf::InterpolateFuncOptions()
                 .size(std::vector<long>{240, 320}).mode(kArea)));
-        if (_lossLevel > 3.0)
-            image.img5.index_put_({t}, tf::interpolate(image.img7.index({t}), tf::InterpolateFuncOptions()
+//        if (_lossLevel > 3.0)
+            image.img5.index_put_({t}, tf::interpolate(image.img6.index({t}), tf::InterpolateFuncOptions()
                 .size(std::vector<long>{120, 160}).mode(kArea)));
-        if (_lossLevel > 2.0)
-            image.img4.index_put_({t}, tf::interpolate(image.img7.index({t}), tf::InterpolateFuncOptions()
+//        if (_lossLevel > 2.0)
+            image.img4.index_put_({t}, tf::interpolate(image.img5.index({t}), tf::InterpolateFuncOptions()
                 .size(std::vector<long>{60, 80}).mode(kArea)));
-        if (_lossLevel > 1.0)
-            image.img3.index_put_({t}, tf::interpolate(image.img7.index({t}), tf::InterpolateFuncOptions()
+//        if (_lossLevel > 1.0)
+            image.img3.index_put_({t}, tf::interpolate(image.img4.index({t}), tf::InterpolateFuncOptions()
                 .size(std::vector<long>{30, 40}).mode(kArea)));
-        if (_lossLevel > 0.0)
-            image.img2.index_put_({t}, tf::interpolate(image.img7.index({t}), tf::InterpolateFuncOptions()
+//        if (_lossLevel > 0.0)
+            image.img2.index_put_({t}, tf::interpolate(image.img3.index({t}), tf::InterpolateFuncOptions()
                 .size(std::vector<long>{15, 20}).mode(kArea)));
-        image.img1.index_put_({t}, tf::interpolate(image.img7.index({t}), tf::InterpolateFuncOptions()
+        image.img1.index_put_({t}, tf::interpolate(image.img2.index({t}), tf::InterpolateFuncOptions()
             .size(std::vector<long>{15, 10}).mode(kArea)));
-        image.img0.index_put_({t}, tf::interpolate(image.img7.index({t}), tf::InterpolateFuncOptions()
+        image.img0.index_put_({t}, tf::interpolate(image.img1.index({t}), tf::InterpolateFuncOptions()
             .size(std::vector<long>{5, 5}).mode(kArea)));
     }
 
@@ -972,28 +998,28 @@ MultiLevelImage MultiLevelAutoEncoderModel::scaleSequences(
 void MultiLevelAutoEncoderModel::scaleDisplayImages(
     const MultiLevelImage& orig, MultiLevelImage& image, torch::DeviceType device)
 {
-    image.img0 = tf::interpolate(orig.img0.unsqueeze(0), tf::InterpolateFuncOptions()
+    image.img0 = tf::interpolate(orig.img0.unsqueeze(0).to(torch::kFloat32), tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
         .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
-    image.img1 = tf::interpolate(orig.img1.unsqueeze(0), tf::InterpolateFuncOptions()
+    image.img1 = tf::interpolate(orig.img1.unsqueeze(0).to(torch::kFloat32), tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
         .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
-    image.img2 = tf::interpolate(orig.img2.unsqueeze(0), tf::InterpolateFuncOptions()
+    image.img2 = tf::interpolate(orig.img2.unsqueeze(0).to(torch::kFloat32), tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
         .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
-    image.img3 = tf::interpolate(orig.img3.unsqueeze(0), tf::InterpolateFuncOptions()
+    image.img3 = tf::interpolate(orig.img3.unsqueeze(0).to(torch::kFloat32), tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
         .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
-    image.img4 = tf::interpolate(orig.img4.unsqueeze(0), tf::InterpolateFuncOptions()
+    image.img4 = tf::interpolate(orig.img4.unsqueeze(0).to(torch::kFloat32), tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
         .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
-    image.img5 = tf::interpolate(orig.img5.unsqueeze(0), tf::InterpolateFuncOptions()
+    image.img5 = tf::interpolate(orig.img5.unsqueeze(0).to(torch::kFloat32), tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
         .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
-    image.img6 = tf::interpolate(orig.img6.unsqueeze(0), tf::InterpolateFuncOptions()
+    image.img6 = tf::interpolate(orig.img6.unsqueeze(0).to(torch::kFloat32), tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
         .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
-    image.img7 = orig.img7.permute({1, 2, 0}).contiguous().to(device);
+    image.img7 = orig.img7.permute({1, 2, 0}).contiguous().to(device, torch::kFloat32);
 }
 
 torch::Tensor MultiLevelAutoEncoderModel::createRandomEncodingInterpolations(const Tensor& enc, double extrapolation)

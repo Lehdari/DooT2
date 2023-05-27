@@ -15,6 +15,7 @@ using namespace torch;
 
 
 ml::DiscriminatorImpl::DiscriminatorImpl() :
+    _encoder    (1, false),
     _bn1        (nn::BatchNorm1dOptions(2048)),
     _linear1    (nn::LinearOptions(2048, 32)),
     _bn2        (nn::BatchNorm1dOptions(32)),
