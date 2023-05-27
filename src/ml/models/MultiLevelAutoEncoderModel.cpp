@@ -91,7 +91,7 @@ nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
     modelConfig["optimizer_weight_decay"] = 0.0001;
     modelConfig["n_training_cycles"] = 4;
     modelConfig["virtual_batch_size"] = 8;
-    modelConfig["frame_loss_weight"] = 3.0;
+    modelConfig["frame_loss_weight"] = 4.0;
     modelConfig["frame_grad_loss_weight"] = 1.5;
     modelConfig["frame_laplacian_loss_weight"] = 1.5;
     modelConfig["use_encoding_mean_loss"] = true;
@@ -110,7 +110,7 @@ nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
     modelConfig["discrimination_loss_weight"] = 0.4;
     modelConfig["discriminator_virtual_batch_size"] = 8;
     modelConfig["initial_loss_level"] = 0.0;
-    modelConfig["target_loss"] = 0.35;
+    modelConfig["target_reconstruction_loss"] = 0.3;
 
     return modelConfig;
 }
@@ -148,7 +148,7 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
     _useDiscriminator               (true),
     _discriminationLossWeight       (0.4),
     _discriminatorVirtualBatchSize  (8),
-    _targetLoss                     (0.35),
+    _targetReconstructionLoss       (0.3),
     _lossLevel                      (0.0),
     _batchPixelDiff                 (1.0),
     _batchEncDiff                   (sqrt(doot2::encodingLength)),
@@ -187,7 +187,7 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     _useDiscriminator = modelConfig["use_discriminator"];
     _discriminationLossWeight = modelConfig["discrimination_loss_weight"];
     _discriminatorVirtualBatchSize = modelConfig["discriminator_virtual_batch_size"];
-    _targetLoss = modelConfig["target_loss"];
+    _targetReconstructionLoss = modelConfig["target_reconstruction_loss"];
     _lossLevel = modelConfig["initial_loss_level"];
 
     // Load torch model file names from the model config
@@ -303,6 +303,8 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         timeSeriesWriteHandle->addSeries<double>("discriminationLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("discriminatorLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingCircularLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("reconstructionLosses", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("auxiliaryLosses", 0.0);
         timeSeriesWriteHandle->addSeries<double>("loss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("lossLevel", 0.0);
         timeSeriesWriteHandle->addSeries<double>("maxEncodingCodistance", 0.0);
@@ -546,6 +548,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     double discriminationLossAcc = 0.0;
     double discriminatorLossAcc = 0.0;
     double encodingCircularLossAcc = 0.0;
+    double reconstructionLossesAcc = 0.0;
+    double auxiliaryLossesAcc = 0.0;
     double maxEncodingCodistance = 1.0; // max distance between encodings
     double maxEncodingCovariance = 1.0; // max value in the covariance matrix
     int64_t nVirtualBatchesPerCycle = (int64_t)sequenceLength / _virtualBatchSize;
@@ -697,6 +701,34 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 float frameLossWeight6 = (float)std::clamp(1.0-std::abs(_lossLevel-6.0), 0.0, 1.0);
                 float frameLossWeight7 = (float)std::clamp(_lossLevel-6.0, 0.0, 1.0);
 
+                if (_useDiscriminator || _useEncodingCircularLoss) {
+                    encRandom = torch::randn({doot2::batchSize, doot2::encodingLength},
+                        TensorOptions().device(_device).dtype(torch::kBFloat16));
+                    rOut = _frameDecoder(encRandom, _lossLevel);
+                }
+
+                // Decoder discrimination loss
+                torch::Tensor discriminationLoss = zero;
+                if (_useDiscriminator) {
+                    discriminationLoss = _discriminationLossWeight * torch::l1_loss(torch::ones({doot2::batchSize},
+                        TensorOptions().device(_device)), _discriminator(rOut));
+                    discriminationLossAcc += discriminationLoss.item<double>();
+                }
+
+                // Circular encoding loss (demand that random encodings match after decode-encode)
+                torch::Tensor encodingCircularLoss = zero;
+                if (_useEncodingCircularLoss) {
+                    torch::Tensor encCircular = _frameEncoder(rOut);
+                    encodingCircularLoss = _encodingCircularLossWeight*
+                        torch::mean(torch::norm(encCircular-encRandom, 2.0, 1) / _batchEncDiff);
+                }
+                encodingCircularLossAcc += encodingCircularLoss.item<double>();
+
+                // Total auxiliary losses
+                torch::Tensor auxiliaryLosses = encodingCodistanceLoss + encodingDistanceLoss + encodingMeanLoss +
+                    encodingCovarianceLoss + encodingPrevDistanceLoss + encodingCircularLoss + discriminationLoss;
+                auxiliaryLossesAcc += auxiliaryLosses.item<double>();
+
                 // Frame decoding losses
                 torch::Tensor frameLoss = _frameLossWeight*(
                     frameLossWeight0 * yuvLoss(in.img0, out.img0) +
@@ -729,34 +761,12 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     (_lossLevel > 4.0 ? frameLossWeight7 * imageLaplacianLoss(in.img7, out.img7) : zero));
                 frameLaplacianLossAcc += frameLaplacianLoss.item<double>();
 
-                if (_useDiscriminator || _useEncodingCircularLoss) {
-                    encRandom = torch::randn({doot2::batchSize, doot2::encodingLength},
-                        TensorOptions().device(_device).dtype(torch::kBFloat16));
-                    rOut = _frameDecoder(encRandom, _lossLevel);
-                }
-
-                // Decoder discrimination loss
-                torch::Tensor discriminationLoss = zero;
-                if (_useDiscriminator) {
-                    discriminationLoss = _discriminationLossWeight * torch::l1_loss(torch::ones({doot2::batchSize},
-                            TensorOptions().device(_device)), _discriminator(rOut));
-                    discriminationLossAcc += discriminationLoss.item<double>();
-                }
-
-                // Circular encoding loss (demand that random encodings match after decode-encode)
-                torch::Tensor encodingCircularLoss = zero;
-                if (_useEncodingCircularLoss) {
-                    torch::Tensor encCircular = _frameEncoder(rOut);
-                    encodingCircularLoss = _encodingCircularLossWeight*
-                        torch::mean(torch::norm(encCircular-encRandom, 2.0, 1) / _batchEncDiff);
-                }
-                encodingCircularLossAcc += encodingCircularLoss.item<double>();
+                // Frame reconstruction losses
+                torch::Tensor reconstructionLosses = frameLoss + frameGradLoss + frameLaplacianLoss;
+                reconstructionLossesAcc += reconstructionLosses.item<double>();
 
                 // Total loss
-                torch::Tensor loss = encodingCodistanceLoss + encodingDistanceLoss + encodingMeanLoss +
-                    encodingCovarianceLoss + encodingPrevDistanceLoss +
-                    frameLoss + frameGradLoss + frameLaplacianLoss +
-                    discriminationLoss + encodingCircularLoss;
+                torch::Tensor loss = reconstructionLosses + auxiliaryLosses;
                 lossAcc += loss.item<double>();
 
                 // Encoder-decoder backward pass
@@ -890,11 +900,13 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         discriminationLossAcc /= framesPerCycle;
         discriminatorLossAcc /= (double)nVirtualBatchesPerCycle*(double)_discriminatorVirtualBatchSize;
         encodingCircularLossAcc /= framesPerCycle;
+        reconstructionLossesAcc /= framesPerCycle;
+        auxiliaryLossesAcc /= framesPerCycle;
 
         // Loss level adjustment
         constexpr double controlP = 0.01;
         // use hyperbolic error metric (asymptotically larger adjustments when loss approaches 0)
-        double error = 1.0 - (_targetLoss / (lossAcc + 1.0e-8));
+        double error = 1.0 - (_targetReconstructionLoss / (reconstructionLossesAcc + 1.0e-8));
         _lossLevel -= error*controlP; // P control should suffice
         _lossLevel = std::clamp(_lossLevel, 0.0, 7.0);
 
@@ -916,6 +928,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 "discriminationLoss", discriminationLossAcc,
                 "discriminatorLoss", discriminatorLossAcc,
                 "encodingCircularLoss", encodingCircularLossAcc,
+                "reconstructionLosses", reconstructionLossesAcc,
+                "auxiliaryLosses", auxiliaryLossesAcc,
                 "loss", lossAcc,
                 "lossLevel", _lossLevel,
                 "maxEncodingCodistance", maxEncodingCodistance,
@@ -935,6 +949,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         discriminationLossAcc = 0.0;
         discriminatorLossAcc = 0.0;
         encodingCircularLossAcc = 0.0;
+        reconstructionLossesAcc = 0.0;
+        auxiliaryLossesAcc = 0.0;
 
         if (_abortTraining)
             break;

@@ -74,7 +74,7 @@ private:
     bool                                    _useDiscriminator;
     double                                  _discriminationLossWeight;
     int64_t                                 _discriminatorVirtualBatchSize;
-    double                                  _targetLoss; // when loss is under this value, lossLevel is increased
+    double                                  _targetReconstructionLoss; // when loss is under this value, lossLevel is increased
 
     double                                  _lossLevel; // determines the resolution the encoder
     double                                  _batchPixelDiff; // estimate for average pixel difference between frames from different sequences
