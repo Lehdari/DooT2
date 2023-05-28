@@ -10,7 +10,8 @@
 
 #pragma once
 
-#include "Utils.hpp"
+#include "util/Utils.hpp"
+#include "util/MathUtils.hpp"
 
 #include <array>
 #include <vector>
@@ -196,4 +197,17 @@ INLINE void copyToTensor(const std::vector<T_Data>& vector, torch::Tensor& tenso
     else {
         memcpy(tensor.data_ptr<T_Data>(), vector.data(), vector.size()*sizeof(T_Data));
     }
+}
+
+
+INLINE torch::Tensor normalDistribution(const torch::Tensor& mean, const torch::Tensor& x, double sigma)
+{
+    constexpr double sqrt2Pi = constexprSqrt(2.0*M_PI);
+    return (1.0/(sigma*sqrt2Pi)) * torch::exp(-0.5*((x-mean)/(sigma)).square());
+}
+
+INLINE torch::Tensor standardNormalDistribution(const torch::Tensor& x)
+{
+    constexpr double sqrt2Pi = constexprSqrt(2.0*M_PI);
+    return (1.0/sqrt2Pi) * torch::exp(-0.5*x.square());
 }
