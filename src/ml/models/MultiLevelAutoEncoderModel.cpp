@@ -96,8 +96,8 @@ nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
     modelConfig["frame_laplacian_loss_weight"] = 1.5;
     modelConfig["use_encoding_mean_loss"] = true;
     modelConfig["encoding_mean_loss_weight"] = 0.001;
-    modelConfig["use_encoding_codistance_loss"] = true;
-    modelConfig["encoding_codistance_loss_weight"] = 0.4;
+    modelConfig["use_encoding_distribution_loss"] = true;
+    modelConfig["encoding_distribution_loss_weight"] = 50.0;
     modelConfig["use_encoding_distance_loss"] = true;
     modelConfig["encoding_distance_loss_weight"] = 0.001;
     modelConfig["use_encoding_covariance_loss"] = false;
@@ -135,8 +135,8 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
     _frameLaplacianLossWeight       (1.5),
     _useEncodingMeanLoss            (true),
     _encodingMeanLossWeight         (0.001),
-    _useEncodingCodistanceLoss      (true),
-    _encodingCodistanceLossWeight   (0.4),
+    _useEncodingDistributionLoss    (true),
+    _encodingDistributionLossWeight (50.0),
     _useEncodingDistanceLoss        (true),
     _encodingDistanceLossWeight     (0.001),
     _useEncodingCovarianceLoss      (false),
@@ -174,8 +174,8 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     _frameLaplacianLossWeight = modelConfig["frame_laplacian_loss_weight"];
     _useEncodingMeanLoss = modelConfig["use_encoding_mean_loss"];
     _encodingMeanLossWeight = modelConfig["encoding_mean_loss_weight"];
-    _useEncodingCodistanceLoss = modelConfig["use_encoding_codistance_loss"];
-    _encodingCodistanceLossWeight = modelConfig["encoding_codistance_loss_weight"];
+    _useEncodingDistributionLoss = modelConfig["use_encoding_distribution_loss"];
+    _encodingDistributionLossWeight = modelConfig["encoding_distribution_loss_weight"];
     _useEncodingDistanceLoss = modelConfig["use_encoding_distance_loss"];
     _encodingDistanceLossWeight = modelConfig["encoding_distance_loss_weight"];
     _useEncodingCovarianceLoss = modelConfig["use_encoding_covariance_loss"];
@@ -295,7 +295,7 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         timeSeriesWriteHandle->addSeries<double>("frameLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("frameGradLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("frameLaplacianLoss", 0.0);
-        timeSeriesWriteHandle->addSeries<double>("encodingCodistanceLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("encodingDistributionLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingDistanceLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingMeanLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingCovarianceLoss", 0.0);
@@ -307,7 +307,6 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         timeSeriesWriteHandle->addSeries<double>("auxiliaryLosses", 0.0);
         timeSeriesWriteHandle->addSeries<double>("loss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("lossLevel", 0.0);
-        timeSeriesWriteHandle->addSeries<double>("maxEncodingCodistance", 0.0);
         timeSeriesWriteHandle->addSeries<double>("maxEncodingCovariance", 0.0);
     }
     // Initialize images
@@ -339,10 +338,6 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         *(_trainingInfo->images)["random1"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["random0"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["encoding"].write() = Image<float>(64*8, 32*8, ImageFormat::GRAY);
-        if (_useEncodingCodistanceLoss) {
-            *(_trainingInfo->images)["codistance_matrix"].write() = Image<float>(
-                doot2::batchSize*16, doot2::batchSize*16, ImageFormat::GRAY);
-        }
         if (_useEncodingCovarianceLoss) {
             *(_trainingInfo->images)["covariance_matrix"].write() = Image<float>(
                 doot2::encodingLength, doot2::encodingLength, ImageFormat::GRAY);
@@ -526,9 +521,6 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     _frameDecoder->zero_grad();
     _discriminator->zero_grad();
 
-    // Used as a target for encoding distance matrix (try to get all encoding codistances to 1)
-    torch::Tensor targetDistanceMatrix = torch::ones({doot2::batchSize, doot2::batchSize},
-        TensorOptions().device(_device));
     torch::Tensor zero = torch::zeros({}, TensorOptions().device(_device));
 
     // Target covariance matrix
@@ -540,7 +532,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     double frameLossAcc = 0.0;
     double frameGradLossAcc = 0.0;
     double frameLaplacianLossAcc = 0.0;
-    double encodingCodistanceLossAcc = 0.0;
+    double encodingDistributionLossAcc = 0.0;
     double encodingDistanceLossAcc = 0.0;
     double encodingMeanLossAcc = 0.0;
     double encodingCovarianceLossAcc = 0.0;
@@ -550,7 +542,6 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     double encodingCircularLossAcc = 0.0;
     double reconstructionLossesAcc = 0.0;
     double auxiliaryLossesAcc = 0.0;
-    double maxEncodingCodistance = 1.0; // max distance between encodings
     double maxEncodingCovariance = 1.0; // max value in the covariance matrix
     int64_t nVirtualBatchesPerCycle = (int64_t)sequenceLength / _virtualBatchSize;
     const double framesPerCycle = (double)nVirtualBatchesPerCycle * _virtualBatchSize;
@@ -637,18 +628,20 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     encodingMeanLossAcc += encodingMeanLoss.item<double>();
                 }
 
-                // Compute distances between each encoding and the codistance loss
-                torch::Tensor encodingCodistanceLoss = zero;
-                torch::Tensor codistanceMatrix = torch::zeros({doot2::batchSize, doot2::batchSize},
-                    TensorOptions().device(_device));
-                if (_useEncodingCodistanceLoss) {
-                    codistanceMatrix = torch::cdist(enc, enc);
-                    maxEncodingCodistance = torch::max(codistanceMatrix).to(torch::kCPU, torch::kFloat32).item<double>();
-                    codistanceMatrix = codistanceMatrix +
-                        torch::eye(doot2::batchSize, TensorOptions().device(_device));
-                    encodingCodistanceLoss = torch::mse_loss(codistanceMatrix, targetDistanceMatrix) *
-                        _encodingCodistanceLossWeight;
-                    encodingCodistanceLossAcc += encodingCodistanceLoss.item<double>();
+                // Compute distribution loss (demand that each encoding channel follows standard normal distribution)
+                torch::Tensor encodingDistributionLoss = zero;
+                if (_useEncodingDistributionLoss) {
+                    torch::Tensor x = torch::linspace(-4.0, 4.0, 32, TensorOptions().device(_device));
+                    torch::Tensor mean = enc.expand({x.sizes()[0], enc.sizes()[0], enc.sizes()[1]});
+                    torch::Tensor y = normalDistribution(mean,
+                        x.unsqueeze(1).unsqueeze(1).expand({x.sizes()[0], enc.sizes()[0], enc.sizes()[1]}),
+                        0.67711
+                    ).mean(1);
+                    torch::Tensor y2 = standardNormalDistribution(
+                        x.unsqueeze(1).expand({x.sizes()[0], enc.sizes()[1]}));
+
+                    encodingDistributionLoss = _encodingDistributionLossWeight*torch::mse_loss(y, y2);
+                    encodingDistributionLossAcc += encodingDistributionLoss.item<double>();
                 }
 
                 // Compute mean encoding distance to origin loss
@@ -725,7 +718,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 encodingCircularLossAcc += encodingCircularLoss.item<double>();
 
                 // Total auxiliary losses
-                torch::Tensor auxiliaryLosses = encodingCodistanceLoss + encodingDistanceLoss + encodingMeanLoss +
+                torch::Tensor auxiliaryLosses = encodingDistributionLoss + encodingDistanceLoss + encodingMeanLoss +
                     encodingCovarianceLoss + encodingPrevDistanceLoss + encodingCircularLoss + discriminationLoss;
                 auxiliaryLossesAcc += auxiliaryLosses.item<double>();
 
@@ -838,16 +831,6 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                         _trainingInfo->images["random0"].write()->copyFrom(rOutImage.img0.data_ptr<float>());
                     }
 
-                    torch::Tensor codistanceMatrixCPU;
-                    if (_useEncodingCodistanceLoss) {
-                        codistanceMatrixCPU = codistanceMatrix.to(torch::kCPU, torch::kFloat32);
-                        codistanceMatrixCPU /= maxEncodingCodistance;
-                        codistanceMatrixCPU = tf::interpolate(codistanceMatrixCPU.unsqueeze(0).unsqueeze(0),
-                            tf::InterpolateFuncOptions()
-                                .size(std::vector<long>{doot2::batchSize * 16, doot2::batchSize * 16})
-                                .mode(kNearestExact).align_corners(false)
-                        );
-                    }
                     torch::Tensor covarianceMatrixCPU;
                     if (_useEncodingCovarianceLoss) {
                         covarianceMatrixCPU = covarianceMatrix.to(torch::kCPU, torch::kFloat32);
@@ -859,13 +842,11 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                         );
                     }
 
-                    if (_useEncodingCodistanceLoss)
-                        _trainingInfo->images["codistance_matrix"].write()->copyFrom(codistanceMatrixCPU.contiguous().data_ptr<float>());
                     if (_useEncodingCovarianceLoss)
                         _trainingInfo->images["covariance_matrix"].write()->copyFrom(covarianceMatrixCPU.contiguous().data_ptr<float>());
 
                     torch::Tensor encodingImage;
-                    encodingImage = enc.index({displaySeqId}).to(torch::kCPU, torch::kFloat32).reshape({32, 64}) + 0.5;
+                    encodingImage = enc.index({displaySeqId}).to(torch::kCPU, torch::kFloat32).reshape({32, 64})*0.3333 + 0.5;
                     encodingImage = tf::interpolate(encodingImage.unsqueeze(0).unsqueeze(0),
                         tf::InterpolateFuncOptions()
                             .size(std::vector<long>{32*8, 64*8})
@@ -892,7 +873,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         frameLossAcc /= framesPerCycle;
         frameGradLossAcc /= framesPerCycle;
         frameLaplacianLossAcc /= framesPerCycle;
-        encodingCodistanceLossAcc /= framesPerCycle;
+        encodingDistributionLossAcc /= framesPerCycle;
         encodingDistanceLossAcc /= framesPerCycle;
         encodingMeanLossAcc /= framesPerCycle;
         encodingCovarianceLossAcc /= framesPerCycle;
@@ -920,7 +901,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 "frameLoss", frameLossAcc,
                 "frameGradLoss", frameGradLossAcc,
                 "frameLaplacianLoss", frameLaplacianLossAcc,
-                "encodingCodistanceLoss", encodingCodistanceLossAcc,
+                "encodingDistributionLoss", encodingDistributionLossAcc,
                 "encodingDistanceLoss", encodingDistanceLossAcc,
                 "encodingMeanLoss", encodingMeanLossAcc,
                 "encodingCovarianceLoss", encodingCovarianceLossAcc,
@@ -932,7 +913,6 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 "auxiliaryLosses", auxiliaryLossesAcc,
                 "loss", lossAcc,
                 "lossLevel", _lossLevel,
-                "maxEncodingCodistance", maxEncodingCodistance,
                 "maxEncodingCovariance", maxEncodingCovariance
             );
         }
@@ -941,7 +921,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         frameLossAcc = 0.0;
         frameGradLossAcc = 0.0;
         frameLaplacianLossAcc = 0.0;
-        encodingCodistanceLossAcc = 0.0;
+        encodingDistributionLossAcc = 0.0;
         encodingDistanceLossAcc = 0.0;
         encodingMeanLossAcc = 0.0;
         encodingCovarianceLossAcc = 0.0;

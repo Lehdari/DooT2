@@ -61,8 +61,8 @@ private:
     double                                  _frameLaplacianLossWeight;
     bool                                    _useEncodingMeanLoss;
     double                                  _encodingMeanLossWeight;
-    bool                                    _useEncodingCodistanceLoss;
-    double                                  _encodingCodistanceLossWeight;
+    bool                                    _useEncodingDistributionLoss;
+    double                                  _encodingDistributionLossWeight;
     bool                                    _useEncodingDistanceLoss;
     double                                  _encodingDistanceLossWeight;
     bool                                    _useEncodingCovarianceLoss;
