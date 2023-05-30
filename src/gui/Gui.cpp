@@ -123,6 +123,8 @@ void Gui::saveLayout(const std::filesystem::path& layoutFilename, SDL_Window* wi
 
     std::vector<nlohmann::json> windowLayouts;
     for (auto& w : _windows) {
+        if (!w)
+            continue;
         windowLayouts.emplace_back();
         windowLayouts.back()["type"] = windowTypeName(w->getTypeId());;
         windowLayouts.back()["id"] = w->getId();
