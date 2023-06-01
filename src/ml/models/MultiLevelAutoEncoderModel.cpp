@@ -75,6 +75,13 @@ namespace {
         return yuvLoss(targetLaplacian, predLaplacian);
     }
 
+    INLINE double distributionLossKernelWidth(double batchSize)
+    {
+        // Function fitted to kernel widths acquired by empirical tests
+        return 0.35443676461512874 + 1.404941003999142/(0.31916811423436164*std::pow(batchSize+8.424505177725445,
+            0.8104176806922638));
+    }
+
 } // namespace
 
 nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
@@ -635,7 +642,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     torch::Tensor mean = enc.expand({x.sizes()[0], enc.sizes()[0], enc.sizes()[1]});
                     torch::Tensor y = normalDistribution(mean,
                         x.unsqueeze(1).unsqueeze(1).expand({x.sizes()[0], enc.sizes()[0], enc.sizes()[1]}),
-                        0.67711
+                        distributionLossKernelWidth(doot2::batchSize)
                     ).mean(1);
                     torch::Tensor y2 = standardNormalDistribution(
                         x.unsqueeze(1).expand({x.sizes()[0], enc.sizes()[1]}));
