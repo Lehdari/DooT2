@@ -27,9 +27,8 @@ public:
 
 private:
     torch::nn::Linear           _linear1;
-    torch::nn::BatchNorm1d      _bn0_1;
-    torch::nn::Linear           _linear2;
-    torch::nn::BatchNorm1d      _bn0_2;
+    torch::nn::BatchNorm1d      _bn1;
+    torch::nn::PReLU            _pRelu1;
     MultiLevelDecoderModule     _decoder1;
     MultiLevelDecoderModule     _decoder2;
     MultiLevelDecoderModule     _decoder3;

@@ -14,19 +14,13 @@
 using namespace ml;
 using namespace torch;
 using namespace torch::indexing;
-
-
-inline torch::Tensor maxLoss(const torch::Tensor& target, const torch::Tensor& pred)
-{
-    return torch::max(torch::abs(target-pred));
-}
+namespace tf = torch::nn::functional;
 
 
 MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
-    _linear1            (nn::LinearOptions(2048, 1024).bias(false)),
-    _bn0_1              (nn::BatchNorm1dOptions(1024)),
-    _linear2            (nn::LinearOptions(1024, 2048).bias(false)),
-    _bn0_2              (nn::BatchNorm1dOptions(2048)),
+    _linear1            (nn::LinearOptions(2048, 2048).bias(false)),
+    _bn1                (nn::BatchNorm1dOptions(2048)),
+    _pRelu1             (nn::PReLUOptions().num_parameters(2048).init(0.01)),
     _decoder1           (-1.0, 128, 256, 512, 1024, 16, 16, 32, 64, 5, 5, ExpandingArray<2>{2, 2}),
     _decoder2           (0.0, 1024, 512, 512, 512, 16, 16, 64, 64, 10, 15,
                          ExpandingArray<2>{5, 4}, ExpandingArray<2>{3, 2}, Slice(1, -1, None), Slice(1, -1, None)),
@@ -40,13 +34,12 @@ MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
                          ExpandingArray<2>{4, 4}, ExpandingArray<2>{2, 2}, Slice(1, -1, None), Slice(1, -1, None)),
     _decoder7           (5.0, 64, 64, 64, 32, 8, 8, 16, 16, 320, 240,
                          ExpandingArray<2>{4, 4}, ExpandingArray<2>{2, 2}, Slice(1, -1, None), Slice(1, -1, None)),
-    _decoder8           (6.0, 32, 32, 32, 16, 8, 8, 8, 8, 640, 480,
+    _decoder8           (6.0, 32, 32, 32, 32, 8, 8, 8, 8, 640, 480,
                          ExpandingArray<2>{4, 4}, ExpandingArray<2>{2, 2}, Slice(1, -1, None), Slice(1, -1, None))
 {
     register_module("linear0_1", _linear1);
-    register_module("bn0_1", _bn0_1);
-    register_module("linear0_2", _linear2);
-    register_module("bn0_2", _bn0_2);
+    register_module("bn1", _bn1);
+    register_module("pRelu1", _pRelu1);
     register_module("decoder1", _decoder1);
     register_module("decoder2", _decoder2);
     register_module("decoder3", _decoder3);
@@ -61,15 +54,12 @@ MultiLevelImage MultiLevelFrameDecoderImpl::forward(torch::Tensor x, double leve
 {
     using namespace torch::indexing;
 
-    constexpr double leakyReluNegativeSlope = 0.01;
-
     int batchSize = x.sizes()[0];
 
-    // Decoder
-    // Linear residual block
-    torch::Tensor y = torch::leaky_relu(_bn0_1(_linear1(x)), leakyReluNegativeSlope);
-    x = torch::leaky_relu(_bn0_2(_linear2(y) + x), leakyReluNegativeSlope);
 
+    // Decoder
+    // Linear layer
+    x = _pRelu1(_bn1(_linear1(x)));
     x = torch::reshape(x, {batchSize, 128, 4, 4});
 
     MultiLevelImage img;
