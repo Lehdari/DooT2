@@ -24,7 +24,8 @@ public:
         int inputChannels,
         int outputChannels,
         const torch::ExpandingArray<2>& kernelSize,
-        const torch::ExpandingArray<2>& stride
+        const torch::ExpandingArray<2>& stride,
+        double dropoutRate = 0.0
     );
 
     torch::Tensor forward(const torch::Tensor& main, const torch::Tensor& aux, double level);
@@ -32,6 +33,7 @@ public:
 private:
     double                  _level;
     int                     _outputChannels;
+    double                  _dropoutRate;
     torch::nn::Conv2d       _convMain; // layers for the primary feedforward
     torch::nn::BatchNorm2d  _bnMain;
     torch::nn::Conv2d       _convAux; // layers for the downscaled secondary input

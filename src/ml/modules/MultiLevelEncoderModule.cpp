@@ -13,6 +13,7 @@
 
 using namespace ml;
 using namespace torch;
+namespace tf = torch::nn::functional;
 
 
 MultiLevelEncoderModuleImpl::MultiLevelEncoderModuleImpl(
@@ -20,10 +21,12 @@ MultiLevelEncoderModuleImpl::MultiLevelEncoderModuleImpl(
     int inputChannels,
     int outputChannels,
     const ExpandingArray<2>& kernelSize,
-    const ExpandingArray<2>& stride
+    const ExpandingArray<2>& stride,
+    double dropoutRate
 ) :
     _level          (level),
     _outputChannels (outputChannels),
+    _dropoutRate    (dropoutRate),
     _convMain       (nn::Conv2dOptions(inputChannels, _outputChannels, kernelSize)
                      .stride(stride).bias(false).padding(1)),
     _bnMain         (nn::BatchNorm2dOptions(_outputChannels)),
@@ -44,6 +47,8 @@ torch::Tensor MultiLevelEncoderModuleImpl::forward(const Tensor& main, const Ten
     if (level > _level) {
         x = torch::leaky_relu(_bnMain(_convMain(main)), leakyReluNegativeSlope);
         torch::Tensor y = torch::leaky_relu(_bnAux(_convAux(aux)), leakyReluNegativeSlope);
+        if (this->is_training() && _dropoutRate > 0.0)
+            y = tf::dropout(y, tf::DropoutFuncOptions().p(_dropoutRate));
         float w = (float)std::clamp(_level+1.0-level, 0.0, 1.0);
         x = w*y + (1.0f-w)*x;
     }
