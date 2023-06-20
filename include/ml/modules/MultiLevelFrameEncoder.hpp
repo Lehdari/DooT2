@@ -21,12 +21,11 @@ namespace ml {
 class MultiLevelFrameEncoderImpl : public torch::nn::Module {
 public:
     // useLinearResBlock: Add linear residual block in the end
-    MultiLevelFrameEncoderImpl(int featureMultiplier, bool useLinearResBlock);
+    explicit MultiLevelFrameEncoderImpl(int featureMultiplier);
 
     torch::Tensor forward(const MultiLevelImage& img);
 
 private:
-    bool                        _useLinearResBlock;
     MultiLevelEncoderModule     _encoder1;
     MultiLevelEncoderModule     _encoder2;
     MultiLevelEncoderModule     _encoder3;
@@ -37,10 +36,9 @@ private:
     torch::nn::Conv2d           _conv1;
     torch::nn::BatchNorm2d      _bn1;
     torch::nn::Conv2d           _conv2;
+    torch::nn::PReLU            _pRelu1;
     torch::nn::BatchNorm1d      _bn2;
     torch::nn::Linear           _linear1;
-    torch::nn::BatchNorm1d      _bn3;
-    torch::nn::Linear           _linear2;
 };
 TORCH_MODULE(MultiLevelFrameEncoder);
 

@@ -160,6 +160,7 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
     _batchPixelDiff                 (1.0),
     _batchEncDiff                   (sqrt(doot2::encodingLength)),
     _frameEncoder                   (4, true)
+    _frameEncoder                       (4)
 {
 }
 
@@ -232,7 +233,7 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     }
     else {
         printf("No %s found. Initializing new frame encoder model.\n", frameEncoderFilename.c_str()); // TODO logging
-        *_frameEncoder = MultiLevelFrameEncoderImpl(4, true);
+        *_frameEncoder = MultiLevelFrameEncoderImpl(4);
     }
 
     // Load frame decoder
