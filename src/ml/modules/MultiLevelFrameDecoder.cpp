@@ -56,6 +56,14 @@ MultiLevelImage MultiLevelFrameDecoderImpl::forward(torch::Tensor x, double leve
 
     int batchSize = x.sizes()[0];
 
+    // Use dropout directly on the encodings with rate decreasing according to the level
+    if (this->is_training()) {
+        constexpr double passBase = 0.8;
+        constexpr double passLinear = 0.1;
+        constexpr double passExponential = 0.1;
+        double dropoutRate = 1.0-(passBase + passLinear*(level/7.0) + passExponential*(std::pow(2.0, level)/128.0));
+        x = tf::dropout(x, tf::DropoutFuncOptions().p(dropoutRate));
+    }
 
     // Decoder
     // Linear layer
