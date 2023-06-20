@@ -161,7 +161,9 @@ void Trainer::loop()
             if (_quit) break;
 
             if (evaluating) {
+                saveExperiment(); // TODO save experiment to "latest", requires functionality for selecting the save dir
                 evaluateModel();
+                // TODO add experiment saving to "best" in case it outperforms the last best
                 evaluating = false;
                 nextMap();
             }
