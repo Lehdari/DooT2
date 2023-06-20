@@ -32,6 +32,7 @@ set(DOOT2_ML_SOURCES
     src/ml/models/MultiLevelAutoEncoderModel.cpp
     src/ml/models/RandomWalkerModel.cpp
     src/ml/modules/Discriminator.cpp
+    src/ml/modules/EncodingDiscriminator.cpp
     src/ml/modules/FlowDecoder.cpp
     src/ml/modules/FrameDecoder.cpp
     src/ml/modules/FrameEncoder.cpp
