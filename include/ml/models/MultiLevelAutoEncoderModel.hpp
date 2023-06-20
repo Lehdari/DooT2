@@ -14,6 +14,7 @@
 #include "ml/modules/MultiLevelFrameEncoder.hpp"
 #include "ml/modules/MultiLevelFrameDecoder.hpp"
 #include "ml/modules/Discriminator.hpp"
+#include "ml/modules/EncodingDiscriminator.hpp"
 #include "ml/MultiLevelImage.hpp"
 
 #include <chrono>
@@ -49,6 +50,8 @@ private:
     std::filesystem::path                   _frameEncoderFilename;
     std::filesystem::path                   _frameDecoderFilename;
     std::filesystem::path                   _discriminatorFilename;
+    std::filesystem::path                   _encodingDiscriminatorFilename;
+    std::filesystem::path                   _frameClassifierFilename;
     double                                  _optimizerLearningRate;
     double                                  _optimizerBeta1;
     double                                  _optimizerBeta2;
@@ -59,6 +62,8 @@ private:
     double                                  _frameLossWeight;
     double                                  _frameGradLossWeight;
     double                                  _frameLaplacianLossWeight;
+    bool                                    _useFrameClassificationLoss;
+    double                                  _frameClassificationLossWeight;
     bool                                    _useEncodingMeanLoss;
     double                                  _encodingMeanLossWeight;
     bool                                    _useEncodingDistributionLoss;
@@ -69,6 +74,8 @@ private:
     double                                  _encodingCovarianceLossWeight;
     bool                                    _useEncodingPrevDistanceLoss;
     double                                  _encodingPrevDistanceLossWeight;
+    bool                                    _useEncodingDiscriminationLoss;
+    double                                  _encodingDiscriminationLossWeight;
     bool                                    _useEncodingCircularLoss;
     double                                  _encodingCircularLossWeight;
     bool                                    _useDiscriminator;
@@ -83,8 +90,11 @@ private:
     MultiLevelFrameEncoder                  _frameEncoder;
     MultiLevelFrameDecoder                  _frameDecoder;
     Discriminator                           _discriminator;
+    EncodingDiscriminator                   _encodingDiscriminator; // distinguishes between priori encodings and frame encodings
+    EncodingDiscriminator                   _frameClassifier; // classifies encoded frames between real and generated
     std::unique_ptr<torch::optim::AdamW>    _optimizer;
     std::unique_ptr<torch::optim::AdamW>    _discriminatorOptimizer;
+    std::unique_ptr<torch::optim::AdamW>    _encodingDiscriminatorOptimizer;
     torch::Device                           _device;
     TimePoint                               _trainingStartTime;
 

@@ -82,6 +82,17 @@ namespace {
             0.8104176806922638));
     }
 
+    INLINE torch::Tensor circularLoss(const torch::Tensor& x, const torch::Tensor& y)
+    {
+        torch::Tensor xNorm = torch::linalg_norm(x, c10::nullopt, 1);
+        torch::Tensor yNorm = torch::linalg_norm(y, c10::nullopt, 1);
+        torch::Tensor xn = torch::div(x, xNorm.unsqueeze(1).expand({-1, doot2::encodingLength}));
+        torch::Tensor yn = torch::div(y, yNorm.unsqueeze(1).expand({-1, doot2::encodingLength}));
+        return torch::mean(
+            1.0-torch::sum(torch::mul(xn, yn), 1) + // cosine loss
+            (xNorm-yNorm).square() / constexprSqrt(doot2::encodingLength)); // distance loss
+    }
+
 } // namespace
 
 nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
@@ -91,6 +102,8 @@ nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
     modelConfig["frame_encoder_filename"] = "frame_encoder.pt";
     modelConfig["frame_decoder_filename"] = "frame_decoder.pt";
     modelConfig["discriminator_filename"] = "discriminator.pt";
+    modelConfig["encoding_discriminator_filename"] = "encoding_discriminator.pt";
+    modelConfig["frame_classifier_filename"] = "frame_classifier.pt";
     modelConfig["optimizer_learning_rate"] = 0.001;
     modelConfig["optimizer_beta1"] = 0.9;
     modelConfig["optimizer_beta2"] = 0.999;
@@ -101,16 +114,20 @@ nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
     modelConfig["frame_loss_weight"] = 4.0;
     modelConfig["frame_grad_loss_weight"] = 1.5;
     modelConfig["frame_laplacian_loss_weight"] = 1.5;
-    modelConfig["use_encoding_mean_loss"] = true;
+    modelConfig["use_frame_classification_loss"] = true;
+    modelConfig["frame_classification_loss_weight"] = 0.3;
+    modelConfig["use_encoding_mean_loss"] = false;
     modelConfig["encoding_mean_loss_weight"] = 0.001;
     modelConfig["use_encoding_distribution_loss"] = true;
-    modelConfig["encoding_distribution_loss_weight"] = 50.0;
-    modelConfig["use_encoding_distance_loss"] = true;
+    modelConfig["encoding_distribution_loss_weight"] = 100.0;
+    modelConfig["use_encoding_distance_loss"] = false;
     modelConfig["encoding_distance_loss_weight"] = 0.001;
-    modelConfig["use_encoding_covariance_loss"] = false;
-    modelConfig["encoding_covariance_loss_weight"] = 0.01;
+    modelConfig["use_encoding_covariance_loss"] = true;
+    modelConfig["encoding_covariance_loss_weight"] = 0.02;
     modelConfig["use_encoding_prev_distance_loss"] = true;
-    modelConfig["encoding_prev_distance_loss_weight"] = 0.2;
+    modelConfig["encoding_prev_distance_loss_weight"] = 0.4;
+    modelConfig["use_encoding_discrimination_loss"] = true;
+    modelConfig["encoding_discrimination_loss_weight"] = 0.3;
     modelConfig["use_encoding_circular_loss"] = true;
     modelConfig["encoding_circular_loss_weight"] = 0.25;
     modelConfig["use_discriminator"] = true;
@@ -123,43 +140,46 @@ nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
 }
 
 MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
-    _optimizer                      (std::make_unique<torch::optim::AdamW>(
-                                     std::vector<optim::OptimizerParamGroup>
-                                     {_frameEncoder->parameters(), _frameDecoder->parameters()})),
-    _discriminatorOptimizer         (std::make_unique<torch::optim::AdamW>(
-                                     std::vector<optim::OptimizerParamGroup>
-                                     {_discriminator->parameters()})),
-    _device                         (torch::cuda::is_available() ? torch::kCUDA : torch::kCPU),
-    _optimizerLearningRate          (0.001),
-    _optimizerBeta1                 (0.9),
-    _optimizerBeta2                 (0.999),
-    _optimizerEpsilon               (1.0e-8),
-    _optimizerWeightDecay           (0.0001),
-    _nTrainingCycles                (4),
-    _virtualBatchSize               (8),
-    _frameLossWeight                (3.0),
-    _frameGradLossWeight            (1.5),
-    _frameLaplacianLossWeight       (1.5),
-    _useEncodingMeanLoss            (true),
-    _encodingMeanLossWeight         (0.001),
-    _useEncodingDistributionLoss    (true),
-    _encodingDistributionLossWeight (50.0),
-    _useEncodingDistanceLoss        (true),
-    _encodingDistanceLossWeight     (0.001),
-    _useEncodingCovarianceLoss      (false),
-    _encodingCovarianceLossWeight   (0.01),
-    _useEncodingPrevDistanceLoss    (true),
-    _encodingPrevDistanceLossWeight (0.2),
-    _useEncodingCircularLoss        (true),
-    _encodingCircularLossWeight     (0.25),
-    _useDiscriminator               (true),
-    _discriminationLossWeight       (0.4),
-    _discriminatorVirtualBatchSize  (8),
-    _targetReconstructionLoss       (0.3),
-    _lossLevel                      (0.0),
-    _batchPixelDiff                 (1.0),
-    _batchEncDiff                   (sqrt(doot2::encodingLength)),
-    _frameEncoder                   (4, true)
+    _optimizer                          (std::make_unique<torch::optim::AdamW>(
+                                         std::vector<optim::OptimizerParamGroup>
+                                         {_frameEncoder->parameters(), _frameDecoder->parameters()})),
+    _discriminatorOptimizer             (std::make_unique<torch::optim::AdamW>(
+                                         std::vector<optim::OptimizerParamGroup>
+                                         {_discriminator->parameters()})),
+    _device                             (torch::cuda::is_available() ? torch::kCUDA : torch::kCPU),
+    _optimizerLearningRate              (0.001),
+    _optimizerBeta1                     (0.9),
+    _optimizerBeta2                     (0.999),
+    _optimizerEpsilon                   (1.0e-8),
+    _optimizerWeightDecay               (0.0001),
+    _nTrainingCycles                    (4),
+    _virtualBatchSize                   (8),
+    _frameLossWeight                    (3.0),
+    _frameGradLossWeight                (1.5),
+    _frameLaplacianLossWeight           (1.5),
+    _useFrameClassificationLoss         (true),
+    _frameClassificationLossWeight      (0.3),
+    _useEncodingMeanLoss                (false),
+    _encodingMeanLossWeight             (0.001),
+    _useEncodingDistributionLoss        (true),
+    _encodingDistributionLossWeight     (100.0),
+    _useEncodingDistanceLoss            (false),
+    _encodingDistanceLossWeight         (0.001),
+    _useEncodingCovarianceLoss          (true),
+    _encodingCovarianceLossWeight       (0.02),
+    _useEncodingPrevDistanceLoss        (true),
+    _encodingPrevDistanceLossWeight     (0.4),
+    _useEncodingDiscriminationLoss      (true),
+    _encodingDiscriminationLossWeight   (0.4),
+    _useEncodingCircularLoss            (true),
+    _encodingCircularLossWeight         (0.25),
+    _useDiscriminator                   (true),
+    _discriminationLossWeight           (0.4),
+    _discriminatorVirtualBatchSize      (8),
+    _targetReconstructionLoss           (0.3),
+    _lossLevel                          (0.0),
+    _batchPixelDiff                     (1.0),
+    _batchEncDiff                       (sqrt(doot2::encodingLength)),
     _frameEncoder                       (4)
 {
 }
@@ -180,6 +200,8 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     _frameLossWeight = modelConfig["frame_loss_weight"];
     _frameGradLossWeight = modelConfig["frame_grad_loss_weight"];
     _frameLaplacianLossWeight = modelConfig["frame_laplacian_loss_weight"];
+    _useFrameClassificationLoss = modelConfig["use_frame_classification_loss"];
+    _frameClassificationLossWeight = modelConfig["frame_classification_loss_weight"];
     _useEncodingMeanLoss = modelConfig["use_encoding_mean_loss"];
     _encodingMeanLossWeight = modelConfig["encoding_mean_loss_weight"];
     _useEncodingDistributionLoss = modelConfig["use_encoding_distribution_loss"];
@@ -190,6 +212,8 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     _encodingCovarianceLossWeight = modelConfig["encoding_covariance_loss_weight"];
     _useEncodingPrevDistanceLoss = modelConfig["use_encoding_prev_distance_loss"];
     _encodingPrevDistanceLossWeight = modelConfig["encoding_prev_distance_loss_weight"];
+    _useEncodingDiscriminationLoss = modelConfig["use_encoding_discrimination_loss"];
+    _encodingDiscriminationLossWeight = modelConfig["encoding_discrimination_loss_weight"];
     _useEncodingCircularLoss = modelConfig["use_encoding_circular_loss"];
     _encodingCircularLossWeight = modelConfig["encoding_circular_loss_weight"];
     _useDiscriminator = modelConfig["use_discriminator"];
@@ -211,17 +235,37 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     if (modelConfig.contains("discriminator_filename"))
         _discriminatorFilename = experimentRoot / modelConfig["discriminator_filename"].get<fs::path>();
 
+    _encodingDiscriminatorFilename = experimentRoot / "encoding_discriminator.pt";
+    if (modelConfig.contains("encoding_discriminator_filename"))
+        _encodingDiscriminatorFilename = experimentRoot /
+            modelConfig["encoding_discriminator_filename"].get<fs::path>();
+
+    _frameClassifierFilename = experimentRoot / "frame_classifier.pt";
+    if (modelConfig.contains("frame_classifier_filename"))
+        _frameClassifierFilename = experimentRoot / modelConfig["frame_classifier_filename"].get<fs::path>();
+
     // Separate loading paths in case a base experiment is specified
     fs::path frameEncoderFilename = _frameEncoderFilename;
     fs::path frameDecoderFilename = _frameDecoderFilename;
     fs::path discriminatorFilename = _discriminatorFilename;
+    fs::path encodingDiscriminatorFilename = _encodingDiscriminatorFilename;
+    fs::path frameClassifierFilename = _frameClassifierFilename;
     if (experimentConfig.contains("experiment_base_root") && experimentConfig.contains("base_model_config")) {
-        frameEncoderFilename = experimentConfig["experiment_base_root"].get<fs::path>() /
-            experimentConfig["base_model_config"]["frame_encoder_filename"].get<fs::path>();
-        frameDecoderFilename = experimentConfig["experiment_base_root"].get<fs::path>() /
-            experimentConfig["base_model_config"]["frame_decoder_filename"].get<fs::path>();
-        discriminatorFilename = experimentConfig["experiment_base_root"].get<fs::path>() /
-            experimentConfig["base_model_config"]["discriminator_filename"].get<fs::path>();
+        if (experimentConfig["base_model_config"].contains("frame_encoder_filename"))
+            frameEncoderFilename = experimentConfig["experiment_base_root"].get<fs::path>() /
+                experimentConfig["base_model_config"]["frame_encoder_filename"].get<fs::path>();
+        if (experimentConfig["base_model_config"].contains("frame_decoder_filename"))
+            frameDecoderFilename = experimentConfig["experiment_base_root"].get<fs::path>() /
+                experimentConfig["base_model_config"]["frame_decoder_filename"].get<fs::path>();
+        if (experimentConfig["base_model_config"].contains("discriminator_filename"))
+            discriminatorFilename = experimentConfig["experiment_base_root"].get<fs::path>() /
+                experimentConfig["base_model_config"]["discriminator_filename"].get<fs::path>();
+        if (experimentConfig["base_model_config"].contains("encoding_discriminator_filename"))
+            encodingDiscriminatorFilename = experimentConfig["experiment_base_root"].get<fs::path>() /
+                experimentConfig["base_model_config"]["encoding_discriminator_filename"].get<fs::path>();
+        if (experimentConfig["base_model_config"].contains("frame_classifier_filename"))
+            frameClassifierFilename = experimentConfig["experiment_base_root"].get<fs::path>() /
+                experimentConfig["base_model_config"]["frame_classifier_filename"].get<fs::path>();
     }
 
     // Load frame encoder
@@ -251,7 +295,7 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     // Load discriminator
     if (_useDiscriminator) {
         if (fs::exists(discriminatorFilename)) {
-            printf("Loading frame decoder model from %s\n", discriminatorFilename.c_str()); // TODO logging
+            printf("Loading discriminator model from %s\n", discriminatorFilename.c_str()); // TODO logging
             serialize::InputArchive inputArchive;
             inputArchive.load_from(discriminatorFilename);
             _discriminator->load(inputArchive);
@@ -262,10 +306,36 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
         }
     }
 
+    // Load encoding discriminator
+    if (fs::exists(encodingDiscriminatorFilename)) {
+        printf("Loading encoding discriminator model from %s\n", encodingDiscriminatorFilename.c_str()); // TODO logging
+        serialize::InputArchive inputArchive;
+        inputArchive.load_from(encodingDiscriminatorFilename);
+        _encodingDiscriminator->load(inputArchive);
+    } else {
+        printf("No %s found. Initializing new encoding discriminator model.\n",
+            encodingDiscriminatorFilename.c_str()); // TODO logging
+        *_encodingDiscriminator = EncodingDiscriminatorImpl();
+    }
+
+    // Load frame classifier
+    if (fs::exists(frameClassifierFilename)) {
+        printf("Loading frame classifier model from %s\n", frameClassifierFilename.c_str()); // TODO logging
+        serialize::InputArchive inputArchive;
+        inputArchive.load_from(frameClassifierFilename);
+        _frameClassifier->load(inputArchive);
+    } else {
+        printf("No %s found. Initializing new frame classifier model.\n",
+            frameClassifierFilename.c_str()); // TODO logging
+        *_frameClassifier = EncodingDiscriminatorImpl();
+    }
+
     // Move model parameters to GPU if it's used
     _frameEncoder->to(_device, torch::kBFloat16);
     _frameDecoder->to(_device, torch::kBFloat16);
     _discriminator->to(_device, torch::kBFloat16);
+    _encodingDiscriminator->to(_device, torch::kBFloat16);
+    _frameClassifier->to(_device, torch::kBFloat16);
 
     // Setup optimizers
     _optimizer = std::make_unique<torch::optim::AdamW>(std::vector<optim::OptimizerParamGroup>
@@ -286,6 +356,14 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
             .weight_decay(_optimizerWeightDecay);
     }
 
+    _encodingDiscriminatorOptimizer = std::make_unique<torch::optim::AdamW>(std::vector<optim::OptimizerParamGroup>
+        {_encodingDiscriminator->parameters(), _frameClassifier->parameters()});
+    dynamic_cast<torch::optim::AdamWOptions&>(_optimizer->param_groups()[0].options())
+        .lr(_optimizerLearningRate)
+        .betas({_optimizerBeta1, _optimizerBeta2})
+        .eps(_optimizerEpsilon)
+        .weight_decay(_optimizerWeightDecay);
+
     // TODO move to Model base class
     _trainingStartTime = high_resolution_clock::now();
 }
@@ -303,11 +381,15 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         timeSeriesWriteHandle->addSeries<double>("frameLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("frameGradLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("frameLaplacianLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("frameClassificationLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("frameClassifierLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingDistributionLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingDistanceLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingMeanLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingCovarianceLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingPrevDistanceLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("encodingDiscriminationLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("encodingDiscriminatorLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("discriminationLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("discriminatorLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingCircularLoss", 0.0);
@@ -346,6 +428,7 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         *(_trainingInfo->images)["random1"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["random0"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["encoding"].write() = Image<float>(64*8, 32*8, ImageFormat::GRAY);
+        *(_trainingInfo->images)["random_encoding"].write() = Image<float>(64*8, 32*8, ImageFormat::GRAY);
         if (_useEncodingCovarianceLoss) {
             *(_trainingInfo->images)["covariance_matrix"].write() = Image<float>(
                 doot2::encodingLength, doot2::encodingLength, ImageFormat::GRAY);
@@ -373,6 +456,18 @@ void MultiLevelAutoEncoderModel::save()
             serialize::OutputArchive outputArchive;
             _discriminator->save(outputArchive);
             outputArchive.save_to(_discriminatorFilename);
+        }
+        {
+            printf("Saving encoding discriminator model to %s\n", _encodingDiscriminatorFilename.c_str());
+            serialize::OutputArchive outputArchive;
+            _encodingDiscriminator->save(outputArchive);
+            outputArchive.save_to(_encodingDiscriminatorFilename);
+        }
+        {
+            printf("Saving frame classifier model to %s\n", _frameClassifierFilename.c_str());
+            serialize::OutputArchive outputArchive;
+            _frameClassifier->save(outputArchive);
+            outputArchive.save_to(_frameClassifierFilename);
         }
     }
     catch (const std::exception& e) {
@@ -540,11 +635,15 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     double frameLossAcc = 0.0;
     double frameGradLossAcc = 0.0;
     double frameLaplacianLossAcc = 0.0;
+    double frameClassificationLossAcc = 0.0;
+    double frameClassifierLossAcc = 0.0;
     double encodingDistributionLossAcc = 0.0;
     double encodingDistanceLossAcc = 0.0;
     double encodingMeanLossAcc = 0.0;
     double encodingCovarianceLossAcc = 0.0;
     double encodingPrevDistanceLossAcc = 0.0;
+    double encodingDiscriminationLossAcc = 0.0;
+    double encodingDiscriminatorLossAcc = 0.0;
     double discriminationLossAcc = 0.0;
     double discriminatorLossAcc = 0.0;
     double encodingCircularLossAcc = 0.0;
@@ -556,7 +655,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     for (int64_t c=0; c<_nTrainingCycles; ++c) {
         for (int64_t v=0; v<nVirtualBatchesPerCycle; ++v) {
             MultiLevelImage rOut;
-            torch::Tensor covarianceMatrix, enc, encPrev, encRandom;
+            torch::Tensor covarianceMatrix, enc, encPrev, encRandom, encCircular;
 
             // Discriminator training passes
             if (_useDiscriminator) {
@@ -639,7 +738,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 // Compute distribution loss (demand that each encoding channel follows standard normal distribution)
                 torch::Tensor encodingDistributionLoss = zero;
                 if (_useEncodingDistributionLoss) {
-                    torch::Tensor x = torch::linspace(-4.0, 4.0, 32, TensorOptions().device(_device));
+                    torch::Tensor x = torch::linspace(-5.0, 5.0, 64, TensorOptions().device(_device));
                     torch::Tensor mean = enc.expand({x.sizes()[0], enc.sizes()[0], enc.sizes()[1]});
                     torch::Tensor y = normalDistribution(mean,
                         x.unsqueeze(1).unsqueeze(1).expand({x.sizes()[0], enc.sizes()[0], enc.sizes()[1]}),
@@ -687,7 +786,9 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                         ((float)_virtualBatchSize / ((float)_virtualBatchSize-1)); // normalize to match the actual v. batch size
                 }
                 encodingPrevDistanceLossAcc += encodingPrevDistanceLoss.item<double>();
-                encPrev = enc.detach(); // stop gradient from flowing to the previous iteration
+
+                // stop gradient from flowing to the previous iteration
+                encPrev = enc.detach();
 
                 // Frame decode
                 auto out = _frameDecoder(enc, _lossLevel);
@@ -702,10 +803,13 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 float frameLossWeight6 = (float)std::clamp(1.0-std::abs(_lossLevel-6.0), 0.0, 1.0);
                 float frameLossWeight7 = (float)std::clamp(_lossLevel-6.0, 0.0, 1.0);
 
-                if (_useDiscriminator || _useEncodingCircularLoss) {
+                if (_useDiscriminator || _useEncodingCircularLoss || _useEncodingDiscriminationLoss) {
                     encRandom = torch::randn({doot2::batchSize, doot2::encodingLength},
                         TensorOptions().device(_device).dtype(torch::kBFloat16));
                     rOut = _frameDecoder(encRandom, _lossLevel);
+                }
+                if (_useEncodingCircularLoss || _useEncodingDiscriminationLoss) {
+                    encCircular = _frameEncoder(rOut);
                 }
 
                 // Decoder discrimination loss
@@ -719,15 +823,37 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 // Circular encoding loss (demand that random encodings match after decode-encode)
                 torch::Tensor encodingCircularLoss = zero;
                 if (_useEncodingCircularLoss) {
-                    torch::Tensor encCircular = _frameEncoder(rOut);
-                    encodingCircularLoss = _encodingCircularLossWeight*
-                        torch::mean(torch::norm(encCircular-encRandom, 2.0, 1) / _batchEncDiff);
+                    encodingCircularLoss = _encodingCircularLossWeight*circularLoss(encCircular, encRandom);
                 }
                 encodingCircularLossAcc += encodingCircularLoss.item<double>();
 
+                // Encoding discrimination loss
+                torch::Tensor encodingDiscriminationLoss = zero;
+                if (_useEncodingDiscriminationLoss) {
+                    torch::Tensor encodingDiscrimination = _encodingDiscriminator(enc);
+                    encodingDiscriminationLoss = _encodingDiscriminationLossWeight*
+                        torch::binary_cross_entropy_with_logits(encodingDiscrimination,
+                            torch::ones_like(encodingDiscrimination));
+                    encodingDiscrimination = _encodingDiscriminator(encCircular);
+                    encodingDiscriminationLoss += _encodingDiscriminationLossWeight*
+                        torch::binary_cross_entropy_with_logits(encodingDiscrimination,
+                            torch::ones_like(encodingDiscrimination));
+                }
+                encodingDiscriminationLossAcc += encodingDiscriminationLoss.item<double>();
+
+                // Frame classification loss
+                torch::Tensor frameClassificationLoss = zero;
+                if (_useFrameClassificationLoss) { // TODO useframeclassificationloss
+                    torch::Tensor classification = _frameClassifier(encCircular);
+                    frameClassificationLoss = _frameClassificationLossWeight*
+                        torch::binary_cross_entropy_with_logits(classification, torch::ones_like(classification));
+                }
+                frameClassificationLossAcc += frameClassificationLoss.item<double>();
+
                 // Total auxiliary losses
                 torch::Tensor auxiliaryLosses = encodingDistributionLoss + encodingDistanceLoss + encodingMeanLoss +
-                    encodingCovarianceLoss + encodingPrevDistanceLoss + encodingCircularLoss + discriminationLoss;
+                    encodingCovarianceLoss + encodingPrevDistanceLoss + encodingDiscriminationLoss +
+                    encodingCircularLoss + discriminationLoss + frameClassificationLoss;
                 auxiliaryLossesAcc += auxiliaryLosses.item<double>();
 
                 // Frame decoding losses
@@ -818,7 +944,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     _trainingInfo->images["prediction0"].write()->copyFrom(outImage.img0.data_ptr<float>());
 
                     // Output images decoded from random encodings
-                    if (_useDiscriminator) {
+                    if (_useEncodingCircularLoss || _useDiscriminator) {
                         MultiLevelImage rOutImage;
                         scaleDisplayImages(
                             MultiLevelImage {
@@ -866,12 +992,99 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 c10::cuda::CUDACachingAllocator::emptyCache();
             }
 
+            // Encoding discriminator training pass
+            if (_useEncodingDiscriminationLoss) {
+                _encodingDiscriminator->zero_grad();
+                _frameClassifier->zero_grad();
+                for (int d = 0; d < _discriminatorVirtualBatchSize; ++d) {
+                    int t = rnd() % sequenceLength;
+                    torch::Tensor encodingDiscriminatorLoss;
+                    torch::Tensor frameClassifierLoss;
+
+                    // Encodings from the frame encoder
+                    MultiLevelImage inTrue {
+                        seq.img0.index({(int) t}),
+                        seq.img1.index({(int) t}),
+                        seq.img2.index({(int) t}),
+                        seq.img3.index({(int) t}),
+                        seq.img4.index({(int) t}),
+                        seq.img5.index({(int) t}),
+                        seq.img6.index({(int) t}),
+                        seq.img7.index({(int) t}),
+                        _lossLevel
+                    };
+                    torch::Tensor encTrue = _frameEncoder(inTrue);
+                    MultiLevelImage inGenerated = _frameDecoder(torch::randn(
+                        {doot2::batchSize, doot2::encodingLength},
+                        TensorOptions().device(_device).dtype(torch::kBFloat16)), _lossLevel);
+                    inGenerated.img0 = inGenerated.img0.detach();
+                    inGenerated.img1 = inGenerated.img1.detach();
+                    inGenerated.img2 = inGenerated.img2.detach();
+                    inGenerated.img3 = inGenerated.img3.detach();
+                    inGenerated.img4 = inGenerated.img4.detach();
+                    inGenerated.img5 = inGenerated.img5.detach();
+                    inGenerated.img6 = inGenerated.img6.detach();
+                    inGenerated.img7 = inGenerated.img7.detach();
+                    torch::Tensor encGenerated = _frameEncoder(inGenerated);
+
+                    // Train the frame classifier
+                    {
+                        torch::Tensor classification = _frameClassifier(encTrue);
+                        frameClassifierLoss = torch::binary_cross_entropy_with_logits(classification,
+                            torch::ones_like(classification));
+                    }
+                    {
+                        torch::Tensor classification = _frameClassifier(encGenerated);
+                        frameClassifierLoss += torch::binary_cross_entropy_with_logits(classification,
+                            torch::zeros_like(classification));
+                    }
+                    frameClassifierLossAcc += frameClassifierLoss.item<double>();
+                    frameClassifierLoss.backward();
+
+                    // Train the encoding discriminator
+                    if (d%2 == 0) { // Encodings from images (true or generated) are both considered fake from
+                        // the p.o.v. of the discriminator - alternate between them.
+                        // Encodings from real images
+                        torch::Tensor discrimination = _encodingDiscriminator(encTrue.detach());
+                        encodingDiscriminatorLoss = torch::binary_cross_entropy_with_logits(discrimination,
+                            torch::zeros_like(discrimination));
+                    }
+                    else {
+                        // Encodings from fake images
+                        torch::Tensor discrimination = _encodingDiscriminator(encGenerated.detach());
+                        encodingDiscriminatorLoss = torch::binary_cross_entropy_with_logits(discrimination,
+                            torch::zeros_like(discrimination));
+                    }
+                    {   // Gaussian prior encodings
+                        encRandom = torch::randn({doot2::batchSize, doot2::encodingLength},
+                            TensorOptions().device(_device).dtype(torch::kBFloat16));
+                        torch::Tensor discrimination = _encodingDiscriminator(encRandom);
+                        encodingDiscriminatorLoss += torch::binary_cross_entropy_with_logits(discrimination,
+                            torch::ones_like(discrimination));
+                    }
+                    encodingDiscriminatorLossAcc += encodingDiscriminatorLoss.item<double>();
+                    encodingDiscriminatorLoss.backward();
+
+                    torch::Tensor rndEncodingImage;
+                    rndEncodingImage = encRandom.index({0}).to(torch::kCPU, torch::kFloat32).reshape({32, 64})*0.15 + 0.5;
+                    rndEncodingImage = tf::interpolate(rndEncodingImage.unsqueeze(0).unsqueeze(0),
+                        tf::InterpolateFuncOptions()
+                            .size(std::vector<long>{32*8, 64*8})
+                            .mode(kNearestExact).align_corners(false)
+                    );
+                    _trainingInfo->images["random_encoding"].write()->copyFrom(rndEncodingImage.contiguous().data_ptr<float>());
+                }
+            }
+
             // Apply gradients
             _optimizer->step();
             _discriminatorOptimizer->step();
+            _encodingDiscriminatorOptimizer->step();
             _frameEncoder->zero_grad();
             _frameDecoder->zero_grad();
             _discriminator->zero_grad();
+            _encodingDiscriminator->zero_grad();
+            _frameClassifier->zero_grad();
 
             if (_abortTraining)
                 break;
@@ -881,11 +1094,15 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         frameLossAcc /= framesPerCycle;
         frameGradLossAcc /= framesPerCycle;
         frameLaplacianLossAcc /= framesPerCycle;
+        frameClassificationLossAcc /= framesPerCycle;
+        frameClassifierLossAcc /= (double)nVirtualBatchesPerCycle*(double)_discriminatorVirtualBatchSize;
         encodingDistributionLossAcc /= framesPerCycle;
         encodingDistanceLossAcc /= framesPerCycle;
         encodingMeanLossAcc /= framesPerCycle;
         encodingCovarianceLossAcc /= framesPerCycle;
         encodingPrevDistanceLossAcc /= framesPerCycle;
+        encodingDiscriminationLossAcc /= framesPerCycle;
+        encodingDiscriminatorLossAcc /= (double)nVirtualBatchesPerCycle*(double)_discriminatorVirtualBatchSize;
         discriminationLossAcc /= framesPerCycle;
         discriminatorLossAcc /= (double)nVirtualBatchesPerCycle*(double)_discriminatorVirtualBatchSize;
         encodingCircularLossAcc /= framesPerCycle;
@@ -909,11 +1126,15 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 "frameLoss", frameLossAcc,
                 "frameGradLoss", frameGradLossAcc,
                 "frameLaplacianLoss", frameLaplacianLossAcc,
+                "frameClassificationLoss", frameClassificationLossAcc,
+                "frameClassifierLoss", frameClassifierLossAcc,
                 "encodingDistributionLoss", encodingDistributionLossAcc,
                 "encodingDistanceLoss", encodingDistanceLossAcc,
                 "encodingMeanLoss", encodingMeanLossAcc,
                 "encodingCovarianceLoss", encodingCovarianceLossAcc,
                 "encodingPrevDistanceLoss", encodingPrevDistanceLossAcc,
+                "encodingDiscriminationLoss", encodingDiscriminationLossAcc,
+                "encodingDiscriminatorLoss", encodingDiscriminatorLossAcc,
                 "discriminationLoss", discriminationLossAcc,
                 "discriminatorLoss", discriminatorLossAcc,
                 "encodingCircularLoss", encodingCircularLossAcc,
@@ -929,11 +1150,15 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         frameLossAcc = 0.0;
         frameGradLossAcc = 0.0;
         frameLaplacianLossAcc = 0.0;
+        frameClassificationLossAcc = 0.0;
+        frameClassifierLossAcc = 0.0;
         encodingDistributionLossAcc = 0.0;
         encodingDistanceLossAcc = 0.0;
         encodingMeanLossAcc = 0.0;
         encodingCovarianceLossAcc = 0.0;
         encodingPrevDistanceLossAcc = 0.0;
+        encodingDiscriminationLossAcc = 0.0;
+        encodingDiscriminatorLossAcc = 0.0;
         discriminationLossAcc = 0.0;
         discriminatorLossAcc = 0.0;
         encodingCircularLossAcc = 0.0;
