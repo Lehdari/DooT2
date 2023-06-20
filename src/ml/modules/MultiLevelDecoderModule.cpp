@@ -42,10 +42,10 @@ MultiLevelDecoderModuleImpl::MultiLevelDecoderModuleImpl(
     _convTranspose  (nn::ConvTranspose2dOptions(hiddenChannels2, outputChannels, kernelSize)
                      .stride(stride).bias(false)),
     _bnMain         (nn::BatchNorm2dOptions(outputChannels)),
-    _convAux        (nn::Conv2dOptions(outputChannels, 16, {3, 3}).bias(false).padding(1)),
-    _bnAux          (nn::BatchNorm2dOptions(16)),
-    _conv_Y         (nn::Conv2dOptions(16, 1, {1, 1})),
-    _conv_UV        (nn::Conv2dOptions(16, 2, {1, 1}))
+    _convAux        (nn::Conv2dOptions(outputChannels, 32, {1, 1}).bias(false)),
+    _bnAux          (nn::BatchNorm2dOptions(32)),
+    _conv_Y         (nn::Conv2dOptions(32, 1, {1, 1})),
+    _conv_UV        (nn::Conv2dOptions(32, 2, {1, 1}))
 {
     register_module("resNext1", _resNext1);
     register_module("resNext2", _resNext2);
