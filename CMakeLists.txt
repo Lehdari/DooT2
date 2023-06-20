@@ -35,6 +35,7 @@ set(DOOT2_ML_SOURCES
     src/ml/modules/FlowDecoder.cpp
     src/ml/modules/FrameDecoder.cpp
     src/ml/modules/FrameEncoder.cpp
+    src/ml/modules/LinearResidualModule.cpp
     src/ml/modules/MultiLevelDecoderModule.cpp
     src/ml/modules/MultiLevelEncoderModule.cpp
     src/ml/modules/MultiLevelFrameDecoder.cpp
