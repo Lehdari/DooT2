@@ -226,7 +226,7 @@ void App::updateExperimentConfig(nlohmann::json& experimentConfig)
     if (!_gui.getState().experimentBase.empty())
         experimentConfig["experiment_base_root"] = experimentRootFromString(_gui.getState().experimentBase);
     experimentConfig["software_version"] = GIT_VERSION;
-    experimentConfig["evaluation_interval"] = 4; // interval in epochs to run the evaluation on, TODO make controllable from the GUI
+    experimentConfig["evaluation_interval"] = 16; // interval in epochs to run the evaluation on, TODO make controllable from the GUI
     experimentConfig["pwad_filenames_evaluation"] = { // filenames for wads used in evaluation, mandatory if evaluation_interval is specified
         assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_11.wad"
     };
