@@ -843,7 +843,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
                 // Frame classification loss
                 torch::Tensor frameClassificationLoss = zero;
-                if (_useFrameClassificationLoss) { // TODO useframeclassificationloss
+                if (_useFrameClassificationLoss) {
                     torch::Tensor classification = _frameClassifier(encCircular);
                     frameClassificationLoss = _frameClassificationLossWeight*
                         torch::binary_cross_entropy_with_logits(classification, torch::ones_like(classification));
@@ -1028,42 +1028,46 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     torch::Tensor encGenerated = _frameEncoder(inGenerated);
 
                     // Train the frame classifier
-                    {
-                        torch::Tensor classification = _frameClassifier(encTrue);
-                        frameClassifierLoss = torch::binary_cross_entropy_with_logits(classification,
-                            torch::ones_like(classification));
+                    if (_useFrameClassificationLoss) {
+                        {
+                            torch::Tensor classification = _frameClassifier(encTrue);
+                            frameClassifierLoss = torch::binary_cross_entropy_with_logits(classification,
+                                torch::ones_like(classification));
+                        }
+                        {
+                            torch::Tensor classification = _frameClassifier(encGenerated);
+                            frameClassifierLoss += torch::binary_cross_entropy_with_logits(classification,
+                                torch::zeros_like(classification));
+                        }
+                        frameClassifierLossAcc += frameClassifierLoss.item<double>();
+                        frameClassifierLoss.backward();
                     }
-                    {
-                        torch::Tensor classification = _frameClassifier(encGenerated);
-                        frameClassifierLoss += torch::binary_cross_entropy_with_logits(classification,
-                            torch::zeros_like(classification));
-                    }
-                    frameClassifierLossAcc += frameClassifierLoss.item<double>();
-                    frameClassifierLoss.backward();
 
                     // Train the encoding discriminator
-                    if (d%2 == 0) { // Encodings from images (true or generated) are both considered fake from
-                        // the p.o.v. of the discriminator - alternate between them.
-                        // Encodings from real images
-                        torch::Tensor discrimination = _encodingDiscriminator(encTrue.detach());
-                        encodingDiscriminatorLoss = torch::binary_cross_entropy_with_logits(discrimination,
-                            torch::zeros_like(discrimination));
+                    if (_useEncodingDiscriminationLoss) {
+                        if (d%2 == 0) { // Encodings from images (true or generated) are both considered fake from
+                            // the p.o.v. of the discriminator - alternate between them.
+                            // Encodings from real images
+                            torch::Tensor discrimination = _encodingDiscriminator(encTrue.detach());
+                            encodingDiscriminatorLoss = torch::binary_cross_entropy_with_logits(discrimination,
+                                torch::zeros_like(discrimination));
+                        }
+                        else {
+                            // Encodings from fake images
+                            torch::Tensor discrimination = _encodingDiscriminator(encGenerated.detach());
+                            encodingDiscriminatorLoss = torch::binary_cross_entropy_with_logits(discrimination,
+                                torch::zeros_like(discrimination));
+                        }
+                        {   // Gaussian prior encodings
+                            encRandom = torch::randn({doot2::batchSize, doot2::encodingLength},
+                                TensorOptions().device(_device).dtype(torch::kBFloat16));
+                            torch::Tensor discrimination = _encodingDiscriminator(encRandom);
+                            encodingDiscriminatorLoss += torch::binary_cross_entropy_with_logits(discrimination,
+                                torch::ones_like(discrimination));
+                        }
+                        encodingDiscriminatorLossAcc += encodingDiscriminatorLoss.item<double>();
+                        encodingDiscriminatorLoss.backward();
                     }
-                    else {
-                        // Encodings from fake images
-                        torch::Tensor discrimination = _encodingDiscriminator(encGenerated.detach());
-                        encodingDiscriminatorLoss = torch::binary_cross_entropy_with_logits(discrimination,
-                            torch::zeros_like(discrimination));
-                    }
-                    {   // Gaussian prior encodings
-                        encRandom = torch::randn({doot2::batchSize, doot2::encodingLength},
-                            TensorOptions().device(_device).dtype(torch::kBFloat16));
-                        torch::Tensor discrimination = _encodingDiscriminator(encRandom);
-                        encodingDiscriminatorLoss += torch::binary_cross_entropy_with_logits(discrimination,
-                            torch::ones_like(discrimination));
-                    }
-                    encodingDiscriminatorLossAcc += encodingDiscriminatorLoss.item<double>();
-                    encodingDiscriminatorLoss.backward();
 
                     torch::Tensor rndEncodingImage;
                     rndEncodingImage = encRandom.index({0}).to(torch::kCPU, torch::kFloat32).reshape({32, 64})*0.15 + 0.5;
