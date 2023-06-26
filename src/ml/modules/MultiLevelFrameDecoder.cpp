@@ -67,7 +67,8 @@ MultiLevelImage MultiLevelFrameDecoderImpl::forward(torch::Tensor x, double leve
 
     // Decoder
     // Linear layer
-    x = _pRelu1(_bn1(_linear1(x)));
+    torch::Tensor y = _pRelu1(_bn1(_linear1(x)));
+    x = x + y;
     x = torch::reshape(x, {batchSize, 128, 4, 4});
 
     MultiLevelImage img;

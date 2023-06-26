@@ -16,19 +16,22 @@ using namespace torch;
 
 
 MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl(int featureMultiplier) :
-    _encoder1           (6.0, 3, 4*featureMultiplier, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}, 0.1), // 320x240
-    _encoder2           (5.0, 4*featureMultiplier, 8*featureMultiplier, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}, 0.1), // 160x120
-    _encoder3           (4.0, 8*featureMultiplier, 16*featureMultiplier, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}, 0.1), // 80x60
-    _encoder4           (3.0, 16*featureMultiplier, 32*featureMultiplier, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}, 0.1), // 40x30
-    _encoder5           (2.0, 32*featureMultiplier, 64*featureMultiplier, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}, 0.1), // 20x15
-    _encoder6           (1.0, 64*featureMultiplier, 128*featureMultiplier, ExpandingArray<2>{3,4}, ExpandingArray<2>{1,2}, 0.1), // 10x15
-    _encoder7           (0.0, 128*featureMultiplier, 256*featureMultiplier, ExpandingArray<2>{5,4}, ExpandingArray<2>{3,2}, 0.1), // 5x5
-    _conv1              (nn::Conv2dOptions(256*featureMultiplier, 128*featureMultiplier, {2, 2}).bias(false)),
-    _bn1                (nn::BatchNorm2dOptions(128*featureMultiplier)),
-    _conv2              (nn::Conv2dOptions(128*featureMultiplier, 128, {1, 1}).bias(false)),
-    _pRelu1             (nn::PReLUOptions().num_parameters(2048).init(0.01)),
-    _bn2                (nn::BatchNorm1dOptions(2048)),
-    _linear1            (nn::LinearOptions(2048, 2048).bias(false))
+    _encoder1   (6.0, 3, 4*featureMultiplier, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}, 0.1), // 320x240
+    _encoder2   (5.0, 4*featureMultiplier, 8*featureMultiplier, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}, 0.1), // 160x120
+    _encoder3   (4.0, 8*featureMultiplier, 16*featureMultiplier, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}, 0.15), // 80x60
+    _encoder4   (3.0, 16*featureMultiplier, 32*featureMultiplier, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}, 0.2), // 40x30
+    _encoder5   (2.0, 32*featureMultiplier, 64*featureMultiplier, ExpandingArray<2>{4,4}, ExpandingArray<2>{2,2}, 0.3), // 20x15
+    _encoder6   (1.0, 64*featureMultiplier, 128*featureMultiplier, ExpandingArray<2>{3,4}, ExpandingArray<2>{1,2}, 0.4), // 10x15
+    _encoder7   (0.0, 128*featureMultiplier, 256*featureMultiplier, ExpandingArray<2>{5,4}, ExpandingArray<2>{3,2}, 0.5), // 5x5
+    _conv1      (nn::Conv2dOptions(256*featureMultiplier, 128*featureMultiplier, {2, 2}).bias(false)),
+    _bn1        (nn::BatchNorm2dOptions(128*featureMultiplier)),
+    _conv2      (nn::Conv2dOptions(128*featureMultiplier, 128, {1, 1}).bias(false)),
+    _pRelu1     (nn::PReLUOptions().num_parameters(2048).init(0.01)),
+    _bn2        (nn::BatchNorm1dOptions(2048)),
+    _bn3        (nn::BatchNorm2dOptions(256*featureMultiplier)),
+    _pRelu2     (nn::PReLUOptions().num_parameters(256*featureMultiplier).init(0.01)),
+    _conv3      (nn::Conv2dOptions(256*featureMultiplier, 2048, {1, 1}).bias(false)), // from decoder7 output to NxNx2048
+    _linear1    (nn::LinearOptions(2048, 2048).bias(false))
 {
     register_module("encoder1", _encoder1);
     register_module("encoder2", _encoder2);
@@ -42,6 +45,9 @@ MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl(int featureMultiplier) :
     register_module("conv2", _conv2);
     register_module("pRelu1", _pRelu1);
     register_module("bn2", _bn2);
+    register_module("bn3", _bn3);
+    register_module("pRelu2", _pRelu2);
+    register_module("conv3", _conv3);
     register_module("linear1", _linear1);
 
     auto* w = _conv2->named_parameters(false).find("weight");
@@ -66,12 +72,14 @@ torch::Tensor MultiLevelFrameEncoderImpl::forward(const MultiLevelImage& img)
     x = _encoder6(x, img.img1, img.level); // 10x15x512
     x = _encoder7(x, img.img0, img.level); // 5x5x1024
 
+    // "skip" connection by 1x1 conv to 2048 channels and global avg pooling
+    torch::Tensor y = _conv3(_pRelu2(_bn3(x))).mean({2,3});
+
     x = torch::leaky_relu(_bn1(_conv1(x)), leakyReluNegativeSlope); // 4x4x512
     x = _conv2(x); // 4x4x128
     x = torch::reshape(x, {-1, 2048}); // 2048
 
     // linear residual block
-    torch::Tensor y = _pRelu1(_bn2(x));
-    x = _linear1(y);
-    return x;
+    torch::Tensor z = _linear1(_pRelu1(_bn2(x)));
+    return y + z;
 }

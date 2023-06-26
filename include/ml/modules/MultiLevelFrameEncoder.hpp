@@ -38,6 +38,9 @@ private:
     torch::nn::Conv2d           _conv2;
     torch::nn::PReLU            _pRelu1;
     torch::nn::BatchNorm1d      _bn2;
+    torch::nn::BatchNorm2d      _bn3;
+    torch::nn::PReLU            _pRelu2;
+    torch::nn::Conv2d           _conv3;
     torch::nn::Linear           _linear1;
 };
 TORCH_MODULE(MultiLevelFrameEncoder);
