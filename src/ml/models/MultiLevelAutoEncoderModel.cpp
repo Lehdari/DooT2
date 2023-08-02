@@ -393,6 +393,7 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         timeSeriesWriteHandle->addSeries<double>("discriminationLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("discriminatorLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingCircularLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("encodingMaskLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("reconstructionLosses", 0.0);
         timeSeriesWriteHandle->addSeries<double>("auxiliaryLosses", 0.0);
         timeSeriesWriteHandle->addSeries<double>("loss", 0.0);
@@ -428,6 +429,7 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         *(_trainingInfo->images)["random1"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["random0"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["encoding"].write() = Image<float>(64*8, 32*8, ImageFormat::GRAY);
+        *(_trainingInfo->images)["encoding_mask"].write() = Image<float>(64*8, 32*8, ImageFormat::GRAY);
         *(_trainingInfo->images)["random_encoding"].write() = Image<float>(64*8, 32*8, ImageFormat::GRAY);
         if (_useEncodingCovarianceLoss) {
             *(_trainingInfo->images)["covariance_matrix"].write() = Image<float>(
@@ -523,7 +525,7 @@ void MultiLevelAutoEncoderModel::infer(const TensorVector& input, TensorVector& 
     _frameDecoder->to(torch::kFloat32);
 
     // Frame encode
-    torch::Tensor enc = _frameEncoder->forward(in);
+    torch::Tensor enc = std::get<0>(_frameEncoder->forward(in));
 
     // Frame decode
     auto out = _frameDecoder->forward(enc, _lossLevel);
@@ -647,6 +649,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     double discriminationLossAcc = 0.0;
     double discriminatorLossAcc = 0.0;
     double encodingCircularLossAcc = 0.0;
+    double encodingMaskLossAcc = 0.0;
     double reconstructionLossesAcc = 0.0;
     double auxiliaryLossesAcc = 0.0;
     double maxEncodingCovariance = 1.0; // max value in the covariance matrix
@@ -723,7 +726,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 };
 
                 // Frame encode
-                enc = _frameEncoder(in);
+                torch::Tensor encMask;
+                std::tie(enc, encMask) = _frameEncoder(in);
 
                 // Compute distance from encoding mean to origin and encoding mean loss
                 torch::Tensor encodingMeanLoss = zero;
@@ -787,6 +791,15 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 }
                 encodingPrevDistanceLossAcc += encodingPrevDistanceLoss.item<double>();
 
+                // Encoding mask loss
+                torch::Tensor encodingMaskLoss = zero;
+                /* if (_useEncodingMaskLoss) */{
+                    double _encodingMaskLossWeight = std::pow(0.25, _lossLevel);
+                    encodingMaskLoss = _encodingMaskLossWeight *
+                        torch::mse_loss(encMask, -0.05f*torch::ones_like(encMask));
+                }
+                encodingMaskLossAcc += encodingMaskLoss.item<double>();
+
                 // stop gradient from flowing to the previous iteration
                 encPrev = enc.detach();
 
@@ -809,7 +822,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     rOut = _frameDecoder(encRandom, _lossLevel);
                 }
                 if (_useEncodingCircularLoss || _useEncodingDiscriminationLoss) {
-                    encCircular = _frameEncoder(rOut);
+                    encCircular = std::get<0>(_frameEncoder(rOut));
                 }
 
                 // Decoder discrimination loss
@@ -853,7 +866,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 // Total auxiliary losses
                 torch::Tensor auxiliaryLosses = encodingDistributionLoss + encodingDistanceLoss + encodingMeanLoss +
                     encodingCovarianceLoss + encodingPrevDistanceLoss + encodingDiscriminationLoss +
-                    encodingCircularLoss + discriminationLoss + frameClassificationLoss;
+                    encodingCircularLoss + encodingMaskLoss + discriminationLoss + frameClassificationLoss;
                 auxiliaryLossesAcc += auxiliaryLosses.item<double>();
 
                 // Frame decoding losses
@@ -980,13 +993,22 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                         _trainingInfo->images["covariance_matrix"].write()->copyFrom(covarianceMatrixCPU.contiguous().data_ptr<float>());
 
                     torch::Tensor encodingImage;
-                    encodingImage = enc.index({displaySeqId}).to(torch::kCPU, torch::kFloat32).reshape({32, 64})*0.3333 + 0.5;
+                    encodingImage = enc.index({displaySeqId}).to(torch::kCPU, torch::kFloat32).reshape({32, 64})*0.01 + 0.5;
                     encodingImage = tf::interpolate(encodingImage.unsqueeze(0).unsqueeze(0),
                         tf::InterpolateFuncOptions()
                             .size(std::vector<long>{32*8, 64*8})
                             .mode(kNearestExact).align_corners(false)
                     );
                     _trainingInfo->images["encoding"].write()->copyFrom(encodingImage.contiguous().data_ptr<float>());
+
+                    torch::Tensor encodingMaskImage;
+                    encodingMaskImage = encMask.index({displaySeqId}).to(torch::kCPU, torch::kFloat32).reshape({32, 64})*0.5 + 0.5;
+                    encodingMaskImage = tf::interpolate(encodingMaskImage.unsqueeze(0).unsqueeze(0),
+                        tf::InterpolateFuncOptions()
+                            .size(std::vector<long>{32*8, 64*8})
+                            .mode(kNearestExact).align_corners(false)
+                    );
+                    _trainingInfo->images["encoding_mask"].write()->copyFrom(encodingMaskImage.contiguous().data_ptr<float>());
                 }
 
                 c10::cuda::CUDACachingAllocator::emptyCache();
@@ -1013,7 +1035,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                         seq.img7.index({(int) t}),
                         _lossLevel
                     };
-                    torch::Tensor encTrue = _frameEncoder(inTrue);
+                    torch::Tensor encTrue = std::get<0>(_frameEncoder(inTrue));
                     MultiLevelImage inGenerated = _frameDecoder(torch::randn(
                         {doot2::batchSize, doot2::encodingLength},
                         TensorOptions().device(_device).dtype(torch::kBFloat16)), _lossLevel);
@@ -1025,7 +1047,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     inGenerated.img5 = inGenerated.img5.detach();
                     inGenerated.img6 = inGenerated.img6.detach();
                     inGenerated.img7 = inGenerated.img7.detach();
-                    torch::Tensor encGenerated = _frameEncoder(inGenerated);
+                    torch::Tensor encGenerated = std::get<0>(_frameEncoder(inGenerated));
 
                     // Train the frame classifier
                     if (_useFrameClassificationLoss) {
@@ -1110,6 +1132,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         discriminationLossAcc /= framesPerCycle;
         discriminatorLossAcc /= (double)nVirtualBatchesPerCycle*(double)_discriminatorVirtualBatchSize;
         encodingCircularLossAcc /= framesPerCycle;
+        encodingMaskLossAcc /= framesPerCycle;
         reconstructionLossesAcc /= framesPerCycle;
         auxiliaryLossesAcc /= framesPerCycle;
 
@@ -1142,6 +1165,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 "discriminationLoss", discriminationLossAcc,
                 "discriminatorLoss", discriminatorLossAcc,
                 "encodingCircularLoss", encodingCircularLossAcc,
+                "encodingMaskLoss", encodingMaskLossAcc,
                 "reconstructionLosses", reconstructionLossesAcc,
                 "auxiliaryLosses", auxiliaryLossesAcc,
                 "loss", lossAcc,
@@ -1166,6 +1190,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         discriminationLossAcc = 0.0;
         discriminatorLossAcc = 0.0;
         encodingCircularLossAcc = 0.0;
+        encodingMaskLossAcc = 0.0;
         reconstructionLossesAcc = 0.0;
         auxiliaryLossesAcc = 0.0;
 
