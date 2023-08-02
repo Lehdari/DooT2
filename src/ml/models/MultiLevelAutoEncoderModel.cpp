@@ -587,31 +587,33 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     auto seq = scaleSequences(storageFrames, sequenceLength);
 
     // Random sample the pixel diff to get an approximation
-    for (int i=0; i<8; ++i) {
-        // Select two frames from different sequences on timestep t
-        int t = rnd() % sequenceLength;
-        int b1 = rnd() % doot2::batchSize;
-        int b2 = rnd() % doot2::batchSize;
-        while (b2 == b1)
-            b2 = rnd() % doot2::batchSize;
+    if (_useEncodingDistanceLoss) {
+        for (int i=0; i<8; ++i) {
+            // Select two frames from different sequences on timestep t
+            int t = rnd() % sequenceLength;
+            int b1 = rnd() % doot2::batchSize;
+            int b2 = rnd() % doot2::batchSize;
+            while (b2 == b1)
+                b2 = rnd() % doot2::batchSize;
 
-        // Lowpass filter the diff to prevent sudden changes
-        _batchPixelDiff = _batchPixelDiff*0.95 +
-            0.05 * torch::mean(torch::abs(seq.img7.index({t, b1})-seq.img7.index({t, b2}))).item<double>();
+            // Lowpass filter the diff to prevent sudden changes
+            _batchPixelDiff = _batchPixelDiff*0.95 +
+                0.05 * torch::mean(torch::abs(seq.img7.index({t, b1})-seq.img7.index({t, b2}))).item<double>();
 
-        MultiLevelImage in {
-            seq.img0.index({(int)t}),
-            seq.img1.index({(int)t}),
-            seq.img2.index({(int)t}),
-            seq.img3.index({(int)t}),
-            seq.img4.index({(int)t}),
-            seq.img5.index({(int)t}),
-            seq.img6.index({(int)t}),
-            seq.img7.index({(int)t}),
-            _lossLevel
-        };
-        torch::Tensor enc = _frameEncoder(in);
-        _batchEncDiff = _batchEncDiff*0.95 + 0.05*torch::norm(enc.index({b1})-enc.index({b2})).item<double>();
+            MultiLevelImage in {
+                seq.img0.index({(int)t}),
+                seq.img1.index({(int)t}),
+                seq.img2.index({(int)t}),
+                seq.img3.index({(int)t}),
+                seq.img4.index({(int)t}),
+                seq.img5.index({(int)t}),
+                seq.img6.index({(int)t}),
+                seq.img7.index({(int)t}),
+                _lossLevel
+            };
+            torch::Tensor enc = std::get<0>(_frameEncoder(in));
+            _batchEncDiff = _batchEncDiff*0.95 + 0.05*torch::norm(enc.index({b1})-enc.index({b2})).item<double>();
+        }
     }
 
     // Set training mode on
@@ -877,8 +879,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     (_lossLevel > 2.0 ? frameLossWeight3 * yuvLoss(in.img3, out.img3) : zero) +
                     (_lossLevel > 3.0 ? frameLossWeight4 * yuvLoss(in.img4, out.img4) : zero) +
                     (_lossLevel > 4.0 ? frameLossWeight5 * yuvLoss(in.img5, out.img5) : zero) +
-                    (_lossLevel > 4.0 ? frameLossWeight6 * yuvLoss(in.img6, out.img6) : zero) +
-                    (_lossLevel > 4.0 ? frameLossWeight7 * yuvLoss(in.img7, out.img7) : zero));
+                    (_lossLevel > 5.0 ? frameLossWeight6 * yuvLoss(in.img6, out.img6) : zero) +
+                    (_lossLevel > 6.0 ? frameLossWeight7 * yuvLoss(in.img7, out.img7) : zero));
                 frameLossAcc += frameLoss.item<double>();
                 torch::Tensor frameGradLoss = _frameGradLossWeight*(
                     frameLossWeight0 * imageGradLoss(in.img0, out.img0) +
@@ -887,8 +889,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     (_lossLevel > 2.0 ? frameLossWeight3 * imageGradLoss(in.img3, out.img3) : zero) +
                     (_lossLevel > 3.0 ? frameLossWeight4 * imageGradLoss(in.img4, out.img4) : zero) +
                     (_lossLevel > 4.0 ? frameLossWeight5 * imageGradLoss(in.img5, out.img5) : zero) +
-                    (_lossLevel > 4.0 ? frameLossWeight6 * imageGradLoss(in.img6, out.img6) : zero) +
-                    (_lossLevel > 4.0 ? frameLossWeight7 * imageGradLoss(in.img7, out.img7) : zero));
+                    (_lossLevel > 5.0 ? frameLossWeight6 * imageGradLoss(in.img6, out.img6) : zero) +
+                    (_lossLevel > 6.0 ? frameLossWeight7 * imageGradLoss(in.img7, out.img7) : zero));
                 frameGradLossAcc += frameGradLoss.item<double>();
                 torch::Tensor frameLaplacianLoss = _frameLaplacianLossWeight*(
                     frameLossWeight0 * imageLaplacianLoss(in.img0, out.img0) +
@@ -897,8 +899,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     (_lossLevel > 2.0 ? frameLossWeight3 * imageLaplacianLoss(in.img3, out.img3) : zero) +
                     (_lossLevel > 3.0 ? frameLossWeight4 * imageLaplacianLoss(in.img4, out.img4) : zero) +
                     (_lossLevel > 4.0 ? frameLossWeight5 * imageLaplacianLoss(in.img5, out.img5) : zero) +
-                    (_lossLevel > 4.0 ? frameLossWeight6 * imageLaplacianLoss(in.img6, out.img6) : zero) +
-                    (_lossLevel > 4.0 ? frameLossWeight7 * imageLaplacianLoss(in.img7, out.img7) : zero));
+                    (_lossLevel > 5.0 ? frameLossWeight6 * imageLaplacianLoss(in.img6, out.img6) : zero) +
+                    (_lossLevel > 6.0 ? frameLossWeight7 * imageLaplacianLoss(in.img7, out.img7) : zero));
                 frameLaplacianLossAcc += frameLaplacianLoss.item<double>();
 
                 // Frame reconstruction losses
