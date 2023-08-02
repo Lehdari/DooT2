@@ -13,9 +13,11 @@
 
 using namespace ml;
 using namespace torch;
+namespace tf = torch::nn::functional;
 
 
 MultiLevelDecoderModuleImpl::MultiLevelDecoderModuleImpl(
+    bool useConvTranspose,
     double level,
     int inputChannels,
     int hiddenChannels1,
@@ -32,25 +34,33 @@ MultiLevelDecoderModuleImpl::MultiLevelDecoderModuleImpl(
     const torch::indexing::Slice& vSlice,
     const torch::indexing::Slice& hSlice
 ) :
-    _level          (level),
-    _outputWidth    (outputWidth),
-    _outputHeight   (outputHeight),
-    _vSlice         (vSlice),
-    _hSlice         (hSlice),
-    _resNext1       (inputChannels, hiddenChannels1, nGroups1, groupChannels1),
-    _resNext2       (hiddenChannels1, hiddenChannels2, nGroups2, groupChannels2),
-    _convTranspose  (nn::ConvTranspose2dOptions(hiddenChannels2, outputChannels, kernelSize)
-                     .stride(stride).bias(false)),
-    _bnMain         (nn::BatchNorm2dOptions(outputChannels)),
-    _convAux        (nn::Conv2dOptions(outputChannels, 16, {3, 3}).bias(false).padding(1)),
-    _bnAux          (nn::BatchNorm2dOptions(16)),
-    _conv_Y         (nn::Conv2dOptions(16, 1, {1, 1})),
-    _conv_UV        (nn::Conv2dOptions(16, 2, {1, 1}))
+    _useConvTranspose   (useConvTranspose),
+    _level              (level),
+    _outputWidth        (outputWidth),
+    _outputHeight       (outputHeight),
+    _kernelSize         (kernelSize),
+    _vSlice             (vSlice),
+    _hSlice             (hSlice),
+    _resNext1           (_useConvTranspose ? hiddenChannels1 : inputChannels,
+                         hiddenChannels2, nGroups1, groupChannels1),
+    _resNext2           (hiddenChannels2, outputChannels, nGroups2, groupChannels2),
+    _convTranspose      (nn::ConvTranspose2dOptions(inputChannels, hiddenChannels1, kernelSize)
+                         .stride(stride).bias(false)),
+    _bnMain             (nn::BatchNorm2dOptions(hiddenChannels1)),
+    _convSkip           (nn::Conv2dOptions(_useConvTranspose ? hiddenChannels1 : inputChannels,
+                         outputChannels, {1,1}).bias(false)),
+    _convAux            (nn::Conv2dOptions(outputChannels, 16, {3, 3}).bias(false).padding(1)),
+    _bnAux              (nn::BatchNorm2dOptions(16)),
+    _conv_Y             (nn::Conv2dOptions(16, 1, {1, 1})),
+    _conv_UV            (nn::Conv2dOptions(16, 2, {1, 1}))
 {
     register_module("resNext1", _resNext1);
     register_module("resNext2", _resNext2);
-    register_module("convTranspose", _convTranspose);
-    register_module("bnMain", _bnMain);
+    if (_useConvTranspose) {
+        register_module("convTranspose", _convTranspose);
+        register_module("bnMain", _bnMain);
+    }
+    register_module("convSkip", _convSkip);
     register_module("convAux", _convAux);
     register_module("bnAux", _bnAux);
     register_module("conv_Y", _conv_Y);
@@ -78,8 +88,18 @@ std::tuple<torch::Tensor, torch::Tensor> MultiLevelDecoderModuleImpl::forward(to
 
     torch::Tensor y;
     if (level > _level) {
-        x = torch::leaky_relu(_bnMain(_convTranspose(_resNext2(_resNext1(x)))), leakyReluNegativeSlope);
-        x = x.index({Slice(), Slice(), _vSlice, _hSlice});
+        if (_useConvTranspose) {
+            x = torch::leaky_relu(_bnMain(_convTranspose(x)), leakyReluNegativeSlope);
+            x = x.index({Slice(), Slice(), _vSlice, _hSlice});
+        }
+        else {
+            auto originalType = x.scalar_type();
+            x = tf::interpolate(x.to(kFloat32), tf::InterpolateFuncOptions()
+                .size(std::vector<int64_t>{_outputHeight, _outputWidth})
+                .mode(kBilinear)
+                .align_corners(false)).to(originalType);
+        }
+        x = _convSkip(x) + _resNext2(_resNext1(x));
 
         // auxiliary image output
         y = torch::leaky_relu(_bnAux(_convAux(x)), leakyReluNegativeSlope);
