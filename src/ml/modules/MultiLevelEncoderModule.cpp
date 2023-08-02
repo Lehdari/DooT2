@@ -43,6 +43,7 @@ torch::Tensor MultiLevelEncoderModuleImpl::forward(const Tensor& main, const Ten
 {
     constexpr double leakyReluNegativeSlope = 0.01;
 
+#if 0
     torch::Tensor x;
     if (level > _level) {
         x = torch::leaky_relu(_bnMain(_convMain(main)), leakyReluNegativeSlope);
@@ -57,6 +58,14 @@ torch::Tensor MultiLevelEncoderModuleImpl::forward(const Tensor& main, const Ten
     }
     else
         x = torch::zeros({aux.sizes()[0], _outputChannels, aux.sizes()[2], aux.sizes()[3]});
+#else
+    torch::Tensor x = torch::leaky_relu(_bnMain(_convMain(main)), leakyReluNegativeSlope);
+    float w = (float)std::clamp(_level+1.0-level, 0.0, 1.0);
+    if (w > 0.0) {
+        torch::Tensor y = torch::leaky_relu(_bnAux(_convAux(aux)), leakyReluNegativeSlope);
+        x = x + w*y;
+    }
 
+#endif
     return x;
 }
