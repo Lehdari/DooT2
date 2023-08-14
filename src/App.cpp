@@ -163,8 +163,11 @@ void App::trainingControl()
             }
         }   break;
         case gui::State::TrainingStatus::ONGOING: {
-            if (!_trainer->isFinished()) // training running, continue business as usual
+            if (!_trainer->isFinished()) {
+                if (_trainer->isPaused())
+                    _trainer->unpause();
                 break;
+            }
 
             // Trainer finished, clean up the experiment
             if (_trainerThread.joinable()) {
@@ -195,7 +198,8 @@ void App::trainingControl()
             _trainerThread = std::thread(&ml::Trainer::loop, _trainer);
         }   break;
         case gui::State::TrainingStatus::PAUSED: {
-            // TODO, requires pausing interface for Model
+            if (!_trainer->isPaused())
+                _trainer->pause();
         }   break;
     }
 }

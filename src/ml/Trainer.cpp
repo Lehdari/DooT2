@@ -191,6 +191,13 @@ void Trainer::loop()
                 _experimentConfig["n_training_epochs"].get<int>()); // TODO logging
             break;
         }
+
+        {   // Wait for unpause signal in case the training has been paused
+            std::unique_lock pauseLock(_pauseMutex);
+            if (_paused)
+                saveExperiment();
+            _pauseCV.wait(pauseLock, [this]{ return !_paused || _quit; });
+        }
     }
 
     _model->waitForTrainingFinished();
@@ -200,13 +207,40 @@ void Trainer::loop()
 
 void Trainer::quit()
 {
-    _quit = true;
+    {
+        std::lock_guard lock(_pauseMutex);
+        _quit = true;
+    }
+    _pauseCV.notify_one();
     _model->abortTraining();
 }
 
-bool Trainer::isFinished()
+bool Trainer::isFinished() const noexcept
 {
     return _finished;
+}
+
+void Trainer::pause()
+{
+    {
+        std::lock_guard lock(_pauseMutex);
+        _paused = true;
+    }
+    _pauseCV.notify_one();
+}
+
+void Trainer::unpause()
+{
+    {
+        std::lock_guard lock(_pauseMutex);
+        _paused = false;
+    }
+    _pauseCV.notify_one();
+}
+
+bool Trainer::isPaused() const noexcept
+{
+    return _paused;
 }
 
 void Trainer::configureExperiment(nlohmann::json&& experimentConfig)

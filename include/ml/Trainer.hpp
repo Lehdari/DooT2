@@ -48,7 +48,10 @@ public:
 
     void loop();
     void quit();
-    bool isFinished();
+    bool isFinished() const noexcept;
+    void pause();
+    void unpause();
+    bool isPaused() const noexcept;
 
     void configureExperiment(nlohmann::json&& experimentConfig);
     void setupExperiment(); // called before starting the training loop
@@ -64,6 +67,9 @@ private:
     using Rnd = std::default_random_engine;
     Rnd                             _rnd;
     std::atomic_bool                _quit;
+    std::atomic_bool                _paused;
+    std::mutex                      _pauseMutex;
+    std::condition_variable         _pauseCV;
     std::atomic_bool                _finished; // loop() finished, waiting to join
     ActionConverter<float>          _actionConverter;
     SequenceStorage                 _sequenceStorage;
