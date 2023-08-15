@@ -402,7 +402,7 @@ void AutoEncoderModel::trainImpl(SequenceStorage& storage)
     }
 }
 
-void AutoEncoderModel::save()
+void AutoEncoderModel::save(const std::filesystem::path& subdir)
 {
     try {
         {

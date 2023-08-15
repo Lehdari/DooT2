@@ -48,7 +48,7 @@ public:
     virtual void reset();
 
     // Save the model
-    virtual void save();
+    virtual void save(const std::filesystem::path& subdir = "");
 
     // Train the model
     void train(SequenceStorage& storage);

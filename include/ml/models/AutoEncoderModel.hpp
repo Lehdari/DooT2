@@ -38,7 +38,7 @@ public:
 
     void init(const nlohmann::json& experimentConfig) override;
     void setTrainingInfo(TrainingInfo* trainingInfo) override;
-    void save() override;
+    void save(const std::filesystem::path& subdir = "") override;
     void infer(const TensorVector& input, TensorVector& output) override;
 
 private:

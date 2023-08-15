@@ -16,6 +16,7 @@
 #include "ml/modules/Discriminator.hpp"
 #include "ml/modules/EncodingDiscriminator.hpp"
 #include "ml/MultiLevelImage.hpp"
+#include "util/Types.hpp"
 
 #include <chrono>
 
@@ -30,7 +31,7 @@ struct TrainingInfo;
 
 class MultiLevelAutoEncoderModel final : public Model {
 public:
-    static nlohmann::json getDefaultModelConfig();
+    static Json getDefaultModelConfig();
 
     MultiLevelAutoEncoderModel();
     MultiLevelAutoEncoderModel(const MultiLevelAutoEncoderModel&) = delete;
@@ -38,15 +39,16 @@ public:
     MultiLevelAutoEncoderModel& operator=(const MultiLevelAutoEncoderModel&) = delete;
     MultiLevelAutoEncoderModel& operator=(MultiLevelAutoEncoderModel&&) = delete;
 
-    void init(const nlohmann::json& experimentConfig) override;
+    void init(const Json& experimentConfig) override;
     void setTrainingInfo(TrainingInfo* trainingInfo) override;
-    void save() override;
+    void save(const std::filesystem::path& subdir = "") override;
     void infer(const TensorVector& input, TensorVector& output) override;
 
 private:
     using TimePoint = decltype(std::chrono::high_resolution_clock::now());
 
     // Configuration variables and hyperparameters
+    std::filesystem::path                   _experimentRoot;
     std::filesystem::path                   _frameEncoderFilename;
     std::filesystem::path                   _frameDecoderFilename;
     std::filesystem::path                   _discriminatorFilename;
@@ -83,7 +85,9 @@ private:
     int64_t                                 _discriminatorVirtualBatchSize;
     double                                  _targetReconstructionLoss; // when loss is under this value, lossLevel is increased
 
-    double                                  _lossLevel; // determines the resolution the encoder
+    // State parameters (will be written to state_params.json)
+    int64_t                                 _trainingIteration;
+    double                                  _lossLevel; // determines the resolution of the encoding
     double                                  _batchPixelDiff; // estimate for average pixel difference between frames from different sequences
     double                                  _batchEncDiff; // estimate for average encoding distance between frames from different sequences
 

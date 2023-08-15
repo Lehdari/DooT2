@@ -31,7 +31,7 @@ void Model::reset()
 {
 }
 
-void Model::save()
+void Model::save(const std::filesystem::path& subdir)
 {
 }
 

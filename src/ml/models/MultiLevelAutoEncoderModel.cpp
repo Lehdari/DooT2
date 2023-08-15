@@ -95,9 +95,9 @@ namespace {
 
 } // namespace
 
-nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
+Json MultiLevelAutoEncoderModel::getDefaultModelConfig()
 {
-    nlohmann::json modelConfig;
+    Json modelConfig;
 
     modelConfig["frame_encoder_filename"] = "frame_encoder.pt";
     modelConfig["frame_decoder_filename"] = "frame_decoder.pt";
@@ -133,7 +133,6 @@ nlohmann::json MultiLevelAutoEncoderModel::getDefaultModelConfig()
     modelConfig["use_discriminator"] = true;
     modelConfig["discrimination_loss_weight"] = 0.4;
     modelConfig["discriminator_virtual_batch_size"] = 8;
-    modelConfig["initial_loss_level"] = 0.0;
     modelConfig["target_reconstruction_loss"] = 0.3;
 
     return modelConfig;
@@ -177,6 +176,7 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
     _discriminationLossWeight           (0.4),
     _discriminatorVirtualBatchSize      (8),
     _targetReconstructionLoss           (0.3),
+    _trainingIteration                  (0),
     _lossLevel                          (0.0),
     _batchPixelDiff                     (1.0),
     _batchEncDiff                       (sqrt(doot2::encodingLength)),
@@ -184,10 +184,10 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
 {
 }
 
-void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
+void MultiLevelAutoEncoderModel::init(const Json& experimentConfig)
 {
     auto& modelConfig = experimentConfig["model_config"];
-    fs::path experimentRoot = doot2::experimentsDirectory / experimentConfig["experiment_root"].get<fs::path>();
+    _experimentRoot = doot2::experimentsDirectory / experimentConfig["experiment_root"].get<fs::path>();
 
     // Setup hyperparameters
     _optimizerLearningRate = modelConfig["optimizer_learning_rate"];
@@ -220,29 +220,33 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     _discriminationLossWeight = modelConfig["discrimination_loss_weight"];
     _discriminatorVirtualBatchSize = modelConfig["discriminator_virtual_batch_size"];
     _targetReconstructionLoss = modelConfig["target_reconstruction_loss"];
-    _lossLevel = modelConfig["initial_loss_level"];
+
+    // Setup the state parameters
+    _trainingIteration = 0;
+    _lossLevel = 0.0;
+    _batchPixelDiff = 1.0;
+    _batchEncDiff = sqrt(doot2::encodingLength);
 
     // Load torch model file names from the model config
-    _frameEncoderFilename = experimentRoot / "frame_encoder.pt";
+    _frameEncoderFilename = "frame_encoder.pt";
     if (modelConfig.contains("frame_encoder_filename"))
-        _frameEncoderFilename = experimentRoot / modelConfig["frame_encoder_filename"].get<fs::path>();
+        _frameEncoderFilename = modelConfig["frame_encoder_filename"].get<fs::path>();
 
-    _frameDecoderFilename = experimentRoot / "frame_decoder.pt";
+    _frameDecoderFilename = "frame_decoder.pt";
     if (modelConfig.contains("frame_decoder_filename"))
-        _frameDecoderFilename = experimentRoot / modelConfig["frame_decoder_filename"].get<fs::path>();
+        _frameDecoderFilename = modelConfig["frame_decoder_filename"].get<fs::path>();
 
-    _discriminatorFilename = experimentRoot / "discriminator.pt";
+    _discriminatorFilename = "discriminator.pt";
     if (modelConfig.contains("discriminator_filename"))
-        _discriminatorFilename = experimentRoot / modelConfig["discriminator_filename"].get<fs::path>();
+        _discriminatorFilename = modelConfig["discriminator_filename"].get<fs::path>();
 
-    _encodingDiscriminatorFilename = experimentRoot / "encoding_discriminator.pt";
+    _encodingDiscriminatorFilename = "encoding_discriminator.pt";
     if (modelConfig.contains("encoding_discriminator_filename"))
-        _encodingDiscriminatorFilename = experimentRoot /
-            modelConfig["encoding_discriminator_filename"].get<fs::path>();
+        _encodingDiscriminatorFilename = modelConfig["encoding_discriminator_filename"].get<fs::path>();
 
-    _frameClassifierFilename = experimentRoot / "frame_classifier.pt";
+    _frameClassifierFilename = "frame_classifier.pt";
     if (modelConfig.contains("frame_classifier_filename"))
-        _frameClassifierFilename = experimentRoot / modelConfig["frame_classifier_filename"].get<fs::path>();
+        _frameClassifierFilename = modelConfig["frame_classifier_filename"].get<fs::path>();
 
     // Separate loading paths in case a base experiment is specified
     fs::path frameEncoderFilename = _frameEncoderFilename;
@@ -251,21 +255,32 @@ void MultiLevelAutoEncoderModel::init(const nlohmann::json& experimentConfig)
     fs::path encodingDiscriminatorFilename = _encodingDiscriminatorFilename;
     fs::path frameClassifierFilename = _frameClassifierFilename;
     if (experimentConfig.contains("experiment_base_root") && experimentConfig.contains("base_model_config")) {
+        fs::path experimentBaseRoot = experimentConfig["experiment_base_root"].get<fs::path>();
         if (experimentConfig["base_model_config"].contains("frame_encoder_filename"))
-            frameEncoderFilename = experimentConfig["experiment_base_root"].get<fs::path>() /
+            frameEncoderFilename = experimentBaseRoot /
                 experimentConfig["base_model_config"]["frame_encoder_filename"].get<fs::path>();
         if (experimentConfig["base_model_config"].contains("frame_decoder_filename"))
-            frameDecoderFilename = experimentConfig["experiment_base_root"].get<fs::path>() /
+            frameDecoderFilename = experimentBaseRoot /
                 experimentConfig["base_model_config"]["frame_decoder_filename"].get<fs::path>();
         if (experimentConfig["base_model_config"].contains("discriminator_filename"))
-            discriminatorFilename = experimentConfig["experiment_base_root"].get<fs::path>() /
+            discriminatorFilename = experimentBaseRoot /
                 experimentConfig["base_model_config"]["discriminator_filename"].get<fs::path>();
         if (experimentConfig["base_model_config"].contains("encoding_discriminator_filename"))
-            encodingDiscriminatorFilename = experimentConfig["experiment_base_root"].get<fs::path>() /
+            encodingDiscriminatorFilename = experimentBaseRoot /
                 experimentConfig["base_model_config"]["encoding_discriminator_filename"].get<fs::path>();
         if (experimentConfig["base_model_config"].contains("frame_classifier_filename"))
-            frameClassifierFilename = experimentConfig["experiment_base_root"].get<fs::path>() /
+            frameClassifierFilename = experimentBaseRoot /
                 experimentConfig["base_model_config"]["frame_classifier_filename"].get<fs::path>();
+
+        // Load state parameters from the base experiment
+        fs::path stateParamsFilename = experimentBaseRoot / "state_params.json";
+        std::ifstream stateParamsFile(stateParamsFilename);
+        auto stateParams = Json::parse(stateParamsFile);
+
+        if (stateParams.contains("trainingIteration")) _trainingIteration = stateParams["trainingIteration"];
+        if (stateParams.contains("lossLevel")) _lossLevel = stateParams["lossLevel"];
+        if (stateParams.contains("batchPixelDiff")) _batchPixelDiff = stateParams["batchPixelDiff"];
+        if (stateParams.contains("batchEncDiff")) _batchEncDiff = stateParams["batchEncDiff"];
     }
 
     // Load frame encoder
@@ -438,38 +453,58 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
     }
 }
 
-void MultiLevelAutoEncoderModel::save()
+void MultiLevelAutoEncoderModel::save(const fs::path& subdir)
 {
     try {
+        // Save the state parameters
         {
-            printf("Saving frame encoder model to %s\n", _frameEncoderFilename.c_str());
+            Json stateParams;
+            stateParams["trainingIteration"] = _trainingIteration;
+            stateParams["lossLevel"] = _lossLevel;
+            stateParams["batchPixelDiff"] = _batchPixelDiff;
+            stateParams["batchEncDiff"] = _batchEncDiff;
+
+            fs::path stateParamsFilename = _experimentRoot / subdir / "state_params.json";
+            printf("Saving model state parameters to %s\n", stateParamsFilename.c_str());
+            std::ofstream stateParamsFile(stateParamsFilename);
+            stateParamsFile << std::setw(4) << stateParams;
+        }
+
+        // Save the models
+        {
+            fs::path frameEncoderFilename = _experimentRoot / subdir / _frameEncoderFilename;
+            printf("Saving frame encoder model to %s\n", frameEncoderFilename.c_str());
             serialize::OutputArchive outputArchive;
             _frameEncoder->save(outputArchive);
-            outputArchive.save_to(_frameEncoderFilename);
+            outputArchive.save_to(frameEncoderFilename);
         }
         {
-            printf("Saving frame decoder model to %s\n", _frameDecoderFilename.c_str());
+            fs::path frameDecoderFilename = _experimentRoot / subdir / _frameDecoderFilename;
+            printf("Saving frame decoder model to %s\n", frameDecoderFilename.c_str());
             serialize::OutputArchive outputArchive;
             _frameDecoder->save(outputArchive);
-            outputArchive.save_to(_frameDecoderFilename);
+            outputArchive.save_to(frameDecoderFilename);
         }
         {
-            printf("Saving discriminator model to %s\n", _discriminatorFilename.c_str());
+            fs::path discriminatorFilename = _experimentRoot / subdir / _discriminatorFilename;
+            printf("Saving discriminator model to %s\n", discriminatorFilename.c_str());
             serialize::OutputArchive outputArchive;
             _discriminator->save(outputArchive);
-            outputArchive.save_to(_discriminatorFilename);
+            outputArchive.save_to(discriminatorFilename);
         }
         {
-            printf("Saving encoding discriminator model to %s\n", _encodingDiscriminatorFilename.c_str());
+            fs::path encodingDiscriminatorFilename = _experimentRoot / subdir / _encodingDiscriminatorFilename;
+            printf("Saving encoding discriminator model to %s\n", encodingDiscriminatorFilename.c_str());
             serialize::OutputArchive outputArchive;
             _encodingDiscriminator->save(outputArchive);
-            outputArchive.save_to(_encodingDiscriminatorFilename);
+            outputArchive.save_to(encodingDiscriminatorFilename);
         }
         {
-            printf("Saving frame classifier model to %s\n", _frameClassifierFilename.c_str());
+            fs::path frameClassifierFilename = _experimentRoot / subdir / _frameClassifierFilename;
+            printf("Saving frame classifier model to %s\n", frameClassifierFilename.c_str());
             serialize::OutputArchive outputArchive;
             _frameClassifier->save(outputArchive);
-            outputArchive.save_to(_frameClassifierFilename);
+            outputArchive.save_to(frameClassifierFilename);
         }
     }
     catch (const std::exception& e) {
@@ -1106,6 +1141,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     _trainingInfo->images["random_encoding"].write()->copyFrom(rndEncodingImage.contiguous().data_ptr<float>());
                 }
             }
+
+            ++_trainingIteration;
 
             // Apply gradients
             _optimizer->step();

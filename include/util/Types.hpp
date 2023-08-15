@@ -13,6 +13,9 @@
 #include <vector>
 
 #include <torch/torch.h>
+#include <nlohmann/json.hpp>
 
 
 using TensorVector = std::vector<torch::Tensor>;
+
+using Json = nlohmann::json;
