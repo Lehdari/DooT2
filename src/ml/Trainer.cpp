@@ -414,7 +414,7 @@ void Trainer::nextMap(size_t newBatchEntryId, bool evaluating)
 void Trainer::evaluateModel()
 {
     TensorVector inputs(1);
-    TensorVector outputs(1);
+    TensorVector outputs(3);
 
     double performanceAvg = 0.0;
     double performanceMin = std::numeric_limits<double>::max();

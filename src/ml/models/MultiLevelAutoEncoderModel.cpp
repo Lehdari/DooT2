@@ -525,7 +525,7 @@ void MultiLevelAutoEncoderModel::infer(const TensorVector& input, TensorVector& 
     _frameDecoder->to(torch::kFloat32);
 
     // Frame encode
-    torch::Tensor enc = std::get<0>(_frameEncoder->forward(in));
+    auto [enc, mask] = _frameEncoder->forward(in);
 
     // Frame decode
     auto out = _frameDecoder->forward(enc, _lossLevel);
@@ -556,6 +556,7 @@ void MultiLevelAutoEncoderModel::infer(const TensorVector& input, TensorVector& 
     out.img6 = tf::interpolate(out.img6, tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false));
 
+    auto inputDevice = input[0].device();
     output.clear();
     output.push_back((
         levelWeight0 * out.img0 +
@@ -566,7 +567,9 @@ void MultiLevelAutoEncoderModel::infer(const TensorVector& input, TensorVector& 
         levelWeight5 * out.img5 +
         levelWeight6 * out.img6 +
         levelWeight7 * out.img7)
-        .to(input[0].device()));
+        .to(inputDevice));
+    output.push_back(enc.to(inputDevice));
+    output.push_back(mask.to(inputDevice));
 }
 
 void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
@@ -798,7 +801,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 /* if (_useEncodingMaskLoss) */{
                     double _encodingMaskLossWeight = std::pow(0.25, _lossLevel);
                     encodingMaskLoss = _encodingMaskLossWeight *
-                        torch::mse_loss(encMask, -0.05f*torch::ones_like(encMask));
+                        torch::mse_loss(encMask, -0.1f*torch::ones_like(encMask));
                 }
                 encodingMaskLossAcc += encodingMaskLoss.item<double>();
 

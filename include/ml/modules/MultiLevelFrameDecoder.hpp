@@ -29,6 +29,14 @@ private:
     torch::nn::Linear           _linear1;
     torch::nn::BatchNorm1d      _bn1;
     torch::nn::PReLU            _pRelu1;
+    torch::nn::ConvTranspose2d  _convTranspose1a;
+    torch::nn::ConvTranspose2d  _convTranspose1b;
+    torch::nn::BatchNorm2d      _bn2a;
+    torch::nn::BatchNorm2d      _bn2b;
+    torch::nn::Conv2d           _convAux;
+    torch::nn::BatchNorm2d      _bnAux;
+    torch::nn::Conv2d           _conv_Y;
+    torch::nn::Conv2d           _conv_UV;
     MultiLevelDecoderModule     _decoder1;
     MultiLevelDecoderModule     _decoder2;
     MultiLevelDecoderModule     _decoder3;
@@ -36,7 +44,6 @@ private:
     MultiLevelDecoderModule     _decoder5;
     MultiLevelDecoderModule     _decoder6;
     MultiLevelDecoderModule     _decoder7;
-    MultiLevelDecoderModule     _decoder8;
 };
 TORCH_MODULE(MultiLevelFrameDecoder);
 

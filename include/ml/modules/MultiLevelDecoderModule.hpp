@@ -21,11 +21,9 @@ namespace ml {
     class MultiLevelDecoderModuleImpl : public torch::nn::Module {
     public:
         MultiLevelDecoderModuleImpl(
-            bool useConvTranspose,
             double level,
             int inputChannels,
-            int hiddenChannels1,
-            int hiddenChannels2,
+            int hiddenChannels,
             int outputChannels,
             int nGroups1,
             int nGroups2,
@@ -33,23 +31,18 @@ namespace ml {
             int groupChannels2,
             int outputWidth,
             int outputHeight,
-            const torch::ExpandingArray<2>& kernelSize,
-            const torch::ExpandingArray<2>& stride = {1,1},
-            const torch::indexing::Slice& vSlice = torch::indexing::Slice(),
-            const torch::indexing::Slice& hSlice = torch::indexing::Slice()
+            int xUpscale,
+            int yUpscale
         );
 
         // outputs tuple of main tensor, auxiliary image
         std::tuple<torch::Tensor, torch::Tensor> forward(torch::Tensor x, double level);
 
     private:
-        bool                        _useConvTranspose;
         double                      _level;
+        int                         _inputChannels;
         int                         _outputWidth;
         int                         _outputHeight;
-        torch::ExpandingArray<2>    _kernelSize;
-        torch::indexing::Slice      _vSlice;
-        torch::indexing::Slice      _hSlice;
         ResNeXtModule               _resNext1;
         ResNeXtModule               _resNext2;
         torch::nn::ConvTranspose2d  _convTranspose; // layers for the primary feedforward

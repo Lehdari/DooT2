@@ -41,8 +41,6 @@ private:
     torch::nn::PReLU            _pRelu2;
     torch::nn::BatchNorm1d      _bn2;
     torch::nn::BatchNorm2d      _bn3;
-    torch::nn::PReLU            _pRelu3;
-    torch::nn::PReLU            _pRelu4;
     torch::nn::Conv2d           _conv3;
     torch::nn::Conv2d           _conv4;
     torch::nn::Linear           _linear1;
