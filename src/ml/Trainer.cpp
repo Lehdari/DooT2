@@ -22,6 +22,7 @@
 using namespace ml;
 using namespace gvizdoom;
 namespace fs = std::filesystem;
+namespace tf = torch::nn::functional;
 
 
 Trainer::Trainer(
@@ -299,6 +300,10 @@ void Trainer::setupExperiment()
         if (!_trainingInfo.images.contains("evaluation_output"))
             *_trainingInfo.images["evaluation_output"].write() = Image<float>(
                 doot2::frameWidth, doot2::frameHeight, ImageFormat::YUV);
+        if (!_trainingInfo.images.contains("evaluation_encoding"))
+            *_trainingInfo.images["evaluation_encoding"].write() = Image<float>(64*8, 32*8, ImageFormat::GRAY);
+        if (!_trainingInfo.images.contains("evaluation_encoding_mask"))
+            *_trainingInfo.images["evaluation_encoding_mask"].write() = Image<float>(64*8, 32*8, ImageFormat::GRAY);
 
         // Add evaluation time series
         _trainingInfo.evaluationTimeSeries.write()->addSeries<double>("time", 0.0);
@@ -428,10 +433,27 @@ void Trainer::evaluateModel()
             inputs[0] = pixelDataIn.index({t, i, "..."}).unsqueeze(0).permute({0, 3, 1, 2});
             _model->infer(inputs, outputs);
 
+            // Images output
             _trainingInfo.images["evaluation_input"].write()->copyFrom(
                 inputs[0].permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
             _trainingInfo.images["evaluation_output"].write()->copyFrom(
                 outputs[0].permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
+            torch::Tensor encodingImage;
+            encodingImage = outputs[1].to(torch::kCPU, torch::kFloat32).reshape({32, 64})*0.01 + 0.5;
+            encodingImage = tf::interpolate(encodingImage.unsqueeze(0).unsqueeze(0),
+                tf::InterpolateFuncOptions()
+                    .size(std::vector<long>{32*8, 64*8})
+                    .mode(torch::kNearestExact).align_corners(false)
+            );
+            _trainingInfo.images["evaluation_encoding"].write()->copyFrom(encodingImage.contiguous().data_ptr<float>());
+            torch::Tensor encodingMaskImage;
+            encodingMaskImage = outputs[2].to(torch::kCPU, torch::kFloat32).reshape({32, 64})*0.5 + 0.5;
+            encodingMaskImage = tf::interpolate(encodingMaskImage.unsqueeze(0).unsqueeze(0),
+                tf::InterpolateFuncOptions()
+                    .size(std::vector<long>{32*8, 64*8})
+                    .mode(torch::kNearestExact).align_corners(false)
+            );
+            _trainingInfo.images["evaluation_encoding_mask"].write()->copyFrom(encodingMaskImage.contiguous().data_ptr<float>());
 
             // TODO introduce proper performance metric(s)
             auto loss = torch::mean(torch::abs(inputs[0]-outputs[0])).item<double>();
