@@ -1149,16 +1149,18 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
             // Apply gradients
             _optimizer->step();
-            _discriminatorOptimizer->step();
-            _encodingDiscriminatorOptimizer->step();
+            if (_useDiscriminator)
+                _discriminatorOptimizer->step();
+            if (_useEncodingDiscriminationLoss)
+                _encodingDiscriminatorOptimizer->step();
             _frameEncoder->zero_grad();
             _frameDecoder->zero_grad();
-            _discriminator->zero_grad();
-            _encodingDiscriminator->zero_grad();
-            _frameClassifier->zero_grad();
-
-            if (_abortTraining)
-                break;
+            if (_useDiscriminator) {
+                _discriminator->zero_grad();
+                _frameClassifier->zero_grad();
+            }
+            if (_useEncodingDiscriminationLoss)
+                _encodingDiscriminator->zero_grad();
         }
 
         lossAcc /= framesPerCycle;
