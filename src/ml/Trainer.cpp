@@ -439,7 +439,7 @@ void Trainer::evaluateModel()
             _trainingInfo.images["evaluation_output"].write()->copyFrom(
                 outputs[0].permute({0, 2, 3, 1}).contiguous().data_ptr<float>());
             torch::Tensor encodingImage;
-            encodingImage = outputs[1].to(torch::kCPU, torch::kFloat32).reshape({32, 64})*0.01 + 0.5;
+            encodingImage = outputs[1].to(torch::kCPU, torch::kFloat32).reshape({32, 64})*0.05 + 0.5;
             encodingImage = tf::interpolate(encodingImage.unsqueeze(0).unsqueeze(0),
                 tf::InterpolateFuncOptions()
                     .size(std::vector<long>{32*8, 64*8})
@@ -447,7 +447,7 @@ void Trainer::evaluateModel()
             );
             _trainingInfo.images["evaluation_encoding"].write()->copyFrom(encodingImage.contiguous().data_ptr<float>());
             torch::Tensor encodingMaskImage;
-            encodingMaskImage = outputs[2].to(torch::kCPU, torch::kFloat32).reshape({32, 64})*0.5 + 0.5;
+            encodingMaskImage = outputs[2].to(torch::kCPU, torch::kFloat32).reshape({32, 64});
             encodingMaskImage = tf::interpolate(encodingMaskImage.unsqueeze(0).unsqueeze(0),
                 tf::InterpolateFuncOptions()
                     .size(std::vector<long>{32*8, 64*8})

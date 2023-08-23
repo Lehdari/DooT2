@@ -52,13 +52,11 @@ torch::Tensor MultiLevelEncoderModuleImpl::forward(const Tensor& main, const Ten
 {
     constexpr double leakyReluNegativeSlope = 0.01;
 
-#if 0
-    torch::Tensor x;
+    torch::Tensor x, y;
+#if 1
     if (level > _level) {
         x = torch::leaky_relu(_bn1Main(_conv1Main(main)), leakyReluNegativeSlope);
-        torch::Tensor y = torch::leaky_relu(_bn1Aux(_conv1Aux(aux)), leakyReluNegativeSlope);
-        if (this->is_training() && _dropoutRate > 0.0)
-            y = tf::dropout(y, tf::DropoutFuncOptions().p(_dropoutRate));
+        y = torch::leaky_relu(_bn1Aux(_conv1Aux(aux)), leakyReluNegativeSlope);
         float w = (float)std::clamp(_level+1.0-level, 0.0, 1.0);
         x = w*y + (1.0f-w)*x;
     }
@@ -66,17 +64,18 @@ torch::Tensor MultiLevelEncoderModuleImpl::forward(const Tensor& main, const Ten
         x = torch::leaky_relu(_bn1Aux(_conv1Aux(aux)), leakyReluNegativeSlope);
     }
     else
-        x = torch::zeros({aux.sizes()[0], _outputChannels, aux.sizes()[2], aux.sizes()[3]});
+        x = torch::zeros({aux.sizes()[0], _outputChannels, aux.sizes()[2], aux.sizes()[3]},
+            torch::TensorOptions().device(main.device()).dtype(main.dtype()));
 #else
-    torch::Tensor x = torch::leaky_relu(_bn1Main(_conv1Main(main)), leakyReluNegativeSlope);
-    torch::Tensor y;
+    x = torch::leaky_relu(_bn1Main(_conv1Main(main)), leakyReluNegativeSlope);
     float w = (float)std::clamp(_level+1.0-level, 0.0, 1.0);
     if (w > 0.0) {
         y = torch::leaky_relu(_bn1Aux(_conv1Aux(aux)), leakyReluNegativeSlope);
         x = x + w*y;
     }
+#endif
     y = _conv3(torch::leaky_relu(_bn2(_conv2(x)), leakyReluNegativeSlope));
     x = torch::leaky_relu(_bn3(x + y), leakyReluNegativeSlope);
-#endif
+
     return x;
 }

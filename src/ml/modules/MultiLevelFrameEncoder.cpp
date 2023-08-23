@@ -83,16 +83,27 @@ std::tuple<torch::Tensor, torch::Tensor> MultiLevelFrameEncoderImpl::forward(con
     x = _encoder7(x, img.img0, img.level); // 5x5x1024
 
     // "skip" connection by 1x1 conv to 2048 channels and global avg pooling
-    torch::Tensor y1 = _conv3(x).mean({2,3}); // values
-    torch::Tensor y2 = _conv4(x).mean({2,3}); // mask
+    torch::Tensor y1 = _conv3(x).mean({2,3}); // values residual branch
+    torch::Tensor y2 = _conv4(x).mean({2,3}); // mask residual branch
 
     x = torch::leaky_relu(_bn1(_conv1(x)), leakyReluNegativeSlope); // 4x4x512
     x = _conv2(x); // 4x4x128
     x = torch::reshape(x, {-1, 2048}); // 2048
 
-    torch::Tensor z1 = _linear1(_pRelu1(_bn2(x))); // values
-    torch::Tensor z2 = _linear2(_pRelu2(x)); // mask
+    torch::Tensor z1 = _linear1(_pRelu1(_bn2(x))); // values main branch
+    torch::Tensor z2 = _linear2(_pRelu2(x)); // mask main branch
+    x = 0.5+0.5*torch::tanh(y2 + z2); // mask probabilities
 
-    x = torch::tanh(y2 + z2);
-    return { (y1 + z1)*(torch::where(x < 0.0f, torch::zeros_like(x), torch::ones_like(x)) + x - x.detach()), x };
+    torch::Tensor mask;
+    if (this->is_training()) {
+        // Treat mask
+        torch::Tensor s = torch::rand(x.sizes(), TensorOptions().device(x.device()).dtype(x.dtype()));
+        mask = torch::where(x < s, torch::zeros_like(x), torch::ones_like(x))
+            + x - x.detach(); // straight-through gradient
+    }
+    else {
+        mask = x;
+    }
+
+    return { (y1 + z1)*mask, x };
 }

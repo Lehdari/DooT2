@@ -833,11 +833,14 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
                 // Encoding mask loss
                 torch::Tensor encodingMaskLoss = zero;
+#if 1
                 /* if (_useEncodingMaskLoss) */{
                     double _encodingMaskLossWeight = std::pow(0.25, _lossLevel);
+                    torch::Tensor encMaskMean = encMask.mean(0);
                     encodingMaskLoss = _encodingMaskLossWeight *
-                        torch::mse_loss(encMask, -0.1f*torch::ones_like(encMask));
+                        torch::mse_loss(encMaskMean, 0.5f*torch::ones_like(encMaskMean));
                 }
+#endif
                 encodingMaskLossAcc += encodingMaskLoss.item<double>();
 
                 // stop gradient from flowing to the previous iteration
@@ -1033,7 +1036,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                         _trainingInfo->images["covariance_matrix"].write()->copyFrom(covarianceMatrixCPU.contiguous().data_ptr<float>());
 
                     torch::Tensor encodingImage;
-                    encodingImage = enc.index({displaySeqId}).to(torch::kCPU, torch::kFloat32).reshape({32, 64})*0.01 + 0.5;
+                    encodingImage = enc.index({displaySeqId}).to(torch::kCPU, torch::kFloat32).reshape({32, 64})*0.05 + 0.5;
                     encodingImage = tf::interpolate(encodingImage.unsqueeze(0).unsqueeze(0),
                         tf::InterpolateFuncOptions()
                             .size(std::vector<long>{32*8, 64*8})
@@ -1042,7 +1045,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     _trainingInfo->images["encoding"].write()->copyFrom(encodingImage.contiguous().data_ptr<float>());
 
                     torch::Tensor encodingMaskImage;
-                    encodingMaskImage = encMask.index({displaySeqId}).to(torch::kCPU, torch::kFloat32).reshape({32, 64})*0.5 + 0.5;
+                    encodingMaskImage = encMask.index({displaySeqId}).to(torch::kCPU, torch::kFloat32).reshape({32, 64});
                     encodingMaskImage = tf::interpolate(encodingMaskImage.unsqueeze(0).unsqueeze(0),
                         tf::InterpolateFuncOptions()
                             .size(std::vector<long>{32*8, 64*8})
@@ -1270,21 +1273,16 @@ MultiLevelImage MultiLevelAutoEncoderModel::scaleSequences(
         TensorOptions().device(_device).dtype(torch::kBFloat16));
 
     for (int t=0; t<sequenceLength; ++t) {
-//        if (_lossLevel > 4.0) // these limits are intentionally 1 less than elsewhere because lossLevel may increase during training
-            image.img6.index_put_({t}, tf::interpolate(image.img7.index({t}), tf::InterpolateFuncOptions()
-                .size(std::vector<long>{240, 320}).mode(kArea)));
-//        if (_lossLevel > 3.0)
-            image.img5.index_put_({t}, tf::interpolate(image.img6.index({t}), tf::InterpolateFuncOptions()
-                .size(std::vector<long>{120, 160}).mode(kArea)));
-//        if (_lossLevel > 2.0)
-            image.img4.index_put_({t}, tf::interpolate(image.img5.index({t}), tf::InterpolateFuncOptions()
-                .size(std::vector<long>{60, 80}).mode(kArea)));
-//        if (_lossLevel > 1.0)
-            image.img3.index_put_({t}, tf::interpolate(image.img4.index({t}), tf::InterpolateFuncOptions()
-                .size(std::vector<long>{30, 40}).mode(kArea)));
-//        if (_lossLevel > 0.0)
-            image.img2.index_put_({t}, tf::interpolate(image.img3.index({t}), tf::InterpolateFuncOptions()
-                .size(std::vector<long>{15, 20}).mode(kArea)));
+        image.img6.index_put_({t}, tf::interpolate(image.img7.index({t}), tf::InterpolateFuncOptions()
+            .size(std::vector<long>{240, 320}).mode(kArea)));
+        image.img5.index_put_({t}, tf::interpolate(image.img6.index({t}), tf::InterpolateFuncOptions()
+            .size(std::vector<long>{120, 160}).mode(kArea)));
+        image.img4.index_put_({t}, tf::interpolate(image.img5.index({t}), tf::InterpolateFuncOptions()
+            .size(std::vector<long>{60, 80}).mode(kArea)));
+        image.img3.index_put_({t}, tf::interpolate(image.img4.index({t}), tf::InterpolateFuncOptions()
+            .size(std::vector<long>{30, 40}).mode(kArea)));
+        image.img2.index_put_({t}, tf::interpolate(image.img3.index({t}), tf::InterpolateFuncOptions()
+            .size(std::vector<long>{15, 20}).mode(kArea)));
         image.img1.index_put_({t}, tf::interpolate(image.img2.index({t}), tf::InterpolateFuncOptions()
             .size(std::vector<long>{15, 10}).mode(kArea)));
         image.img0.index_put_({t}, tf::interpolate(image.img1.index({t}), tf::InterpolateFuncOptions()
