@@ -14,6 +14,7 @@
 
 #include "ml/MultiLevelImage.hpp"
 #include "ml/modules/MultiLevelDecoderModule.hpp"
+#include "ml/modules/ResNeXtModule.hpp"
 
 
 namespace ml {
@@ -29,10 +30,15 @@ private:
     torch::nn::Linear           _linear1;
     torch::nn::BatchNorm1d      _bn1;
     torch::nn::PReLU            _pRelu1;
+    torch::nn::Linear           _linear2;
     torch::nn::ConvTranspose2d  _convTranspose1a;
     torch::nn::ConvTranspose2d  _convTranspose1b;
     torch::nn::BatchNorm2d      _bn2a;
     torch::nn::BatchNorm2d      _bn2b;
+    torch::nn::Conv2d           _conv1;
+    torch::nn::BatchNorm2d      _bn3;
+    torch::nn::Conv2d           _conv2;
+    torch::nn::BatchNorm2d      _bn4;
     torch::nn::Conv2d           _convAux;
     torch::nn::BatchNorm2d      _bnAux;
     torch::nn::Conv2d           _conv_Y;
