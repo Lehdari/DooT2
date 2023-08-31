@@ -45,6 +45,9 @@ private:
     torch::nn::Conv2d           _conv4;
     torch::nn::Linear           _linear1;
     torch::nn::Linear           _linear2;
+    torch::nn::Linear           _linear3;
+    torch::nn::BatchNorm1d      _bn4;
+    torch::nn::Linear           _linear4;
 };
 TORCH_MODULE(MultiLevelFrameEncoder);
 

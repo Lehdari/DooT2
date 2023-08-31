@@ -33,7 +33,10 @@ MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl(int featureMultiplier) :
     _conv3      (nn::Conv2dOptions(256*featureMultiplier, 2048, {1, 1}).bias(false).groups(8)), // from decoder7 output to NxNx2048
     _conv4      (nn::Conv2dOptions(256*featureMultiplier, 2048, {1, 1}).groups(8)), // from decoder7 output to NxNx2048
     _linear1    (nn::LinearOptions(2048, 2048).bias(false)),
-    _linear2    (nn::LinearOptions(2048, 2048))
+    _linear2    (nn::LinearOptions(2048, 2048)),
+    _linear3    (nn::LinearOptions(2048, 1024).bias(false)),
+    _bn4        (nn::BatchNorm1dOptions(1024)),
+    _linear4    (nn::LinearOptions(1024, 2048).bias(false))
 {
     register_module("encoder1", _encoder1);
     register_module("encoder2", _encoder2);
@@ -53,6 +56,9 @@ MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl(int featureMultiplier) :
     register_module("conv4", _conv4);
     register_module("linear1", _linear1);
     register_module("linear2", _linear2);
+    register_module("linear3", _linear3);
+    register_module("bn4", _bn4);
+    register_module("linear4", _linear4);
 
     auto* w = _conv3->named_parameters(false).find("weight");
     if (w == nullptr) throw std::runtime_error("Unable to find layer weights");
@@ -92,18 +98,22 @@ std::tuple<torch::Tensor, torch::Tensor> MultiLevelFrameEncoderImpl::forward(con
 
     torch::Tensor z1 = _linear1(_pRelu1(_bn2(x))); // values main branch
     torch::Tensor z2 = _linear2(_pRelu2(x)); // mask main branch
-    x = 0.5+0.5*torch::tanh(y2 + z2); // mask probabilities
+    torch::Tensor maskProb = 0.5+0.5*torch::tanh(y2 + z2); // mask probabilities
 
     torch::Tensor mask;
     if (this->is_training()) {
-        // Treat mask
-        torch::Tensor s = torch::rand(x.sizes(), TensorOptions().device(x.device()).dtype(x.dtype()));
-        mask = torch::where(x < s, torch::zeros_like(x), torch::ones_like(x))
-            + x - x.detach(); // straight-through gradient
+        torch::Tensor s = torch::rand(maskProb.sizes(),
+            TensorOptions().device(maskProb.device()).dtype(maskProb.dtype()));
+        mask = torch::where(maskProb < s, torch::zeros_like(maskProb), torch::ones_like(maskProb))
+            + maskProb - maskProb.detach(); // straight-through gradient
     }
     else {
-        mask = x;
+        mask = maskProb; // deterministic during inference
     }
 
-    return { (y1 + z1)*mask, x };
+    // Final residual linear module on valuess
+    x = y1 + z1;
+    x = x + _linear4(torch::leaky_relu(_bn4(_linear3(x)), leakyReluNegativeSlope));
+
+    return { x*mask, maskProb };
 }
