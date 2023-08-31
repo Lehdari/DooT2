@@ -46,7 +46,8 @@ namespace ml {
         ResNeXtModule               _resNext1;
         ResNeXtModule               _resNext2;
         torch::nn::ConvTranspose2d  _convTranspose; // layers for the primary feedforward
-        torch::nn::BatchNorm2d      _bnMain;
+        torch::nn::BatchNorm2d      _bnMain1;
+        torch::nn::BatchNorm2d      _bnMain2;
         torch::nn::Conv2d           _convSkip;
         torch::nn::Conv2d           _convAux;
         torch::nn::BatchNorm2d      _bnAux;

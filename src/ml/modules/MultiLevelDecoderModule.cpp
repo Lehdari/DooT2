@@ -38,7 +38,8 @@ MultiLevelDecoderModuleImpl::MultiLevelDecoderModuleImpl(
     _resNext2           (hiddenChannels, outputChannels, nGroups2, groupChannels2),
     _convTranspose      (nn::ConvTranspose2dOptions(_inputChannels/2, _inputChannels/2, {xUpscale+2, yUpscale+2})
                          .stride({xUpscale, yUpscale}).bias(false)),
-    _bnMain             (nn::BatchNorm2dOptions(_inputChannels/2)),
+    _bnMain1            (nn::BatchNorm2dOptions(_inputChannels/2)),
+    _bnMain2            (nn::BatchNorm2dOptions(_inputChannels/2)),
     _convSkip           (nn::Conv2dOptions(_inputChannels, outputChannels, {1,1}).bias(false)),
     _convAux            (nn::Conv2dOptions(outputChannels, 16, {3, 3}).bias(false).padding(1)),
     _bnAux              (nn::BatchNorm2dOptions(16)),
@@ -48,7 +49,8 @@ MultiLevelDecoderModuleImpl::MultiLevelDecoderModuleImpl(
     register_module("resNext1", _resNext1);
     register_module("resNext2", _resNext2);
     register_module("convTranspose", _convTranspose);
-    register_module("bnMain", _bnMain);
+    register_module("bnMain1", _bnMain1);
+    register_module("bnMain2", _bnMain2);
     register_module("convSkip", _convSkip);
     register_module("convAux", _convAux);
     register_module("bnAux", _bnAux);
@@ -78,7 +80,7 @@ std::tuple<torch::Tensor, torch::Tensor> MultiLevelDecoderModuleImpl::forward(to
     torch::Tensor y;
     if (level > _level) {
         y = x.index({Slice(), Slice(0, _inputChannels/2), Slice(), Slice()});
-        y = torch::leaky_relu(_bnMain(_convTranspose(y)), leakyReluNegativeSlope);
+        y = torch::leaky_relu(_convTranspose(y), leakyReluNegativeSlope);
         y = y.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)});
 
         auto originalType = x.scalar_type();
@@ -88,7 +90,7 @@ std::tuple<torch::Tensor, torch::Tensor> MultiLevelDecoderModuleImpl::forward(to
             .mode(kBilinear)
             .align_corners(false)).to(originalType);
 
-        x = torch::cat({x, y}, 1);
+        x = torch::cat({_bnMain1(x), _bnMain2(y)}, 1);
         x = _convSkip(x) + _resNext2(_resNext1(x));
 
         // auxiliary image output
