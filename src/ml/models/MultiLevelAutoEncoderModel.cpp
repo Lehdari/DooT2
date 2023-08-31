@@ -1189,6 +1189,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         constexpr double controlP = 0.01;
         // use hyperbolic error metric (asymptotically larger adjustments when loss approaches 0)
         double error = 1.0 - (_targetReconstructionLoss / (reconstructionLossesAcc + 1.0e-8));
+        if (error > 0.0)
+            error *= 0.1;
         _lossLevel -= error*controlP; // P control should suffice
         _lossLevel = std::clamp(_lossLevel, 0.0, 7.0);
 
