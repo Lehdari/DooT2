@@ -41,6 +41,8 @@ set(DOOT2_ML_SOURCES
     src/ml/modules/MultiLevelEncoderModule.cpp
     src/ml/modules/MultiLevelFrameDecoder.cpp
     src/ml/modules/MultiLevelFrameEncoder.cpp
+    src/ml/modules/ResNetConvBlock.cpp
+    src/ml/modules/ResNetLinearBlock.cpp
     src/ml/modules/ResNeXtModule.cpp
 )
 set(DOOT2_UTIL_SOURCES

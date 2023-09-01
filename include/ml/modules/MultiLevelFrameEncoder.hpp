@@ -12,6 +12,8 @@
 
 #include "ml/MultiLevelImage.hpp"
 #include "ml/modules/MultiLevelEncoderModule.hpp"
+#include "ml/modules/ResNetConvBlock.hpp"
+#include "ml/modules/ResNetLinearBlock.hpp"
 
 #include <torch/torch.h>
 
@@ -27,6 +29,7 @@ public:
     std::tuple<torch::Tensor, torch::Tensor> forward(const MultiLevelImage& img);
 
 private:
+    // Layers
     MultiLevelEncoderModule     _encoder1;
     MultiLevelEncoderModule     _encoder2;
     MultiLevelEncoderModule     _encoder3;
@@ -34,20 +37,19 @@ private:
     MultiLevelEncoderModule     _encoder5;
     MultiLevelEncoderModule     _encoder6;
     MultiLevelEncoderModule     _encoder7;
-    torch::nn::Conv2d           _conv1;
     torch::nn::BatchNorm2d      _bn1;
-    torch::nn::Conv2d           _conv2;
     torch::nn::PReLU            _pRelu1;
-    torch::nn::PReLU            _pRelu2;
-    torch::nn::BatchNorm1d      _bn2;
-    torch::nn::BatchNorm2d      _bn3;
-    torch::nn::Conv2d           _conv3;
-    torch::nn::Conv2d           _conv4;
-    torch::nn::Linear           _linear1;
-    torch::nn::Linear           _linear2;
-    torch::nn::Linear           _linear3;
-    torch::nn::BatchNorm1d      _bn4;
-    torch::nn::Linear           _linear4;
+    torch::nn::Conv2d           _conv1;
+    ResNetConvBlock             _resBlock1;
+    ResNetLinearBlock           _resBlock2a;
+    ResNetLinearBlock           _resBlock2b;
+    torch::nn::BatchNorm1d      _bn2a;
+    torch::nn::BatchNorm1d      _bn2b;
+    torch::nn::Linear           _linear1a;
+    torch::nn::Linear           _linear1b;
+
+    // Parameters
+    torch::Tensor               _maskGradientScale;
 };
 TORCH_MODULE(MultiLevelFrameEncoder);
 

@@ -19,39 +19,23 @@ namespace tf = torch::nn::functional;
 MultiLevelDecoderModuleImpl::MultiLevelDecoderModuleImpl(
     double level,
     int inputChannels,
-    int hiddenChannels,
     int outputChannels,
-    int nGroups1,
-    int nGroups2,
-    int groupChannels1,
-    int groupChannels2,
-    int outputWidth,
-    int outputHeight,
     int xUpscale,
     int yUpscale
 ) :
-    _level              (level),
-    _inputChannels      (inputChannels),
-    _outputWidth        (outputWidth),
-    _outputHeight       (outputHeight),
-    _resNext1           (_inputChannels, hiddenChannels, nGroups1, groupChannels1),
-    _resNext2           (hiddenChannels, outputChannels, nGroups2, groupChannels2),
-    _convTranspose      (nn::ConvTranspose2dOptions(_inputChannels/2, _inputChannels/2, {xUpscale+2, yUpscale+2})
-                         .stride({xUpscale, yUpscale}).bias(false)),
-    _bnMain1            (nn::BatchNorm2dOptions(_inputChannels/2)),
-    _bnMain2            (nn::BatchNorm2dOptions(_inputChannels/2)),
-    _convSkip           (nn::Conv2dOptions(_inputChannels, outputChannels, {1,1}).bias(false)),
-    _convAux            (nn::Conv2dOptions(outputChannels, 16, {3, 3}).bias(false).padding(1)),
-    _bnAux              (nn::BatchNorm2dOptions(16)),
-    _conv_Y             (nn::Conv2dOptions(16, 1, {1, 1})),
-    _conv_UV            (nn::Conv2dOptions(16, 2, {1, 1}))
+    _level          (level),
+    _outputChannels (outputChannels),
+    _xUpScale       (xUpscale),
+    _yUpScale       (yUpscale),
+    _resBlock1      (inputChannels, inputChannels, outputChannels),
+    _resBlock2      (outputChannels, outputChannels, outputChannels),
+    _convAux        (nn::Conv2dOptions(outputChannels, 8, {1, 1}).bias(false)),
+    _bnAux          (nn::BatchNorm2dOptions(8)),
+    _conv_Y         (nn::Conv2dOptions(8, 1, {1, 1})),
+    _conv_UV        (nn::Conv2dOptions(8, 2, {1, 1}))
 {
-    register_module("resNext1", _resNext1);
-    register_module("resNext2", _resNext2);
-    register_module("convTranspose", _convTranspose);
-    register_module("bnMain1", _bnMain1);
-    register_module("bnMain2", _bnMain2);
-    register_module("convSkip", _convSkip);
+    register_module("resBlock1", _resBlock1);
+    register_module("resBlock2", _resBlock2);
     register_module("convAux", _convAux);
     register_module("bnAux", _bnAux);
     register_module("conv_Y", _conv_Y);
@@ -77,21 +61,18 @@ std::tuple<torch::Tensor, torch::Tensor> MultiLevelDecoderModuleImpl::forward(to
 
     constexpr double leakyReluNegativeSlope = 0.01;
 
+    int outputWidth = x.sizes()[3]*_xUpScale;
+    int outputHeight = x.sizes()[2]*_yUpScale;
+
     torch::Tensor y;
     if (level > _level) {
-        y = x.index({Slice(), Slice(0, _inputChannels/2), Slice(), Slice()});
-        y = torch::leaky_relu(_convTranspose(y), leakyReluNegativeSlope);
-        y = y.index({Slice(), Slice(), Slice(1, -1, None), Slice(1, -1, None)});
-
         auto originalType = x.scalar_type();
-        x = x.index({Slice(), Slice(_inputChannels/2, None), Slice(), Slice()});
         x = tf::interpolate(x.to(kFloat32), tf::InterpolateFuncOptions()
-            .size(std::vector<int64_t>{_outputHeight, _outputWidth})
+            .size(std::vector<int64_t>{outputHeight, outputWidth})
             .mode(kBilinear)
             .align_corners(false)).to(originalType);
 
-        x = torch::cat({_bnMain1(x), _bnMain2(y)}, 1);
-        x = _convSkip(x) + _resNext2(_resNext1(x));
+        x = _resBlock2(_resBlock1(x));
 
         // auxiliary image output
         y = torch::leaky_relu(_bnAux(_convAux(x)), leakyReluNegativeSlope);
@@ -99,8 +80,12 @@ std::tuple<torch::Tensor, torch::Tensor> MultiLevelDecoderModuleImpl::forward(to
         torch::Tensor y_UV = 0.51f * torch::tanh(_conv_UV(y));
         y = torch::cat({y_Y, y_UV}, 1);
     }
-    else
-        y = torch::zeros({x.sizes()[0], 3, _outputHeight, _outputWidth}, TensorOptions().device(x.device()));
+    else {
+        x = torch::zeros({x.sizes()[0], _outputChannels, outputHeight, outputWidth},
+            TensorOptions().device(x.device()));
+        y = torch::zeros({x.sizes()[0], 3, outputHeight, outputWidth},
+            TensorOptions().device(x.device()));
+    }
 
     return {x, y};
 }

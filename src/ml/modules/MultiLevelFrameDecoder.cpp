@@ -18,42 +18,32 @@ namespace tf = torch::nn::functional;
 
 
 MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
-    _linear1            (nn::LinearOptions(2048, 2048).bias(false)),
-    _bn1                (nn::BatchNorm1dOptions(2048)),
-    _pRelu1             (nn::PReLUOptions().num_parameters(2048).init(0.01)),
-    _linear2            (nn::LinearOptions(2048, 2048).bias(false)),
+    _resBlock1          (2048, 2048, 2048),
     _convTranspose1a    (nn::ConvTranspose2dOptions(128, 128, {2, 2})),
     _convTranspose1b    (nn::ConvTranspose2dOptions(2048, 128, {5, 5}).groups(8)),
-    _bn2a               (nn::BatchNorm2dOptions(128)),
-    _bn2b               (nn::BatchNorm2dOptions(128)),
-    _conv1              (nn::Conv2dOptions(256, 256, {1, 1}).bias(false)),
-    _bn3                (nn::BatchNorm2dOptions(256)),
-    _conv2              (nn::Conv2dOptions(256, 256, {1, 1}).bias(false)),
-    _bn4                (nn::BatchNorm2dOptions(256)),
-    _convAux            (nn::Conv2dOptions(256, 16, {3, 3}).bias(false).padding(1)),
-    _bnAux              (nn::BatchNorm2dOptions(16)),
-    _conv_Y             (nn::Conv2dOptions(16, 1, {1, 1})),
-    _conv_UV            (nn::Conv2dOptions(16, 2, {1, 1})),
-    _decoder1           (0.0, 256, 512, 512, 4, 8, -1, -1, 10, 15, 3, 2),
-    _decoder2           (1.0, 512, 512, 512, 8, 8, -1, -1, 20, 15, 1, 2),
-    _decoder3           (2.0, 512, 512, 256, 8, 4, -1, -1, 40, 30, 2, 2),
-    _decoder4           (3.0, 256, 256, 128, 4, 4, -1, -1, 80, 60, 2, 2),
-    _decoder5           (4.0, 128, 128, 64, 4, 2, -1, -1, 160, 120, 2, 2),
-    _decoder6           (5.0, 64, 64, 32, 2, 1, -1, -1, 320, 240, 2, 2),
-    _decoder7           (6.0, 32, 32, 32, 1, 1, -1, -1, 640, 480, 2, 2)
+    _bn1a               (nn::BatchNorm2dOptions(128)),
+    _bn1b               (nn::BatchNorm2dOptions(128)),
+    _resBlock2          (256, 512, 512),
+    _resBlock3          (512, 512, 512),
+    _convAux            (nn::Conv2dOptions(512, 8, {1, 1}).bias(false)),
+    _bnAux              (nn::BatchNorm2dOptions(8)),
+    _conv_Y             (nn::Conv2dOptions(8, 1, {1, 1})),
+    _conv_UV            (nn::Conv2dOptions(8, 2, {1, 1})),
+    _decoder1           (0.0, 512, 512, 2, 3),
+    _decoder2           (1.0, 512, 256, 2, 1),
+    _decoder3           (2.0, 256, 128, 2, 2),
+    _decoder4           (3.0, 128, 64, 2, 2),
+    _decoder5           (4.0, 64, 32, 2, 2),
+    _decoder6           (5.0, 32, 16, 2, 2),
+    _decoder7           (6.0, 16, 8, 2, 2)
 {
-    register_module("linear1", _linear1);
-    register_module("bn1", _bn1);
-    register_module("pRelu1", _pRelu1);
-    register_module("linear2", _linear2);
+    register_module("resBlock1", _resBlock1);
     register_module("convTranspose1a", _convTranspose1a);
     register_module("convTranspose1b", _convTranspose1b);
-    register_module("bn2a", _bn2a);
-    register_module("bn2b", _bn2b);
-    register_module("conv1", _conv1);
-    register_module("bn3", _bn3);
-    register_module("conv2", _conv2);
-    register_module("bn4", _bn4);
+    register_module("bn1a", _bn1a);
+    register_module("bn1b", _bn1b);
+    register_module("resBlock2", _resBlock2);
+    register_module("resBlock3", _resBlock3);
     register_module("convAux", _convAux);
     register_module("bnAux", _bnAux);
     register_module("conv_Y", _conv_Y);
@@ -99,17 +89,17 @@ MultiLevelImage MultiLevelFrameDecoderImpl::forward(torch::Tensor x, double leve
 #endif
     // Decoder
     // Linear residual module
-    x = x + _linear2(_bn1(_pRelu1(_linear1(x))));
+    x = _resBlock1(x);
 
     // 2-way deconv into 5x5x256
     torch::Tensor y = torch::reshape(x, {batchSize, 128, 4, 4});
-    y = _bn2a(_convTranspose1a(y));
+    y = _bn1a(_convTranspose1a(y));
     x = torch::reshape(x, {batchSize, 2048, 1, 1});
-    x = _bn2b(_convTranspose1b(x));
+    x = _bn1b(_convTranspose1b(x));
     x = torch::leaky_relu(torch::cat({x, y}, 1), leakyReluNegativeSlope);
 
-    // Residual 1x1 conv residual module
-    x = _bn4(x + _conv2(torch::leaky_relu(_bn3(_conv1(x)), leakyReluNegativeSlope)));
+    // Residual conv blocks
+    x = _resBlock3(_resBlock2(x));
 
     MultiLevelImage img;
     img.level = level;

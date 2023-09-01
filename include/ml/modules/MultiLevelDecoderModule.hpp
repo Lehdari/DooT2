@@ -11,7 +11,7 @@
 #pragma once
 
 #include "ml/MultiLevelImage.hpp"
-#include "ml/modules/ResNeXtModule.hpp"
+#include "ml/modules/ResNetConvBlock.hpp"
 
 #include <torch/torch.h>
 
@@ -23,14 +23,7 @@ namespace ml {
         MultiLevelDecoderModuleImpl(
             double level,
             int inputChannels,
-            int hiddenChannels,
             int outputChannels,
-            int nGroups1,
-            int nGroups2,
-            int groupChannels1,
-            int groupChannels2,
-            int outputWidth,
-            int outputHeight,
             int xUpscale,
             int yUpscale
         );
@@ -39,20 +32,16 @@ namespace ml {
         std::tuple<torch::Tensor, torch::Tensor> forward(torch::Tensor x, double level);
 
     private:
-        double                      _level;
-        int                         _inputChannels;
-        int                         _outputWidth;
-        int                         _outputHeight;
-        ResNeXtModule               _resNext1;
-        ResNeXtModule               _resNext2;
-        torch::nn::ConvTranspose2d  _convTranspose; // layers for the primary feedforward
-        torch::nn::BatchNorm2d      _bnMain1;
-        torch::nn::BatchNorm2d      _bnMain2;
-        torch::nn::Conv2d           _convSkip;
-        torch::nn::Conv2d           _convAux;
-        torch::nn::BatchNorm2d      _bnAux;
-        torch::nn::Conv2d           _conv_Y;
-        torch::nn::Conv2d           _conv_UV;
+        double                  _level;
+        int                     _outputChannels;
+        int                     _xUpScale;
+        int                     _yUpScale;
+        ResNetConvBlock         _resBlock1;
+        ResNetConvBlock         _resBlock2;
+        torch::nn::Conv2d       _convAux;
+        torch::nn::BatchNorm2d  _bnAux;
+        torch::nn::Conv2d       _conv_Y;
+        torch::nn::Conv2d       _conv_UV;
     };
     TORCH_MODULE(MultiLevelDecoderModule);
 
