@@ -55,7 +55,8 @@ MultiLevelDecoderModuleImpl::MultiLevelDecoderModuleImpl(
     torch::nn::init::zeros_(*w);
 }
 
-std::tuple<torch::Tensor, torch::Tensor> MultiLevelDecoderModuleImpl::forward(torch::Tensor x, double level)
+std::tuple<torch::Tensor, torch::Tensor> MultiLevelDecoderModuleImpl::forward(
+    torch::Tensor x, double level, const torch::Tensor* imgPrev)
 {
     using namespace torch::indexing;
 
@@ -70,15 +71,27 @@ std::tuple<torch::Tensor, torch::Tensor> MultiLevelDecoderModuleImpl::forward(to
         x = tf::interpolate(x.to(kFloat32), tf::InterpolateFuncOptions()
             .size(std::vector<int64_t>{outputHeight, outputWidth})
             .mode(kBilinear)
-            .align_corners(false)).to(originalType);
+            .align_corners(false))
+            .to(originalType);
 
         x = _resBlock2(_resBlock1(x));
 
         // auxiliary image output
         y = torch::leaky_relu(_bnAux(_convAux(x)), leakyReluNegativeSlope);
-        torch::Tensor y_Y = 0.5f + 0.51f * torch::tanh(_conv_Y(y));
+        torch::Tensor y_Y = (imgPrev == nullptr ? 0.5f : 0.0f) + // don't add luminosity bias if image from previous layer is provided
+            0.51f * torch::tanh(_conv_Y(y));
         torch::Tensor y_UV = 0.51f * torch::tanh(_conv_UV(y));
         y = torch::cat({y_Y, y_UV}, 1);
+
+        // add to the previous image in case one is provided
+        if (imgPrev != nullptr) {
+            auto originalImgType = imgPrev->scalar_type();
+            y = y + tf::interpolate(imgPrev->to(kFloat32), tf::InterpolateFuncOptions()
+                .size(std::vector<int64_t>{outputHeight, outputWidth})
+                .mode(kBilinear)
+                .align_corners(false))
+                .to(originalImgType);
+        }
     }
     else {
         x = torch::zeros({x.sizes()[0], _outputChannels, outputHeight, outputWidth},

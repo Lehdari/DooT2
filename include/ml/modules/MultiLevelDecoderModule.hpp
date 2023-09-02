@@ -29,7 +29,11 @@ namespace ml {
         );
 
         // outputs tuple of main tensor, auxiliary image
-        std::tuple<torch::Tensor, torch::Tensor> forward(torch::Tensor x, double level);
+        std::tuple<torch::Tensor, torch::Tensor> forward(
+            torch::Tensor x,
+            double level,
+            const torch::Tensor* imgPrev = nullptr
+        );
 
     private:
         double                  _level;

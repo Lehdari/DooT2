@@ -111,13 +111,13 @@ MultiLevelImage MultiLevelFrameDecoderImpl::forward(torch::Tensor x, double leve
     img.img0 = torch::cat({y_Y, y_UV}, 1);
 
     // Rest of the decoder layers
-    std::tie(x, img.img1) = _decoder1(x, level); // 10x15
-    std::tie(x, img.img2) = _decoder2(x, level); // 20x15
-    std::tie(x, img.img3) = _decoder3(x, level); // 40x30
-    std::tie(x, img.img4) = _decoder4(x, level); // 80x60
-    std::tie(x, img.img5) = _decoder5(x, level); // 160x120
-    std::tie(x, img.img6) = _decoder6(x, level); // 320x240
-    std::tie(x, img.img7) = _decoder7(x, level); // 640x480
+    std::tie(x, img.img1) = _decoder1(x, level, &img.img0); // 10x15
+    std::tie(x, img.img2) = _decoder2(x, level, &img.img1); // 20x15
+    std::tie(x, img.img3) = _decoder3(x, level, &img.img2); // 40x30
+    std::tie(x, img.img4) = _decoder4(x, level, &img.img3); // 80x60
+    std::tie(x, img.img5) = _decoder5(x, level, &img.img4); // 160x120
+    std::tie(x, img.img6) = _decoder6(x, level, &img.img5); // 320x240
+    std::tie(x, img.img7) = _decoder7(x, level, &img.img6); // 640x480
 
     return img;
 }
