@@ -78,7 +78,7 @@ std::tuple<torch::Tensor, torch::Tensor> MultiLevelFrameEncoderImpl::forward(con
     x = _encoder7(x, img.img0, img.level); // 5x5
 
     x = _resBlock1(_conv1(_pRelu1(_bn1(x))));
-    x = torch::reshape(x, {-1, 2048}); // 2048
+    x = torch::reshape(x, {x.sizes()[0], x.sizes()[1]*x.sizes()[2]*x.sizes()[3]}); // 2048
 
     // mask probabilities
     torch::Tensor maskProb = 0.5+0.5*torch::tanh(_linear1b(_bn2b(_resBlock2b(x))));
