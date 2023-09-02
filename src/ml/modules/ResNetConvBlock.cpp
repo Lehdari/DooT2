@@ -15,7 +15,13 @@ using namespace ml;
 using namespace torch;
 
 
-ResNetConvBlockImpl::ResNetConvBlockImpl(int inputChannels, int hiddenChannels, int outputChannels, double reluAlpha) :
+ResNetConvBlockImpl::ResNetConvBlockImpl(
+    int inputChannels,
+    int hiddenChannels,
+    int outputChannels,
+    double reluAlpha,
+    double normalInitializationStd
+) :
     _reluAlpha  (reluAlpha),
     _skipLayer  (inputChannels != outputChannels),
     _bn1        (nn::BatchNorm2dOptions(inputChannels)),
@@ -30,6 +36,12 @@ ResNetConvBlockImpl::ResNetConvBlockImpl(int inputChannels, int hiddenChannels, 
     register_module("conv2", _conv2);
     if (_skipLayer)
         register_module("convSkip", _convSkip);
+
+    if (normalInitializationStd > 0.0) {
+        auto* w = _conv2->named_parameters(false).find("weight");
+        if (w == nullptr) throw std::runtime_error("Unable to find layer weights");
+        torch::nn::init::normal_(*w, 0.0, normalInitializationStd);
+    }
 }
 
 torch::Tensor ResNetConvBlockImpl::forward(torch::Tensor x)

@@ -15,7 +15,13 @@ using namespace ml;
 using namespace torch;
 
 
-ResNetLinearBlockImpl::ResNetLinearBlockImpl(int inputChannels, int hiddenChannels, int outputChannels, double reluAlpha) :
+ResNetLinearBlockImpl::ResNetLinearBlockImpl(
+    int inputChannels,
+    int hiddenChannels,
+    int outputChannels,
+    double reluAlpha,
+    double normalInitializationStd
+) :
     _reluAlpha  (reluAlpha),
     _skipLayer  (inputChannels != outputChannels),
     _bn1        (nn::BatchNorm1dOptions(inputChannels)),
@@ -30,6 +36,12 @@ ResNetLinearBlockImpl::ResNetLinearBlockImpl(int inputChannels, int hiddenChanne
     register_module("linear2", _linear2);
     if (_skipLayer)
         register_module("linearSkip", _linearSkip);
+
+    if (normalInitializationStd > 0.0) {
+        auto* w = _linear2->named_parameters(false).find("weight");
+        if (w == nullptr) throw std::runtime_error("Unable to find layer weights");
+        torch::nn::init::normal_(*w, 0.0, normalInitializationStd);
+    }
 }
 
 torch::Tensor ResNetLinearBlockImpl::forward(torch::Tensor x)

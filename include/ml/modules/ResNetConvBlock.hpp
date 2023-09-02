@@ -17,7 +17,13 @@ namespace ml {
 
 class ResNetConvBlockImpl : public torch::nn::Module {
 public:
-    explicit ResNetConvBlockImpl(int inputChannels, int hiddenChannels, int outputChannels, double reluAlpha=0.01);
+    explicit ResNetConvBlockImpl(
+        int inputChannels,
+        int hiddenChannels,
+        int outputChannels,
+        double reluAlpha=0.01,
+        double normalInitializationStd=0.0
+    );
 
     torch::Tensor forward(torch::Tensor x);
 

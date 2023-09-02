@@ -17,7 +17,13 @@ namespace ml {
 
 class ResNetLinearBlockImpl : public torch::nn::Module {
 public:
-    explicit ResNetLinearBlockImpl(int inputChannels, int hiddenChannels, int outputChannels, double reluAlpha=0.01);
+    explicit ResNetLinearBlockImpl(
+        int inputChannels,
+        int hiddenChannels,
+        int outputChannels,
+        double reluAlpha=0.01,
+        double normalInitializationStd=0.0 // if 0, default (xavier?) initialization is used instead for linear2
+    );
 
     torch::Tensor forward(torch::Tensor x);
 
