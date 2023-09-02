@@ -19,10 +19,12 @@ namespace tf = torch::nn::functional;
 
 MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
     _resBlock1          (2048, 2048, 2048, 0.01, 0.001),
+    _bn1                (nn::BatchNorm1dOptions(2048)),
+    _pRelu1             (nn::PReLUOptions().num_parameters(2048).init(0.01)),
     _convTranspose1a    (nn::ConvTranspose2dOptions(128, 128, {2, 2})),
     _convTranspose1b    (nn::ConvTranspose2dOptions(2048, 128, {5, 5}).groups(8)),
-    _bn1a               (nn::BatchNorm2dOptions(128)),
-    _bn1b               (nn::BatchNorm2dOptions(128)),
+    _bn2a               (nn::BatchNorm2dOptions(128)),
+    _bn2b               (nn::BatchNorm2dOptions(128)),
     _resBlock2          (256, 512, 512, 0.01, 0.001),
     _resBlock3          (512, 512, 512, 0.01, 0.001),
     _convAux            (nn::Conv2dOptions(512, 8, {1, 1}).bias(false)),
@@ -38,10 +40,12 @@ MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
     _decoder7           (6.0, 16, 8, 2, 2)
 {
     register_module("resBlock1", _resBlock1);
+    register_module("bn1", _bn1);
+    register_module("pRelu1", _pRelu1);
     register_module("convTranspose1a", _convTranspose1a);
     register_module("convTranspose1b", _convTranspose1b);
-    register_module("bn1a", _bn1a);
-    register_module("bn1b", _bn1b);
+    register_module("bn2a", _bn2a);
+    register_module("bn2b", _bn2b);
     register_module("resBlock2", _resBlock2);
     register_module("resBlock3", _resBlock3);
     register_module("convAux", _convAux);
@@ -89,13 +93,13 @@ MultiLevelImage MultiLevelFrameDecoderImpl::forward(torch::Tensor x, double leve
 #endif
     // Decoder
     // Linear residual module
-    x = _resBlock1(x);
+    x = _pRelu1(_bn1(_resBlock1(x)));
 
     // 2-way deconv into 5x5x256
     torch::Tensor y = torch::reshape(x, {batchSize, 128, 4, 4});
-    y = _bn1a(_convTranspose1a(y));
+    y = _bn2a(_convTranspose1a(y));
     x = torch::reshape(x, {batchSize, 2048, 1, 1});
-    x = _bn1b(_convTranspose1b(x));
+    x = _bn2b(_convTranspose1b(x));
     x = torch::leaky_relu(torch::cat({x, y}, 1), leakyReluNegativeSlope);
 
     // Residual conv blocks

@@ -29,10 +29,12 @@ public:
 
 private:
     ResNetLinearBlock           _resBlock1;
+    torch::nn::BatchNorm1d      _bn1;
+    torch::nn::PReLU            _pRelu1;
     torch::nn::ConvTranspose2d  _convTranspose1a;
     torch::nn::ConvTranspose2d  _convTranspose1b;
-    torch::nn::BatchNorm2d      _bn1a;
-    torch::nn::BatchNorm2d      _bn1b;
+    torch::nn::BatchNorm2d      _bn2a;
+    torch::nn::BatchNorm2d      _bn2b;
     ResNetConvBlock             _resBlock2;
     ResNetConvBlock             _resBlock3;
     torch::nn::Conv2d           _convAux;
