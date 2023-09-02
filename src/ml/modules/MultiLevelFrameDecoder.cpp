@@ -18,13 +18,13 @@ namespace tf = torch::nn::functional;
 
 
 MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
-    _resBlock1          (2048, 2048, 2048),
+    _resBlock1          (2048, 2048, 2048, 0.01, 0.001),
     _convTranspose1a    (nn::ConvTranspose2dOptions(128, 128, {2, 2})),
     _convTranspose1b    (nn::ConvTranspose2dOptions(2048, 128, {5, 5}).groups(8)),
     _bn1a               (nn::BatchNorm2dOptions(128)),
     _bn1b               (nn::BatchNorm2dOptions(128)),
-    _resBlock2          (256, 512, 512),
-    _resBlock3          (512, 512, 512),
+    _resBlock2          (256, 512, 512, 0.01, 0.001),
+    _resBlock3          (512, 512, 512, 0.01, 0.001),
     _convAux            (nn::Conv2dOptions(512, 8, {1, 1}).bias(false)),
     _bnAux              (nn::BatchNorm2dOptions(8)),
     _conv_Y             (nn::Conv2dOptions(8, 1, {1, 1})),
