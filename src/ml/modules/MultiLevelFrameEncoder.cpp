@@ -16,17 +16,17 @@ using namespace torch;
 
 
 MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl(int featureMultiplier) :
-    _encoder1   (5.5, 3, 8, 2, 2), // 320x240
-    _encoder2   (4.5, 8, 16, 2, 2), // 160x120
-    _encoder3   (3.5, 16, 32, 2, 2), // 80x60
-    _encoder4   (2.5, 32, 64, 2, 2), // 40x30
-    _encoder5   (1.5, 64, 128, 2, 2), // 20x15
-    _encoder6   (0.5, 128, 256, 2, 1), // 10x15
-    _encoder7   (-0.5, 256, 512, 2, 3), // 5x5
+    _encoder1   (5.5, 3, 8, 2, 2, 1), // 320x240
+    _encoder2   (4.5, 8, 16, 2, 2, 1), // 160x120
+    _encoder3   (3.5, 16, 32, 2, 2, 1), // 80x60
+    _encoder4   (2.5, 32, 64, 2, 2, 1), // 40x30
+    _encoder5   (1.5, 64, 128, 2, 2, 1), // 20x15
+    _encoder6   (0.5, 128, 256, 2, 1, 2), // 10x15
+    _encoder7   (-0.5, 256, 512, 2, 3, 4), // 5x5
     _bn1        (nn::BatchNorm2dOptions(512)),
     _pRelu1     (nn::PReLUOptions().num_parameters(512).init(0.01)),
     _conv1      (nn::Conv2dOptions(512, 512, {2, 2}).bias(false).groups(4)),
-    _resBlock1  (512, 256, 128, 0.01, 0.001),
+    _resBlock1  (512, 256, 128, 4, 2, 0.01, 0.001),
     _resBlock2a (2048, 2048, 2048, 0.01, 0.001),
     _resBlock2b (2048, 2048, 2048, 0.01, 0.001),
     _bn2a       (nn::BatchNorm1dOptions(2048)),

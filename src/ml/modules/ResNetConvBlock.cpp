@@ -19,15 +19,17 @@ ResNetConvBlockImpl::ResNetConvBlockImpl(
     int inputChannels,
     int hiddenChannels,
     int outputChannels,
+    int groups1,
+    int groups2,
     double reluAlpha,
     double normalInitializationStd
 ) :
     _reluAlpha  (reluAlpha),
     _skipLayer  (inputChannels != outputChannels),
     _bn1        (nn::BatchNorm2dOptions(inputChannels)),
-    _conv1      (nn::Conv2dOptions(inputChannels, hiddenChannels, {3, 3}).bias(false).padding(1)),
+    _conv1      (nn::Conv2dOptions(inputChannels, hiddenChannels, {3, 3}).bias(false).padding(1).groups(groups1)),
     _bn2        (nn::BatchNorm2dOptions(hiddenChannels)),
-    _conv2      (nn::Conv2dOptions(hiddenChannels, outputChannels, {3, 3}).bias(false).padding(1)),
+    _conv2      (nn::Conv2dOptions(hiddenChannels, outputChannels, {3, 3}).bias(false).padding(1).groups(groups2)),
     _convSkip   (nn::Conv2dOptions(inputChannels, outputChannels, {1, 1}).bias(false))
 {
     register_module("bn1", _bn1);

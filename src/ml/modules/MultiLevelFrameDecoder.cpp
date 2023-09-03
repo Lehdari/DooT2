@@ -25,19 +25,19 @@ MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
     _convTranspose1b    (nn::ConvTranspose2dOptions(2048, 128, {5, 5}).groups(8)),
     _bn2a               (nn::BatchNorm2dOptions(128)),
     _bn2b               (nn::BatchNorm2dOptions(128)),
-    _resBlock2          (256, 512, 512, 0.01, 0.001),
-    _resBlock3          (512, 512, 512, 0.01, 0.001),
+    _resBlock2          (256, 512, 512, 4, 4, 0.01, 0.001),
+    _resBlock3          (512, 512, 512, 4, 4, 0.01, 0.001),
     _convAux            (nn::Conv2dOptions(512, 8, {1, 1}).bias(false)),
     _bnAux              (nn::BatchNorm2dOptions(8)),
     _conv_Y             (nn::Conv2dOptions(8, 1, {1, 1})),
     _conv_UV            (nn::Conv2dOptions(8, 2, {1, 1})),
-    _decoder1           (0.0, 512, 512, 2, 3),
-    _decoder2           (1.0, 512, 256, 2, 1),
-    _decoder3           (2.0, 256, 128, 2, 2),
-    _decoder4           (3.0, 128, 64, 2, 2),
-    _decoder5           (4.0, 64, 32, 2, 2),
-    _decoder6           (5.0, 32, 16, 2, 2),
-    _decoder7           (6.0, 16, 8, 2, 2)
+    _decoder1           (0.0, 512, 512, 2, 3, 4),
+    _decoder2           (1.0, 512, 256, 2, 1, 4),
+    _decoder3           (2.0, 256, 128, 2, 2, 2),
+    _decoder4           (3.0, 128, 64, 2, 2, 1),
+    _decoder5           (4.0, 64, 32, 2, 2, 1),
+    _decoder6           (5.0, 32, 16, 2, 2, 1),
+    _decoder7           (6.0, 16, 8, 2, 2, 1)
 {
     register_module("resBlock1", _resBlock1);
     register_module("bn1", _bn1);

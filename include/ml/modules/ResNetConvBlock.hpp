@@ -21,6 +21,8 @@ public:
         int inputChannels,
         int hiddenChannels,
         int outputChannels,
+        int groups1 = 1,
+        int groups2 = 1,
         double reluAlpha=0.01,
         double normalInitializationStd=0.0
     );
