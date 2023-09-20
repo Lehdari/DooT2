@@ -211,3 +211,6 @@ INLINE torch::Tensor standardNormalDistribution(const torch::Tensor& x)
     constexpr double sqrt2Pi = constexprSqrt(2.0*M_PI);
     return (1.0/sqrt2Pi) * torch::exp(-0.5*x.square());
 }
+
+// Positional embedding for vision transformers
+torch::Tensor positionalEmbedding2D(int h, int w, int dim, double temperature = 10000.0);

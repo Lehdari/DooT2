@@ -31,6 +31,8 @@ set(DOOT2_ML_SOURCES
     src/ml/models/EncoderModel.cpp
     src/ml/models/MultiLevelAutoEncoderModel.cpp
     src/ml/models/RandomWalkerModel.cpp
+    src/ml/modules/Attention.cpp
+    src/ml/modules/Attention2D.cpp
     src/ml/modules/Discriminator.cpp
     src/ml/modules/EncodingDiscriminator.cpp
     src/ml/modules/FlowDecoder.cpp
@@ -44,10 +46,13 @@ set(DOOT2_ML_SOURCES
     src/ml/modules/ResNetConvBlock.cpp
     src/ml/modules/ResNetLinearBlock.cpp
     src/ml/modules/ResNeXtModule.cpp
+    src/ml/modules/TransformerBlock.cpp
+    src/ml/modules/ViTBlock.cpp
 )
 set(DOOT2_UTIL_SOURCES
     src/util/ExperimentUtils.cpp
     src/util/SequenceStorage.cpp
+    src/util/TensorUtils.cpp
     src/util/TimeSeries.cpp
 )
 set(DOOT2_SOURCES
