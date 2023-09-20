@@ -7,22 +7,34 @@ Bot for Doom, now with C++, blackjack and hookers!
 
 Setup
 -----
+Tested with CMake 3.25.1, gcc, g++ 10.3.0 and 11.3.0
 
-- Download submodules:
+1) Install dependencies (Ubuntu Linux 22.04):
 ```
-git submodule update --init --recursive
+$ sudo apt install libsdl2-dev libeigen3-dev libopencv-dev
 ```
 
-- Install [libtorch](https://github.com/pytorch/pytorch)
-  - Either build from source or install from [here](https://pytorch.org/get-started/locally/)
-  - Build from source:
-    - Install its dependencies
-    - Tested with CMake 3.25.1, gcc, g++ 10.3.0 and 11.3.0
-    - Run `setup.py` in the repo
-    - Run `tools/build_libtorch.py`
-  - Use prebuilt packages:
-    - Choose LibTorch as Package
-    - C++ as Language
-    - Choose Compute platform accordingly
-    - Download the zip, unzip to where ever you want
-  - Regardless of your installation style use `-D LIBTORCH_DIR` to set the directory where you built/installed libtorch
+2) Clone the repository, checkout the `develop` branch for the latest changes:
+```
+$ git clone git@github.com:Lehdari/DooT2.git
+$ cd DooT2/
+$ git checkout develop
+```
+
+3) Clone the submodules:
+```
+$ git submodule update --init --recursive
+```
+
+4) Build (note that PyTorch will be built when invoking CMake):
+```
+$ mkdir build
+$ cd build
+$ cmake .. -DCMAKE_BUILD_TYPE=Release -GNinja
+$ ninja -j0 doot2
+```
+
+5) Run
+```
+$ ./doot2
+```
