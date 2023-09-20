@@ -38,11 +38,12 @@ private:
     MultiLevelEncoderModule     _encoder6;
     MultiLevelEncoderModule     _encoder7;
     torch::nn::BatchNorm2d      _bn1;
-    torch::nn::PReLU            _pRelu1;
     torch::nn::Conv2d           _conv1;
     ResNetConvBlock             _resBlock1;
-    ResNetLinearBlock           _resBlock2a;
-    ResNetLinearBlock           _resBlock2b;
+    ResNetConvBlock             _resBlock2;
+    ResNetLinearBlock           _resBlock3a;
+    ResNetLinearBlock           _resBlock3b;
+    ResNetLinearBlock           _resBlock4;
     torch::nn::BatchNorm1d      _bn2a;
     torch::nn::BatchNorm1d      _bn2b;
     torch::nn::Linear           _linear1a;

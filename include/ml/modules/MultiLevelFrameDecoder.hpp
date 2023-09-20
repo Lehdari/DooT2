@@ -30,7 +30,6 @@ public:
 private:
     ResNetLinearBlock           _resBlock1;
     torch::nn::BatchNorm1d      _bn1;
-    torch::nn::PReLU            _pRelu1;
     torch::nn::ConvTranspose2d  _convTranspose1a;
     torch::nn::ConvTranspose2d  _convTranspose1b;
     torch::nn::BatchNorm2d      _bn2a;
@@ -41,6 +40,7 @@ private:
     torch::nn::BatchNorm2d      _bnAux;
     torch::nn::Conv2d           _conv_Y;
     torch::nn::Conv2d           _conv_UV;
+    ResNetConvBlock             _resBlock4;
     MultiLevelDecoderModule     _decoder1;
     MultiLevelDecoderModule     _decoder2;
     MultiLevelDecoderModule     _decoder3;

@@ -21,14 +21,12 @@ public:
         int inputChannels,
         int hiddenChannels,
         int outputChannels,
-        double reluAlpha=0.01,
         double normalInitializationStd=0.0 // if 0, default (xavier?) initialization is used instead for linear2
     );
 
     torch::Tensor forward(torch::Tensor x);
 
 private:
-    double                      _reluAlpha;
     bool                        _skipLayer;
 
     torch::nn::BatchNorm1d      _bn1;

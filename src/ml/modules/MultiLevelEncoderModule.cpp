@@ -22,7 +22,8 @@ MultiLevelEncoderModuleImpl::MultiLevelEncoderModuleImpl(
     int outputChannels,
     int xDownScale,
     int yDownScale,
-    int resBlockGroups
+    int resBlockGroups,
+    int resBlockScaling
 ) :
     _level          (level),
     _outputChannels (outputChannels),
@@ -31,8 +32,8 @@ MultiLevelEncoderModuleImpl::MultiLevelEncoderModuleImpl(
     _bn1Main        (nn::BatchNorm2dOptions(_outputChannels)),
     _conv1Aux       (nn::Conv2dOptions(3, _outputChannels, {1, 1}).bias(false)),
     _bn1Aux         (nn::BatchNorm2dOptions(_outputChannels)),
-    _resBlock1      (_outputChannels, _outputChannels, _outputChannels, resBlockGroups, resBlockGroups, 0.01, 0.001),
-    _resBlock2      (_outputChannels, _outputChannels, _outputChannels, resBlockGroups, resBlockGroups, 0.01, 0.001)
+    _resBlock1      (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, resBlockGroups, 0.001),
+    _resBlock2      (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, resBlockGroups, 0.001)
 {
     register_module("conv1Main", _conv1Main);
     register_module("bn1Main", _bn1Main);
@@ -44,18 +45,16 @@ MultiLevelEncoderModuleImpl::MultiLevelEncoderModuleImpl(
 
 torch::Tensor MultiLevelEncoderModuleImpl::forward(const Tensor& main, const Tensor& aux, double level)
 {
-    constexpr double leakyReluNegativeSlope = 0.01;
-
     torch::Tensor x, y;
     if (level > _level) {
-        x = leaky_relu(_bn1Main(_conv1Main(main)), leakyReluNegativeSlope);
-        y = relu(_bn1Aux(_conv1Aux(aux)));
+        x = gelu(_bn1Main(_conv1Main(main)), "tanh");
+        y = gelu(_bn1Aux(_conv1Aux(aux)));
         float w = (float)std::clamp(_level+1.0-level, 0.0, 1.0);
         x = w*y + (1.0f-w)*x;
         x = _resBlock2(_resBlock1(x));
     }
     else if (level > _level-1.0) {
-        x = relu(_bn1Aux(_conv1Aux(aux)));
+        x = gelu(_bn1Aux(_conv1Aux(aux)));
         x = _resBlock2(_resBlock1(x));
     }
     else

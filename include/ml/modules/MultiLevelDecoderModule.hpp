@@ -26,7 +26,8 @@ namespace ml {
             int outputChannels,
             int xUpscale,
             int yUpscale,
-            int resBlockGroups = 1
+            int resBlockGroups = 1,
+            int resBlockScaling = 1
         );
 
         // outputs tuple of main tensor, auxiliary image

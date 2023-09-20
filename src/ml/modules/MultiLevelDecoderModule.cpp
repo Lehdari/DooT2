@@ -22,14 +22,15 @@ MultiLevelDecoderModuleImpl::MultiLevelDecoderModuleImpl(
     int outputChannels,
     int xUpscale,
     int yUpscale,
-    int resBlockGroups
+    int resBlockGroups,
+    int resBlockScaling
 ) :
     _level          (level),
     _outputChannels (outputChannels),
     _xUpScale       (xUpscale),
     _yUpScale       (yUpscale),
-    _resBlock1      (inputChannels, inputChannels, outputChannels, resBlockGroups, resBlockGroups, 0.01, 0.001),
-    _resBlock2      (outputChannels, outputChannels, outputChannels, resBlockGroups, resBlockGroups, 0.01, 0.001),
+    _resBlock1      (inputChannels, inputChannels*resBlockScaling, _outputChannels, resBlockGroups, 0.001),
+    _resBlock2      (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, resBlockGroups, 0.001),
     _convAux        (nn::Conv2dOptions(outputChannels, 8, {1, 1}).bias(false)),
     _bnAux          (nn::BatchNorm2dOptions(8)),
     _conv_Y         (nn::Conv2dOptions(8, 1, {1, 1})),
@@ -61,8 +62,6 @@ std::tuple<torch::Tensor, torch::Tensor> MultiLevelDecoderModuleImpl::forward(
 {
     using namespace torch::indexing;
 
-    constexpr double leakyReluNegativeSlope = 0.01;
-
     int outputWidth = x.sizes()[3]*_xUpScale;
     int outputHeight = x.sizes()[2]*_yUpScale;
 
@@ -78,7 +77,7 @@ std::tuple<torch::Tensor, torch::Tensor> MultiLevelDecoderModuleImpl::forward(
         x = _resBlock2(_resBlock1(x));
 
         // auxiliary image output
-        y = torch::leaky_relu(_bnAux(_convAux(x)), leakyReluNegativeSlope);
+        y = gelu(_bnAux(_convAux(x)), "tanh");
         torch::Tensor y_Y = (imgPrev == nullptr ? 0.5f : 0.0f) + // don't add luminosity bias if image from previous layer is provided
             0.51f * torch::tanh(_conv_Y(y));
         torch::Tensor y_UV = 0.51f * torch::tanh(_conv_UV(y));

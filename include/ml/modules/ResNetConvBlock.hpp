@@ -21,22 +21,20 @@ public:
         int inputChannels,
         int hiddenChannels,
         int outputChannels,
-        int groups1 = 1,
-        int groups2 = 1,
-        double reluAlpha=0.01,
+        int groups = 1,
         double normalInitializationStd=0.0
     );
 
     torch::Tensor forward(torch::Tensor x);
 
 private:
-    double                      _reluAlpha;
     bool                        _skipLayer; // true if input size differs from output size, so the adapter layer is required
 
-    torch::nn::BatchNorm2d      _bn1;
     torch::nn::Conv2d           _conv1;
-    torch::nn::BatchNorm2d      _bn2;
+    torch::nn::BatchNorm2d      _bn1;
     torch::nn::Conv2d           _conv2;
+    torch::nn::BatchNorm2d      _bn2;
+    torch::nn::Conv2d           _conv3;
     torch::nn::Conv2d           _convSkip;
 };
 TORCH_MODULE(ResNetConvBlock);

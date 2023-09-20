@@ -26,7 +26,8 @@ public:
         int outputChannels,
         int xDownScale,
         int yDownScale,
-        int resBlockGroups = 1
+        int resBlockGroups = 1,
+        int resBlockScaling = 1
     );
 
     torch::Tensor forward(const torch::Tensor& main, const torch::Tensor& aux, double level);

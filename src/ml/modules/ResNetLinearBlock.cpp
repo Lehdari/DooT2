@@ -19,10 +19,8 @@ ResNetLinearBlockImpl::ResNetLinearBlockImpl(
     int inputChannels,
     int hiddenChannels,
     int outputChannels,
-    double reluAlpha,
     double normalInitializationStd
 ) :
-    _reluAlpha  (reluAlpha),
     _skipLayer  (inputChannels != outputChannels),
     _bn1        (nn::BatchNorm1dOptions(inputChannels)),
     _linear1    (nn::LinearOptions(inputChannels, hiddenChannels).bias(false)),
@@ -46,8 +44,8 @@ ResNetLinearBlockImpl::ResNetLinearBlockImpl(
 
 torch::Tensor ResNetLinearBlockImpl::forward(torch::Tensor x)
 {
-    torch::Tensor y = _linear1(leaky_relu(_bn1(x), _reluAlpha));
-    y = _linear2(leaky_relu(_bn2(y), _reluAlpha));
+    torch::Tensor y = _linear1(gelu(_bn1(x), "tanh"));
+    y = _linear2(gelu(_bn2(y), "tanh"));
 
     if (_skipLayer)
         x = _linearSkip(x);
