@@ -25,8 +25,8 @@ MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl(int featureMultiplier) :
     _encoder7           (-0.5, 256, 512, 2, 3, 16, 4), // 5x5
     _bn1                (nn::BatchNorm2dOptions(512)),
     _conv1              (nn::Conv2dOptions(512, 512, {2, 2}).bias(false).groups(512)),
-    _resBlock1          (512, 2048, 256, 16, 0.001),
-    _resBlock2          (256, 1024, 128, 8, 0.001),
+    _resBlock1          (512, 2048, 256, 16, true, 0.001),
+    _resBlock2          (256, 1024, 128, 8, true, 0.001),
     _resBlock3a         (2048, 1024, 2048, 0.001),
     _resBlock3b         (2048, 1024, 2048, 0.001),
     _resBlock4          (2048, 2048, 2048, 0.001),

@@ -46,6 +46,7 @@ set(DOOT2_ML_SOURCES
     src/ml/modules/ResNetConvBlock.cpp
     src/ml/modules/ResNetLinearBlock.cpp
     src/ml/modules/ResNeXtModule.cpp
+    src/ml/modules/SqueezeExcitation.cpp
     src/ml/modules/TransformerBlock.cpp
     src/ml/modules/ViTBlock.cpp
 )

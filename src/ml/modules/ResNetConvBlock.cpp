@@ -20,20 +20,25 @@ ResNetConvBlockImpl::ResNetConvBlockImpl(
     int hiddenChannels,
     int outputChannels,
     int groups,
+    bool useSqueezeExcitation,
     double normalInitializationStd
 ) :
-    _skipLayer  (inputChannels != outputChannels),
-    _conv1      (nn::Conv2dOptions(inputChannels, hiddenChannels, {1, 1}).bias(false)),
-    _bn1        (nn::BatchNorm2dOptions(hiddenChannels)),
-    _conv2      (nn::Conv2dOptions(hiddenChannels, hiddenChannels, {3, 3}).bias(false).padding(1).groups(groups)),
-    _bn2        (nn::BatchNorm2dOptions(hiddenChannels)),
-    _conv3      (nn::Conv2dOptions(hiddenChannels, outputChannels, {1, 1}).bias(false)),
-    _convSkip   (nn::Conv2dOptions(inputChannels, outputChannels, {1, 1}).bias(false))
+    _skipLayer              (inputChannels != outputChannels),
+    _useSqueezeExcitation   (useSqueezeExcitation),
+    _conv1                  (nn::Conv2dOptions(inputChannels, hiddenChannels, {1, 1}).bias(false)),
+    _bn1                    (nn::BatchNorm2dOptions(hiddenChannels)),
+    _conv2                  (nn::Conv2dOptions(hiddenChannels, hiddenChannels, {3, 3}).bias(false).padding(1).groups(groups)),
+    _bn2                    (nn::BatchNorm2dOptions(hiddenChannels)),
+    _se1                    (hiddenChannels, outputChannels, hiddenChannels),
+    _conv3                  (nn::Conv2dOptions(hiddenChannels, outputChannels, {1, 1}).bias(false)),
+    _convSkip               (nn::Conv2dOptions(inputChannels, outputChannels, {1, 1}).bias(false))
 {
     register_module("conv1", _conv1);
-    register_module("bn1", _bn1);
+    register_module("bn2", _bn1);
     register_module("conv2", _conv2);
-    register_module("bn2", _bn2);
+    register_module("bn3", _bn2);
+    if (_useSqueezeExcitation)
+        register_module("se1", _se1);
     register_module("conv3", _conv3);
     if (_skipLayer)
         register_module("convSkip", _convSkip);
@@ -48,8 +53,12 @@ ResNetConvBlockImpl::ResNetConvBlockImpl(
 torch::Tensor ResNetConvBlockImpl::forward(torch::Tensor x)
 {
     torch::Tensor y = _conv1(x);
-    y = _conv2(gelu(_bn1(y), "tanh"));
-    y = _conv3(gelu(_bn2(y), "tanh"));
+    y = gelu(_bn1(y), "tanh");
+    y = _conv2(y);
+    y = gelu(_bn2(y), "tanh");
+    if (_useSqueezeExcitation)
+        y = _se1(y);
+    y = _conv3(y);
 
     if (_skipLayer)
         x = _convSkip(x);
