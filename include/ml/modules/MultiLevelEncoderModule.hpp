@@ -12,6 +12,7 @@
 
 #include "ml/MultiLevelImage.hpp"
 #include "ml/modules/ResNetConvBlock.hpp"
+#include "ml/modules/ResNetDownscaleConvBlock.hpp"
 
 #include <torch/torch.h>
 
@@ -33,14 +34,13 @@ public:
     torch::Tensor forward(const torch::Tensor& main, const torch::Tensor& aux, double level);
 
 private:
-    double                  _level;
-    int                     _outputChannels;
-    torch::nn::Conv2d       _conv1Main; // layers for the primary feedforward
-    torch::nn::BatchNorm2d  _bn1Main;
-    torch::nn::Conv2d       _conv1Aux; // layers for the downscaled secondary input
-    torch::nn::BatchNorm2d  _bn1Aux;
-    ResNetConvBlock         _resBlock1;
-    ResNetConvBlock         _resBlock2;
+    double                      _level;
+    int                         _outputChannels;
+    ResNetDownscaleConvBlock    _downscaleResBlock;
+    torch::nn::Conv2d           _conv1Aux; // layers for the downscaled secondary input
+    torch::nn::BatchNorm2d      _bn1Aux;
+    ResNetConvBlock             _resBlock1;
+    ResNetConvBlock             _resBlock2;
 };
 TORCH_MODULE(MultiLevelEncoderModule);
 

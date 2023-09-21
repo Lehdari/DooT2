@@ -44,6 +44,7 @@ set(DOOT2_ML_SOURCES
     src/ml/modules/MultiLevelFrameDecoder.cpp
     src/ml/modules/MultiLevelFrameEncoder.cpp
     src/ml/modules/ResNetConvBlock.cpp
+    src/ml/modules/ResNetDownscaleConvBlock.cpp
     src/ml/modules/ResNetLinearBlock.cpp
     src/ml/modules/ResNeXtModule.cpp
     src/ml/modules/SqueezeExcitation.cpp

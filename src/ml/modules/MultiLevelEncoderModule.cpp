@@ -25,18 +25,16 @@ MultiLevelEncoderModuleImpl::MultiLevelEncoderModuleImpl(
     int resBlockGroups,
     int resBlockScaling
 ) :
-    _level          (level),
-    _outputChannels (outputChannels),
-    _conv1Main      (nn::Conv2dOptions(inputChannels, _outputChannels, {yDownScale+2, xDownScale+2})
-                     .stride({yDownScale, xDownScale}).bias(false).padding({1, 1})),
-    _bn1Main        (nn::BatchNorm2dOptions(_outputChannels)),
-    _conv1Aux       (nn::Conv2dOptions(3, _outputChannels, {1, 1}).bias(false)),
-    _bn1Aux         (nn::BatchNorm2dOptions(_outputChannels)),
-    _resBlock1      (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, resBlockGroups, true, 0.001),
-    _resBlock2      (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, resBlockGroups, true, 0.001)
+    _level              (level),
+    _outputChannels     (outputChannels),
+    _downscaleResBlock  (inputChannels, _outputChannels*resBlockScaling, _outputChannels, xDownScale, yDownScale,
+                         resBlockGroups, true, 0.001),
+    _conv1Aux           (nn::Conv2dOptions(3, _outputChannels, {1, 1}).bias(false)),
+    _bn1Aux             (nn::BatchNorm2dOptions(_outputChannels)),
+    _resBlock1          (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, resBlockGroups, true, 0.001),
+    _resBlock2          (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, resBlockGroups, true, 0.001)
 {
-    register_module("conv1Main", _conv1Main);
-    register_module("bn1Main", _bn1Main);
+    register_module("downscaleResBlock", _downscaleResBlock);
     register_module("conv1Aux", _conv1Aux);
     register_module("bn1Aux", _bn1Aux);
     register_module("resBlock1", _resBlock1);
@@ -47,7 +45,7 @@ torch::Tensor MultiLevelEncoderModuleImpl::forward(const Tensor& main, const Ten
 {
     torch::Tensor x, y;
     if (level > _level) {
-        x = gelu(_bn1Main(_conv1Main(main)), "tanh");
+        x = _downscaleResBlock(main);
         y = gelu(_bn1Aux(_conv1Aux(aux)));
         float w = (float)std::clamp(_level+1.0-level, 0.0, 1.0);
         x = w*y + (1.0f-w)*x;
