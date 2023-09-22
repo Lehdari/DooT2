@@ -28,7 +28,7 @@ MultiLevelEncoderModuleImpl::MultiLevelEncoderModuleImpl(
     _level              (level),
     _outputChannels     (outputChannels),
     _downscaleResBlock  (inputChannels, _outputChannels*resBlockScaling, _outputChannels, xDownScale, yDownScale,
-                         resBlockGroups, true, 0.001),
+                         resBlockGroups, true, 0.0, 0.001),
     _conv1Aux           (nn::Conv2dOptions(3, _outputChannels, {1, 1}).bias(false)),
     _bn1Aux             (nn::BatchNorm2dOptions(_outputChannels)),
     _resBlock1          (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, resBlockGroups, true, 0.001),

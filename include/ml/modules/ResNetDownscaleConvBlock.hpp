@@ -26,7 +26,8 @@ namespace ml {
             int yDownScale,
             int groups = 1,
             bool useSqueezeExcitation = false,
-            double normalInitializationStd=0.0
+            double normalInitializationStd = 0.0,
+            double skipNormalInitializationStd = 0.0
         );
 
         torch::Tensor forward(torch::Tensor x);

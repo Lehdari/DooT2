@@ -23,7 +23,8 @@ ResNetDownscaleConvBlockImpl::ResNetDownscaleConvBlockImpl(
     int yDownScale,
     int groups,
     bool useSqueezeExcitation,
-    double normalInitializationStd
+    double normalInitializationStd,
+    double skipNormalInitializationStd
 ) :
     _skipLayer              (inputChannels != outputChannels),
     _useSqueezeExcitation   (useSqueezeExcitation),
@@ -52,6 +53,11 @@ ResNetDownscaleConvBlockImpl::ResNetDownscaleConvBlockImpl(
         auto* w = _conv3->named_parameters(false).find("weight");
         if (w == nullptr) throw std::runtime_error("Unable to find layer weights");
         torch::nn::init::normal_(*w, 0.0, normalInitializationStd);
+    }
+    if (skipNormalInitializationStd > 0.0) {
+        auto* w = _convSkip->named_parameters(false).find("weight");
+        if (w == nullptr) throw std::runtime_error("Unable to find layer weights");
+        torch::nn::init::normal_(*w, 0.0, skipNormalInitializationStd);
     }
 }
 
