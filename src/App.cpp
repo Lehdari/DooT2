@@ -225,7 +225,20 @@ void App::updateExperimentConfig(nlohmann::json& experimentConfig)
         assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_09.wad",
         assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_10.wad"
     };
-    experimentConfig["training_task"] = _gui.getState().trainingTask;
+    experimentConfig["training_task"] = static_cast<int32_t>(_gui.getState().trainingTask);
+
+    // task-specific entries
+    switch (_gui.getState().trainingTask) {
+        case gui::State::TrainingTask::FRAME_ENCODING: {
+            experimentConfig["use_frame_cache"] = _gui.getState().useFrameCache;
+            if (_gui.getState().useFrameCache) {
+                experimentConfig["frame_cache_path"] = _gui.getState().frameCachePath;
+                experimentConfig["n_cached_sequences"] = _gui.getState().nCachedSequences;
+            }
+        }   break;
+        case gui::State::TrainingTask::AGENT_POLICY: {
+        }   break;
+    }
 
     // optional entries
     if (!_gui.getState().experimentBase.empty())

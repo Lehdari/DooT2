@@ -62,15 +62,7 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
                 if (fs::exists(baseRoot)) { // valid experiment root passed, let's check if there's a config
                     fs::path baseExperimentConfigFilename = baseRoot / "experiment_config.json";
                     if (fs::exists(baseExperimentConfigFilename)) { // config found, parse it
-                        std::ifstream baseExperimentConfigFile(baseExperimentConfigFilename);
-                        _guiState->baseExperimentConfig = nlohmann::json::parse(baseExperimentConfigFile);
-                        if (_guiState->baseExperimentConfig.contains("model_type")) { // reset the model
-                            _guiState->modelTypeName = _guiState->baseExperimentConfig["model_type"];
-                            if (_guiState->callbacks.contains("resetExperiment"))
-                                _guiState->callbacks["resetExperiment"](*_guiState);
-                        }
-                        else
-                            printf("WARNING: No model_type specified in the base experiment config\n"); // TODO logging
+                        parseBaseExperimentConfig(baseExperimentConfigFilename);
                     }
                     else
                         printf("WARNING: No experiment config from %s found!\n", baseExperimentConfigFilename.c_str());
@@ -84,7 +76,8 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
             }
 
             // Training task options
-            ImGui::BeginDisabled(!_guiState->experimentBase.empty()); // Same model type forced when using a base experiment
+            ImGui::BeginDisabled(!_guiState->experimentBase.empty()); // Same task and model type forced when using a base experiment
+
             ImGui::Text("Training task:");
             static const std::string taskNames[] = {"Frame Encoding", "Agent Policy"};
             ImGui::SetNextItemWidth(windowSize.x - fontSize * 2.0f);
@@ -121,9 +114,25 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
 
                 ImGui::EndCombo();
             }
-            ImGui::EndDisabled();
 
-            ImGui::EndDisabled();
+            ImGui::EndDisabled(); // !_guiState->experimentBase.empty()
+
+            // Task options
+            if (_guiState->trainingTask == State::TrainingTask::FRAME_ENCODING) {
+                ImGui::Text("Frame encoding task options:");
+                ImGui::Checkbox("Use frame cache", &_guiState->useFrameCache);
+                if (_guiState->useFrameCache) {
+                    ImGui::InputText("Frame cache path", &_guiState->frameCachePath);
+                    ImGui::SetNextItemWidth(fontSize * 10.0f);
+                    ImGui::InputInt("N. of cached sequences", &_guiState->nCachedSequences);
+                }
+            }
+            else {
+                ImGui::Text("Agent policy task options:");
+                // TODO
+            }
+
+            ImGui::EndDisabled(); // trainingInProgress
         }
 
         // Model configuration
@@ -366,13 +375,65 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
 
 void gui::TrainingWindow::applyConfig(const nlohmann::json& config)
 {
+    if (config.contains("experimentName"))
+        _guiState->experimentName = config["experimentName"].get<std::string>();
+    if (config.contains("trainingTask"))
+        _guiState->trainingTask = static_cast<State::TrainingTask>(config["trainingTask"].get<int32_t>());
     if (config.contains("modelTypeName"))
         _guiState->modelTypeName = config["modelTypeName"].get<std::string>();
+    if (config.contains("useFrameCache"))
+        _guiState->useFrameCache = config["useFrameCache"].get<bool>();
+    if (config.contains("frameCachePath"))
+        _guiState->frameCachePath = config["frameCachePath"].get<std::string>();
+    if (config.contains("nCachedSequences"))
+        _guiState->nCachedSequences = config["nCachedSequences"].get<int32_t>();
+
 }
 
 nlohmann::json gui::TrainingWindow::getConfig() const
 {
     nlohmann::json config;
+    config["experimentName"] = _guiState->experimentName;
+    config["trainingTask"] = _guiState->trainingTask;
     config["modelTypeName"] = _guiState->modelTypeName;
+    config["useFrameCache"] = _guiState->useFrameCache;
+    config["frameCachePath"] = _guiState->frameCachePath;
+    config["nCachedSequences"] = _guiState->nCachedSequences;
     return config;
+}
+
+void gui::TrainingWindow::parseBaseExperimentConfig(const std::filesystem::path& baseExperimentConfigFilename)
+{
+    std::ifstream baseExperimentConfigFile(baseExperimentConfigFilename);
+    _guiState->baseExperimentConfig = nlohmann::json::parse(baseExperimentConfigFile);
+
+    if (_guiState->baseExperimentConfig.contains("training_task"))
+        _guiState->trainingTask = _guiState->baseExperimentConfig["training_task"];
+    else
+        printf("WARNING: No training_task specified in the base experiment config\n"); // TODO logging
+
+    if (_guiState->baseExperimentConfig.contains("model_type")) { // reset the model
+        _guiState->modelTypeName = _guiState->baseExperimentConfig["model_type"];
+        if (_guiState->callbacks.contains("resetExperiment"))
+            _guiState->callbacks["resetExperiment"](*_guiState);
+    }
+    else
+        printf("WARNING: No model_type specified in the base experiment config\n"); // TODO logging
+
+    if (_guiState->baseExperimentConfig.contains("use_frame_cache"))
+        _guiState->useFrameCache = _guiState->baseExperimentConfig["use_frame_cache"];
+    else
+        printf("WARNING: No use_frame_cache specified in the base experiment config\n"); // TODO logging
+
+    if (_guiState->useFrameCache) {
+        if (_guiState->baseExperimentConfig.contains("frame_cache_path"))
+            _guiState->frameCachePath = _guiState->baseExperimentConfig["frame_cache_path"];
+        else
+            printf("WARNING: No frame_cache_path specified in the base experiment config\n"); // TODO logging
+
+        if (_guiState->baseExperimentConfig.contains("n_cached_sequences"))
+            _guiState->nCachedSequences = _guiState->baseExperimentConfig["n_cached_sequences"];
+        else
+            printf("WARNING: No n_cached_sequences specified in the base experiment config\n"); // TODO logging
+    }
 }

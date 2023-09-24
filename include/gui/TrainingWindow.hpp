@@ -23,6 +23,9 @@ public:
     void render(ml::Trainer* trainer) override;
     void applyConfig(const nlohmann::json& config) override;
     nlohmann::json getConfig() const override;
+
+private:
+    void parseBaseExperimentConfig(const std::filesystem::path& baseExperimentConfigFilename);
 };
 
 };
