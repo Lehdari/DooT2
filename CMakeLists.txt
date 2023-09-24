@@ -53,6 +53,7 @@ set(DOOT2_ML_SOURCES
 )
 set(DOOT2_UTIL_SOURCES
     src/util/ExperimentUtils.cpp
+    src/util/Image.cpp
     src/util/SequenceStorage.cpp
     src/util/TensorUtils.cpp
     src/util/TimeSeries.cpp
@@ -75,6 +76,7 @@ target_include_directories(doot2
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
     PUBLIC  ${SDL2_INCLUDE_DIRS}
     PUBLIC  ext/CLI11/include
+    PUBLIC  ext/GraphicsUtils/ext/stb
 )
 target_link_libraries(doot2
     PUBLIC  gvizdoom

@@ -493,3 +493,14 @@ inline Eigen::Matrix<T_Data, T_NChannelsDest, T_NChannelsSrc> getImageFormatConv
 
     throw std::runtime_error("Requested format conversion not implemented yet");
 }
+
+template<typename T_Data>
+void writeImageToFile(const Image<T_Data>& image, const std::filesystem::path& filename)
+{
+    // TODO extend, only 8/8/8 RGB PNG supported for now
+
+    Image<T_Data> img;
+    convertImage(image, img, ImageFormat::RGB);
+    auto nChannels = getImageFormatNChannels(img.format());
+    stbi_write_png(filename.c_str(), img.width(), img.height(), nChannels, img.data(), img.width()*nChannels);
+}

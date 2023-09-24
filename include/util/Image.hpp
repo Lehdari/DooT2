@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <stb_image_write.h>
 
 #include "Utils.hpp"
 #include "MathTypes.hpp"
@@ -102,6 +103,9 @@ inline void convertImage(
 template <typename T_Data, int T_NChannelsSrc, int T_NChannelsDest>
 inline Eigen::Matrix<T_Data, T_NChannelsDest, T_NChannelsSrc>
     getImageFormatConversionMatrix(ImageFormat srcFormat, ImageFormat destFormat);
+
+template <typename T_Data>
+inline void writeImageToFile(const Image<T_Data>& image, const std::filesystem::path& filename);
 
 
 #include "Image.inl"
