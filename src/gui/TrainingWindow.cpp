@@ -83,9 +83,26 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
                     printf("WARNING: No base experiment model config found\n"); // TODO logging
             }
 
-            // Model select
+            // Training task options
             ImGui::BeginDisabled(!_guiState->experimentBase.empty()); // Same model type forced when using a base experiment
-            ImGui::Text("Model:");
+            ImGui::Text("Training task:");
+            static const std::string taskNames[] = {"Frame Encoding", "Agent Policy"};
+            ImGui::SetNextItemWidth(windowSize.x - fontSize * 2.0f);
+            if (ImGui::BeginCombo("##TaskSelector", taskNames[(int32_t)_guiState->trainingTask].c_str())) {
+                for (int i=0; i<2; ++i) {
+                    auto name = taskNames[i].c_str();
+                    bool isSelected = (int32_t)_guiState->trainingTask == i;
+                    if (ImGui::Selectable(name, isSelected)) {
+                        _guiState->trainingTask = (State::TrainingTask)i;
+                    }
+                    if (isSelected)
+                        ImGui::SetItemDefaultFocus();
+                };
+
+                ImGui::EndCombo();
+            }
+
+            ImGui::Text("Model to train:");
             ImGui::SetNextItemWidth(windowSize.x - fontSize * 2.0f);
             if (ImGui::BeginCombo("##ModelSelector", _guiState->modelTypeName.c_str())) {
                 ml::modelForEachTypeCallback([&]<typename T_Model>() {

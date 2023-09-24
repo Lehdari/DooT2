@@ -49,6 +49,10 @@ struct State {
     std::string     experimentName              {"ex_{time}_{version}"};
     std::string     experimentBase;
     nlohmann::json  baseExperimentConfig;
+    enum class TrainingTask : int32_t {
+        FRAME_ENCODING = 0,
+        AGENT_POLICY = 1
+    }               trainingTask                {TrainingTask::FRAME_ENCODING};
     std::string     modelTypeName               {"AutoEncoderModel"}; // type name of the model to be trained
     bool            gridSearch                  {false};
     nlohmann::json  gridSearchModelConfigParams;

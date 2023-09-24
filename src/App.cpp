@@ -225,6 +225,7 @@ void App::updateExperimentConfig(nlohmann::json& experimentConfig)
         assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_09.wad",
         assetsDir/"wads"/"micro_nomonsters"/"micro_nomonsters_10.wad"
     };
+    experimentConfig["training_task"] = _gui.getState().trainingTask;
 
     // optional entries
     if (!_gui.getState().experimentBase.empty())
