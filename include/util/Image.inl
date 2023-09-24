@@ -13,6 +13,8 @@ INLINE int getImageFormatNChannels(ImageFormat imageFormat)
     switch (imageFormat) {
         case ImageFormat::BGRA:
             return 4;
+        case ImageFormat::RGB:
+            return 3;
         case ImageFormat::YUV:
             return 3;
         case ImageFormat::GRAY:
@@ -274,6 +276,8 @@ inline void convertImage(
             tempBuffer.resize(srcImage._nElements);
             data = tempBuffer.data();
         }
+        else
+            destImage._format = srcImage.format();
     }
     else {
         destImage.copyParamsFrom(srcImage);
@@ -334,6 +338,16 @@ inline Eigen::Matrix<T_Data, T_NChannelsDest, T_NChannelsSrc> getImageFormatConv
         switch (srcFormat) {
         case ImageFormat::BGRA: {
             switch (destFormat) {
+            case ImageFormat::RGB: { // BGRA -> RGB
+                static const auto matrix = [](){
+                    ConversionMatrix matrix;
+                    matrix  <<  0.0,    0.0,    1.0,    0.0,
+                                0.0,    1.0,    0.0,    0.0,
+                                1.0,    0.0,    0.0,    0.0;
+                    return matrix;
+                }();
+                return matrix;
+            }
             case ImageFormat::YUV: { // BGRA -> YUV
                 static const auto matrix = [](){
                     ConversionMatrix matrix;
@@ -362,6 +376,40 @@ inline Eigen::Matrix<T_Data, T_NChannelsDest, T_NChannelsSrc> getImageFormatConv
     }
     else if constexpr (T_NChannelsSrc == 3) {
         switch (srcFormat) {
+        case ImageFormat::RGB: {
+            switch (destFormat) {
+            case ImageFormat::BGRA: { // RGB -> BGRA
+                static const auto matrix = [](){
+                    ConversionMatrix matrix;
+                    matrix  <<  0.0,    0.0,    1.0,
+                                0.0,    1.0,    0.0,
+                                1.0,    0.0,    0.0,
+                                0.0,    0.0,    0.0;
+                    return matrix;
+                }();
+                return matrix;
+            }
+            case ImageFormat::YUV: { // RGB -> YUV
+                static const auto matrix = [](){
+                    ConversionMatrix matrix;
+                    matrix  <<  0.299,      0.587,      0.114,
+                                -0.14713,   -0.28886,   0.436,
+                                0.615,      -0.51499,   -0.10001;
+                    return matrix;
+                }();
+                return matrix;
+            }
+            case ImageFormat::GRAY: { // RGB -> GRAY
+                static const auto matrix = [](){
+                    ConversionMatrix matrix;
+                    matrix  <<  0.299,  0.587,  0.114;
+                    return matrix;
+                }();
+                return matrix;
+            }
+            default: break;
+            }
+        }   break;
         case ImageFormat::YUV: {
             switch (destFormat) {
             case ImageFormat::BGRA: { // YUV -> BGRA
@@ -371,6 +419,16 @@ inline Eigen::Matrix<T_Data, T_NChannelsDest, T_NChannelsSrc> getImageFormatConv
                                 1.0,        -0.394646,      -0.580594,
                                 1.0,        -1.17892e-05,   1.13983,
                                 0.0,        0.0,            0.0;
+                    return matrix;
+                }();
+                return matrix;
+            }
+            case ImageFormat::RGB: { // YUV -> RGB
+                static const auto matrix = [](){
+                    ConversionMatrix matrix;
+                    matrix  <<  1.0,        -1.17892e-05,   1.13983,
+                                1.0,        -0.394646,      -0.580594,
+                                0.99998,    2.03211,        -1.5082e-05;
                     return matrix;
                 }();
                 return matrix;
@@ -401,6 +459,16 @@ inline Eigen::Matrix<T_Data, T_NChannelsDest, T_NChannelsSrc> getImageFormatConv
                                 1.0,
                                 1.0,
                                 0.0;
+                    return matrix;
+                }();
+                return matrix;
+            }
+            case ImageFormat::RGB: { // GRAY -> RGB
+                static const auto matrix = [](){
+                    ConversionMatrix matrix;
+                    matrix  <<  1.0,
+                                1.0,
+                                1.0;
                     return matrix;
                 }();
                 return matrix;
