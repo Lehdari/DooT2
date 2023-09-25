@@ -31,7 +31,7 @@ Trainer::Trainer(
     uint32_t batchSizeIn,
     size_t sequenceLengthIn
 ) :
-    _rnd                        (1507715517),
+    _rnd                        (time(NULL)),
     _quit                       (false),
     _finished                   (true),
     _sequenceStorage            (batchSizeIn),
