@@ -76,6 +76,8 @@ private:
     SingleBuffer<Image<uint8_t>>    _frame;
     nlohmann::json                  _experimentConfig;
     TrainingInfo                    _trainingInfo;
+    std::filesystem::path           _frameCachePath;
+    std::string                     _frameCacheRecordSequenceName;
 
     size_t                          _batchEntryId;
     bool                            _newPatchReady;
@@ -93,6 +95,12 @@ private:
     void evaluateModel();
     void createExperimentDirectories() const;
     void loadBaseExperimentTrainingInfo();
+
+    // Frame cache handling functions
+    int nFrameCacheSequences();
+    bool recordingToCache();
+    void recordFrameToCache(int frameId);
+    void loadSequenceStorageFromFrameCache(int offset);
 };
 
 } // namespace ml

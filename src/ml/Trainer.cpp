@@ -98,61 +98,98 @@ void Trainer::loop()
     TensorVector encodingTV(1); // frame converted into an encoding (output of the encoding model)
     TensorVector actionTV(1); // action output produced by the agent model
 
+    // Are we running the game inline or loading training data from the cache?
+    bool runningGame = _experimentConfig["training_task"].get<int32_t>() == 1 || // agent policy task
+        recordingToCache();
+
     bool recording = false;
     bool evaluating = false;
-    int nRecordedFrames = 0;
+    int recordedFrameId = 0;
     int epoch = 0;
     _quit = false;
     while (!_quit) {
-        // Map the frame into a tensor
-        frameTV[0] = torch::from_blob(frameYUVData.data(),
-            { 1 /*batch size*/, doot2::frameWidth, doot2::frameHeight,
-            getImageFormatNChannels(ImageFormat::YUV) },
-            torch::TensorOptions().device(torch::kCPU)
-        );
+        if (runningGame || evaluating) {
+            // Map the frame into a tensor
+            frameTV[0] = torch::from_blob(frameYUVData.data(),
+                {
+                    1 /*batch size*/, doot2::frameWidth, doot2::frameHeight,
+                    getImageFormatNChannels(ImageFormat::YUV)
+                },
+                torch::TensorOptions().device(torch::kCPU)
+            );
 
-        // Run encoder and agent model inference
-        if (_encoderModel == nullptr) {
-            // no encoder model in use, input raw frames to the model
-            _agentModel->infer(frameTV, actionTV);
+            // Run encoder and agent model inference
+            if (_encoderModel == nullptr) {
+                // no encoder model in use, input raw frames to the model
+                _agentModel->infer(frameTV, actionTV);
+            } else {
+                _encoderModel->infer(frameTV, encodingTV);
+                _agentModel->infer(encodingTV, actionTV);
+            }
+
+            // Convert agent model output to an action for this timestep
+            auto action = _actionConverter(actionTV[0]);
+
+            // Update the game state, restart if required
+            if (recordedFrameId >= _sequenceStorage.length() || doomGame.update(action)) {
+                int nextBatchEntryId = _batchEntryId + 1;
+                if (recordedFrameId < _sequenceStorage.length())
+                    nextBatchEntryId = _batchEntryId;
+                nextMap(nextBatchEntryId, evaluating);
+                recordedFrameId = 0;
+                recording = false;
+                continue;
+            }
+
+            // Copy the DoomGame frame to local storage
+            {
+                auto frameHandle = _frame.write();
+                frameHandle->copyFrom(doomGame.getPixelsBGRA());
+            }
+
+            // Recording to cache finished, move saved sequence batch to frame cache
+            if (recordingToCache() && _newPatchReady) {
+                printf("Cache frame sequence %s record finished, new patch ready.\n",
+                    _frameCacheRecordSequenceName.c_str());
+                fs::rename(fs::path("temp") / _frameCacheRecordSequenceName,
+                    _frameCachePath / _frameCacheRecordSequenceName);
+                _frameCacheRecordSequenceName.clear();
+                if (recordingToCache()) { // we're still missing sequences from the cache
+                    _visitedMaps.clear();
+                    _newPatchReady = false;
+                }
+                else { // all necessary sequences captured for the cache, proceed to training
+                    runningGame = false;
+                    continue;
+                }
+            }
+
+            // Record
+            if (recording) {
+                if (recordingToCache()) {
+                    recordFrameToCache(recordedFrameId);
+                }
+                else {
+                    _sequenceStorage.getBatch<Action>("action", recordedFrameId)[_batchEntryId] = action;
+                    {   // convert the frame
+                        auto frameHandle = _frame.read();
+                        convertImage(*frameHandle, frameYUV, ImageFormat::YUV);
+                        _sequenceStorage.getBatch<float>("frame", recordedFrameId)[_batchEntryId] = torch::from_blob(
+                            frameYUVData.data(), frameShape, torch::TensorOptions().device(torch::kCPU)
+                        );
+                    }
+                    _sequenceStorage.getBatch<double>("reward",
+                        recordedFrameId)[_batchEntryId] = 0.0; // TODO no rewards for now
+                }
+                ++recordedFrameId;
+            } else if (startRecording()) {
+                recording = true;
+            }
         }
         else {
-            _encoderModel->infer(frameTV, encodingTV);
-            _agentModel->infer(encodingTV, actionTV);
-        }
-
-        // Convert agent model output to an action for this timestep
-        auto action = _actionConverter(actionTV[0]);
-
-        // Update the game state, restart if required
-        if (nRecordedFrames >= _sequenceStorage.length() || doomGame.update(action)) {
-            nextMap(_batchEntryId+1, evaluating);
-            nRecordedFrames = 0;
-            recording = false;
-            continue;
-        }
-
-        // Copy the DoomGame frame to local storage
-        {
-            auto frameHandle = _frame.write();
-            frameHandle->copyFrom(doomGame.getPixelsBGRA());
-        }
-
-        // Record
-        if (recording) {
-            _sequenceStorage.getBatch<Action>("action", nRecordedFrames)[_batchEntryId] = action;
-            {   // convert the frame
-                auto frameHandle = _frame.read();
-                convertImage(*frameHandle, frameYUV, ImageFormat::YUV);
-                _sequenceStorage.getBatch<float>("frame", nRecordedFrames)[_batchEntryId] = torch::from_blob(
-                    frameYUVData.data(), frameShape, torch::TensorOptions().device(torch::kCPU)
-                );
-            }
-            _sequenceStorage.getBatch<double>("reward", nRecordedFrames)[_batchEntryId] = 0.0; // TODO no rewards for now
-            ++nRecordedFrames;
-        }
-        else if (startRecording()) {
-            recording = true;
+            printf("Loading sequence from frame cache, offset %d\n", epoch);
+            loadSequenceStorageFromFrameCache(epoch);
+            _newPatchReady = true;
         }
 
         // Train or evaluate
@@ -249,10 +286,24 @@ void Trainer::configureExperiment(nlohmann::json&& experimentConfig)
     // Check for mandatory entries
     if (!experimentConfig.contains("experiment_name"))
         throw std::runtime_error("Experiment config does not contain mandatory entry \"experiment_name\"");
+    if (!experimentConfig.contains("training_task"))
+        throw std::runtime_error("Experiment config does not contain mandatory entry \"training_task\"");
     if (!experimentConfig.contains("model_type"))
         throw std::runtime_error("Experiment config does not contain mandatory entry \"model_type\"");
     if (!experimentConfig.contains("model_config"))
         throw std::runtime_error("Experiment config does not contain mandatory entry \"model_config\"");
+
+    // Check task-specific entries
+    if (experimentConfig["training_task"].get<int32_t>() == 0) {
+        if (!experimentConfig.contains("use_frame_cache"))
+            throw std::runtime_error("Experiment config does not contain entry \"use_frame_cache\"");
+        if (experimentConfig["use_frame_cache"].get<bool>()) { // using cache, check for parameters
+            if (!experimentConfig.contains("frame_cache_path"))
+                throw std::runtime_error("Experiment config does not contain entry \"frame_cache_path\"");
+            if (!experimentConfig.contains("n_cached_sequences"))
+                throw std::runtime_error("Experiment config does not contain entry \"n_cached_sequences\"");
+        }
+    }
 
     std::string previousModelType;
     if (_experimentConfig.contains("model_type"))
@@ -309,6 +360,13 @@ void Trainer::setupExperiment()
         _trainingInfo.evaluationTimeSeries.write()->addSeries<double>("time", 0.0);
         _trainingInfo.evaluationTimeSeries.write()->addSeries<double>("performanceAvg", 0.0);
         _trainingInfo.evaluationTimeSeries.write()->addSeries<double>("performanceMin", 0.0);
+    }
+
+    // Create frame cache path directory in case it's required and it doesn't already exist
+    if (_experimentConfig["training_task"].get<int32_t>() == 0 && // Image encoding
+        _experimentConfig["use_frame_cache"].get<bool>()) {
+        _frameCachePath = _experimentConfig["frame_cache_path"].get<fs::path>();
+        fs::create_directories(_frameCachePath);
     }
 
     _model->init(_experimentConfig);
@@ -517,6 +575,81 @@ void Trainer::loadBaseExperimentTrainingInfo()
             printf("WARNING: Base experiment and evaluation interval specified in config but evaluation time series data was not found (%s).\n",
                 evaluationTimeSeriesPath.c_str()); // TODO logging
             return;
+        }
+    }
+}
+
+int Trainer::nFrameCacheSequences()
+{
+    int n = 0;
+    for (const auto& s : fs::directory_iterator(_frameCachePath))
+        ++n;
+    return n;
+}
+
+bool Trainer::recordingToCache()
+{
+    return (_experimentConfig["training_task"].get<int32_t>() == 0 && // frame encoding task
+        _experimentConfig["use_frame_cache"].get<bool>() && // and using frame cache
+        nFrameCacheSequences() < _experimentConfig["n_cached_sequences"].get<int>()); // but not sufficient amount of sequences in the frame cache
+}
+
+void Trainer::recordFrameToCache(int frameId)
+{
+    if (_frameCacheRecordSequenceName.empty()) {
+        _frameCacheRecordSequenceName = [](){
+            using namespace std::chrono;
+            std::stringstream ss;
+            auto now = system_clock::to_time_t(system_clock::now());
+            ss << std::put_time(std::gmtime(&now), "%Y%m%dT%H%M%S");
+            return ss.str();
+        }();
+    }
+    std::stringstream batchEntryIdSs, frameIdSs;
+    batchEntryIdSs << std::setw(5) << std::setfill('0') << _batchEntryId;
+    frameIdSs << std::setw(5) << std::setfill('0') << frameId << ".png";
+
+    fs::path frameFilename = fs::path("temp") / _frameCacheRecordSequenceName / batchEntryIdSs.str() / frameIdSs.str();
+
+    fs::create_directories(frameFilename.parent_path());
+    writeImageToFile(*_frame.read(), frameFilename);
+}
+
+void Trainer::loadSequenceStorageFromFrameCache(int offset)
+{
+    static std::vector<float> frameYUVData(doot2::frameWidth*doot2::frameHeight*
+        getImageFormatNChannels(ImageFormat::YUV)); // external buffer to allow mapping to tensor
+    static Image<float> frameYUV(doot2::frameWidth, doot2::frameHeight, ImageFormat::YUV, frameYUVData.data());
+    static const std::vector<int64_t> frameShape{doot2::frameHeight, doot2::frameWidth,
+        getImageFormatNChannels(ImageFormat::YUV)};
+
+    auto frameCacheSequencePaths = [this](){
+        std::vector<fs::path> paths;
+        for (const auto& s : fs::directory_iterator(_frameCachePath)) {
+            paths.push_back(_frameCachePath / s);
+        }
+        return paths;
+    }();
+
+    int nSequences = _experimentConfig["n_cached_sequences"].get<int>();
+    if (nSequences > frameCacheSequencePaths.size())
+        throw std::runtime_error("Number of sequences requested exceeds the n. of sequences cached\n");
+
+    for (int i=0; i<doot2::sequenceLength; ++i) {
+        auto& base = frameCacheSequencePaths[(offset + i) % nSequences];
+        std::stringstream frameFilename;
+        frameFilename << std::setw(5) << std::setfill('0') << i << ".png";
+        for (int b=0; b<doot2::batchSize; ++b) {
+            std::stringstream batchEntryDir;
+            batchEntryDir << std::setw(5) << std::setfill('0') << b;
+            fs::path filename = base / batchEntryDir.str() / frameFilename.str();
+            //printf("loading from %s\n", filename.c_str());
+
+            auto frame = readImageFromFile<uint8_t>(filename);
+            convertImage(frame, frameYUV, ImageFormat::YUV);
+            _sequenceStorage.getBatch<float>("frame", i)[b] = torch::from_blob(
+                frameYUVData.data(), frameShape, torch::TensorOptions().device(torch::kCPU)
+            );
         }
     }
 }
