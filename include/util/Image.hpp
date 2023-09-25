@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <stb_image.h>
 #include <stb_image_write.h>
 
 #include "Utils.hpp"
@@ -106,6 +107,9 @@ inline Eigen::Matrix<T_Data, T_NChannelsDest, T_NChannelsSrc>
 
 template <typename T_Data>
 inline void writeImageToFile(const Image<T_Data>& image, const std::filesystem::path& filename);
+
+template <typename T_Data>
+inline Image<T_Data> readImageFromFile(const std::filesystem::path& filename);
 
 
 #include "Image.inl"

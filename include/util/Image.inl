@@ -504,3 +504,19 @@ void writeImageToFile(const Image<T_Data>& image, const std::filesystem::path& f
     auto nChannels = getImageFormatNChannels(img.format());
     stbi_write_png(filename.c_str(), img.width(), img.height(), nChannels, img.data(), img.width()*nChannels);
 }
+
+template<typename T_Data>
+Image<T_Data> readImageFromFile(const std::filesystem::path& filename)
+{
+    // TODO extend, only 8/8/8 RGB PNG supported for now
+
+    int w, h, c;
+    unsigned char* data = stbi_load(filename.c_str(), &w, &h, &c, 3);
+    if (data == nullptr)
+        throw std::runtime_error("Unable to load image from " + filename.string() + ": " + stbi_failure_reason());
+    Image<T_Data> img(w, h, ImageFormat::RGB);
+    img.copyFrom(data);
+    stbi_image_free(data);
+
+    return img;
+}
