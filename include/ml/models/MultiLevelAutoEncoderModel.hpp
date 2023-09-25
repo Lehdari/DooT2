@@ -54,6 +54,7 @@ private:
     std::filesystem::path                   _discriminatorFilename;
     std::filesystem::path                   _encodingDiscriminatorFilename;
     std::filesystem::path                   _frameClassifierFilename;
+    std::filesystem::path                   _optimizerStateFilename;
     double                                  _optimizerLearningRate;
     double                                  _optimizerBeta1;
     double                                  _optimizerBeta2;

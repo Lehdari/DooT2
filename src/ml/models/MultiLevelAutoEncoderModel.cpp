@@ -104,6 +104,7 @@ Json MultiLevelAutoEncoderModel::getDefaultModelConfig()
     modelConfig["discriminator_filename"] = "discriminator.pt";
     modelConfig["encoding_discriminator_filename"] = "encoding_discriminator.pt";
     modelConfig["frame_classifier_filename"] = "frame_classifier.pt";
+    modelConfig["optimizer_state_filename"] = "optimizer_state.pt";
     modelConfig["optimizer_learning_rate"] = 0.001;
     modelConfig["optimizer_beta1"] = 0.9;
     modelConfig["optimizer_beta2"] = 0.999;
@@ -248,12 +249,17 @@ void MultiLevelAutoEncoderModel::init(const Json& experimentConfig)
     if (modelConfig.contains("frame_classifier_filename"))
         _frameClassifierFilename = modelConfig["frame_classifier_filename"].get<fs::path>();
 
+    _optimizerStateFilename = "optimizer_state.pt";
+    if (modelConfig.contains("optimizer_state_filename"))
+        _optimizerStateFilename = modelConfig["optimizer_state_filename"].get<fs::path>();
+
     // Separate loading paths in case a base experiment is specified
     fs::path frameEncoderFilename = _frameEncoderFilename;
     fs::path frameDecoderFilename = _frameDecoderFilename;
     fs::path discriminatorFilename = _discriminatorFilename;
     fs::path encodingDiscriminatorFilename = _encodingDiscriminatorFilename;
     fs::path frameClassifierFilename = _frameClassifierFilename;
+    fs::path optimizerStateFilename = _optimizerStateFilename;
     if (experimentConfig.contains("experiment_base_root") && experimentConfig.contains("base_model_config")) {
         fs::path experimentBaseRoot = experimentConfig["experiment_base_root"].get<fs::path>();
         if (experimentConfig["base_model_config"].contains("frame_encoder_filename"))
@@ -271,6 +277,9 @@ void MultiLevelAutoEncoderModel::init(const Json& experimentConfig)
         if (experimentConfig["base_model_config"].contains("frame_classifier_filename"))
             frameClassifierFilename = experimentBaseRoot /
                 experimentConfig["base_model_config"]["frame_classifier_filename"].get<fs::path>();
+        if (experimentConfig["base_model_config"].contains("optimizer_state_filename"))
+            optimizerStateFilename = experimentBaseRoot /
+                experimentConfig["base_model_config"]["optimizer_state_filename"].get<fs::path>();
 
         // Load state parameters from the base experiment
         fs::path stateParamsFilename = experimentBaseRoot / "state_params.json";
@@ -355,6 +364,12 @@ void MultiLevelAutoEncoderModel::init(const Json& experimentConfig)
     // Setup optimizers
     _optimizer = std::make_unique<torch::optim::AdamW>(std::vector<optim::OptimizerParamGroup>
         {_frameEncoder->parameters(), _frameDecoder->parameters()});
+    if (fs::exists(optimizerStateFilename)) {
+        printf("Loading optimizer state from %s\n", optimizerStateFilename.c_str()); // TODO logging
+        serialize::InputArchive inputArchive;
+        inputArchive.load_from(optimizerStateFilename);
+        _optimizer->load(inputArchive);
+    }
     dynamic_cast<torch::optim::AdamWOptions&>(_optimizer->param_groups()[0].options())
         .lr(_optimizerLearningRate)
         .betas({_optimizerBeta1, _optimizerBeta2})
@@ -505,6 +520,15 @@ void MultiLevelAutoEncoderModel::save(const fs::path& subdir)
             serialize::OutputArchive outputArchive;
             _frameClassifier->save(outputArchive);
             outputArchive.save_to(frameClassifierFilename);
+        }
+
+        // Save the optimizer state
+        {
+            fs::path optimizerStateFilename = _experimentRoot / subdir / _optimizerStateFilename;
+            printf("Saving optimizer state to %s\n", optimizerStateFilename.c_str());
+            serialize::OutputArchive outputArchive;
+            _optimizer->save(outputArchive);
+            outputArchive.save_to(optimizerStateFilename);
         }
     }
     catch (const std::exception& e) {
