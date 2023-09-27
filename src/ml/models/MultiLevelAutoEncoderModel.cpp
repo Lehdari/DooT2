@@ -981,6 +981,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
                 // Encoder-decoder backward pass
                 loss.backward();
+                nn::utils::clip_grad_norm_(_frameEncoder->parameters(), 1.0, 2.0, true);
+                nn::utils::clip_grad_norm_(_frameDecoder->parameters(), 1.0, 2.0, true);
 
                 // Display
                 if (b == 0) {
