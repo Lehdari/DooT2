@@ -60,6 +60,13 @@ private:
     double                                  _optimizerBeta2;
     double                                  _optimizerEpsilon;
     double                                  _optimizerWeightDecay;
+    double                                  _optimizerLearningRateInitial;
+    double                                  _optimizerBeta1Initial;
+    double                                  _optimizerWeightDecayInitial;
+    double                                  _optimizerLearningRateFinal;
+    double                                  _optimizerBeta1Final;
+    double                                  _optimizerWeightDecayFinal;
+    int64_t                                 _warmupDuration;
     int64_t                                 _nTrainingCycles; // number of times the sequence collection will be cycled through in each training call
     int64_t                                 _virtualBatchSize; // this many frames will gradients be accumulated over before the optimization step. must be at least 2
     double                                  _frameLossWeight;
@@ -110,6 +117,8 @@ private:
     static void scaleDisplayImages(const MultiLevelImage& orig, MultiLevelImage& image, torch::DeviceType device);
 
     static torch::Tensor createRandomEncodingInterpolations(const torch::Tensor& enc, double extrapolation=0.2);
+
+    void updateTrainingParameters(int64_t nVirtualBatchesPerCycle);
 };
 
 } // namespace ml

@@ -109,7 +109,14 @@ Json MultiLevelAutoEncoderModel::getDefaultModelConfig()
     modelConfig["optimizer_beta1"] = 0.9;
     modelConfig["optimizer_beta2"] = 0.999;
     modelConfig["optimizer_epsilon"] = 1.0e-8;
-    modelConfig["optimizer_weight_decay"] = 0.0001;
+    modelConfig["optimizer_weight_decay"] = 0.05;
+    modelConfig["optimizer_learning_rate_initial"] = 0.0001;
+    modelConfig["optimizer_beta1_initial"] = 0.0;
+    modelConfig["optimizer_weight_decay_initial"] = 0.05;
+    modelConfig["optimizer_learning_rate_final"] = 0.001;
+    modelConfig["optimizer_beta1_final"] = 0.9;
+    modelConfig["optimizer_weight_decay_final"] = 0.05;
+    modelConfig["warmup_duration"] = 1000;
     modelConfig["n_training_cycles"] = 4;
     modelConfig["virtual_batch_size"] = 8;
     modelConfig["frame_loss_weight"] = 4.0;
@@ -151,7 +158,14 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
     _optimizerBeta1                     (0.9),
     _optimizerBeta2                     (0.999),
     _optimizerEpsilon                   (1.0e-8),
-    _optimizerWeightDecay               (0.0001),
+    _optimizerWeightDecay               (0.05),
+    _optimizerLearningRateInitial       (0.0001),
+    _optimizerBeta1Initial              (0.0),
+    _optimizerWeightDecayInitial        (0.05),
+    _optimizerLearningRateFinal         (0.001),
+    _optimizerBeta1Final                (0.9),
+    _optimizerWeightDecayFinal          (0.05),
+    _warmupDuration                     (1000),
     _nTrainingCycles                    (4),
     _virtualBatchSize                   (8),
     _frameLossWeight                    (3.0),
@@ -196,6 +210,13 @@ void MultiLevelAutoEncoderModel::init(const Json& experimentConfig)
     _optimizerBeta2 = modelConfig["optimizer_beta2"];
     _optimizerEpsilon = modelConfig["optimizer_epsilon"];
     _optimizerWeightDecay = modelConfig["optimizer_weight_decay"];
+    _optimizerLearningRateInitial = modelConfig["optimizer_learning_rate_initial"];
+    _optimizerBeta1Initial = modelConfig["optimizer_beta1_initial"];
+    _optimizerWeightDecayInitial = modelConfig["optimizer_weight_decay_initial"];
+    _optimizerLearningRateFinal = modelConfig["optimizer_learning_rate_final"];
+    _optimizerBeta1Final = modelConfig["optimizer_beta1_final"];
+    _optimizerWeightDecayFinal = modelConfig["optimizer_weight_decay_final"];
+    _warmupDuration = modelConfig["warmup_duration"];
     _nTrainingCycles = modelConfig["n_training_cycles"];
     _virtualBatchSize = modelConfig["virtual_batch_size"];
     _frameLossWeight = modelConfig["frame_loss_weight"];
@@ -428,6 +449,9 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         timeSeriesWriteHandle->addSeries<double>("auxiliaryLosses", 0.0);
         timeSeriesWriteHandle->addSeries<double>("loss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("lossLevel", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("optimizerLearningRate", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("optimizerBeta1", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("optimizerWeightDecay", 0.0);
         timeSeriesWriteHandle->addSeries<double>("maxEncodingCovariance", 0.0);
     }
     // Initialize images
@@ -1174,6 +1198,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 }
             }
 
+            // Update training parameters according to scheduling
+            updateTrainingParameters(nVirtualBatchesPerCycle);
             ++_trainingIteration;
 
             // Apply gradients
@@ -1248,6 +1274,9 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 "auxiliaryLosses", auxiliaryLossesAcc,
                 "loss", lossAcc,
                 "lossLevel", _lossLevel,
+                "optimizerLearningRate", _optimizerLearningRate,
+                "optimizerBeta1", _optimizerBeta1,
+                "optimizerWeightDecay", _optimizerWeightDecay,
                 "maxEncodingCovariance", maxEncodingCovariance
             );
         }
@@ -1369,4 +1398,24 @@ torch::Tensor MultiLevelAutoEncoderModel::createRandomEncodingInterpolations(con
 
     torch::Tensor basis = positiveBasis*(1.0+2.0*extrapolation) - negativeBasis*(2.0*extrapolation);
     return basis.matmul(enc);
+}
+
+void MultiLevelAutoEncoderModel::updateTrainingParameters(int64_t nVirtualBatchesPerCycle)
+{
+    double iterationNormalized = (double)_trainingIteration / nVirtualBatchesPerCycle;
+    double warmupFactor = 0.5-0.5*std::cos(std::min(iterationNormalized / _warmupDuration, 1.0)*M_PI);
+
+    _optimizerLearningRate = _optimizerLearningRateInitial + warmupFactor*
+        (_optimizerLearningRateFinal-_optimizerLearningRateInitial);
+    _optimizerBeta1 = _optimizerBeta1Initial + warmupFactor*
+        (_optimizerBeta1Final-_optimizerBeta1Initial);
+    _optimizerWeightDecay = _optimizerWeightDecayInitial + warmupFactor*
+        (_optimizerWeightDecayFinal-_optimizerWeightDecayInitial);
+
+    for (auto& group : _optimizer->param_groups()) {
+        dynamic_cast<torch::optim::AdamWOptions&>(group.options())
+            .lr(_optimizerLearningRate)
+            .betas({_optimizerBeta1, _optimizerBeta2})
+            .weight_decay(_optimizerWeightDecay);
+    }
 }
