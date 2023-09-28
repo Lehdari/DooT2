@@ -1005,8 +1005,6 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
                 // Encoder-decoder backward pass
                 loss.backward();
-                nn::utils::clip_grad_norm_(_frameEncoder->parameters(), 1.0, 2.0, true);
-                nn::utils::clip_grad_norm_(_frameDecoder->parameters(), 1.0, 2.0, true);
 
                 // Display
                 if (b == 0) {
@@ -1201,6 +1199,10 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
             // Update training parameters according to scheduling
             updateTrainingParameters(nVirtualBatchesPerCycle);
             ++_trainingIteration;
+
+            // Clip the gradients
+            nn::utils::clip_grad_norm_(_frameEncoder->parameters(), 1.0, 2.0, true);
+            nn::utils::clip_grad_norm_(_frameDecoder->parameters(), 1.0, 2.0, true);
 
             // Apply gradients
             _optimizer->step();
