@@ -82,6 +82,8 @@ void Trainer::loop()
     int epoch = 0;
     _quit = false;
     while (!_quit) {
+        printf("Epoch %d\n", epoch); fflush(stdout);
+
         // Training
         {
             refreshSequenceStorage(epoch); // Load new sequences for training
@@ -299,16 +301,13 @@ void Trainer::refreshSequenceStorage(int epoch, bool evaluation)
 {
     if (_experimentConfig.contains("use_sequence_cache") &&
         _experimentConfig["use_sequence_cache"].get<bool>()) {
-        printf("Using sequence cache\n"); fflush(stdout);
         // Using sequence cache
         if (evaluation) {
             // Evaluation sequences requested
             if (_sequenceCache.nAvailableSequences(SequenceCache::Type::FRAME_ENCODING_EVALUATION) < 1) {
                 // Cache does not have enough sequences, record new ones until it does
-                printf("Not enough evaluation sequences in the cache, recording new ones\n"); fflush(stdout);
                 recordEvaluationSequences();
             }
-            printf("Loading evaluation sequences\n"); fflush(stdout);
             _sequenceCache.loadFramesToStorage(_sequenceStorage, SequenceCache::Type::FRAME_ENCODING_EVALUATION,
                 "frame", 1, epoch);
         }
@@ -317,10 +316,8 @@ void Trainer::refreshSequenceStorage(int epoch, bool evaluation)
             if (_sequenceCache.nAvailableSequences(SequenceCache::Type::FRAME_ENCODING_TRAINING_NORMAL) <
                 _experimentConfig["n_cached_sequences"]) {
                 // Cache does not have enough sequences, record new ones until it does
-                printf("Not enough training sequences in the cache, recording new ones\n"); fflush(stdout);
                 recordTrainingSequences();
             }
-            printf("Loading training sequences\n"); fflush(stdout);
             _sequenceCache.loadFramesToStorage(_sequenceStorage, SequenceCache::Type::FRAME_ENCODING_TRAINING_NORMAL,
                 "frame", _experimentConfig["n_cached_sequences"].get<int>(), epoch);
         }
