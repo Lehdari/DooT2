@@ -14,6 +14,7 @@
 #include "ActionConverter.hpp"
 #include "ml/TrainingInfo.hpp"
 #include "util/Image.hpp"
+#include "util/SequenceCache.hpp"
 #include "util/SequenceStorage.hpp"
 #include "util/SingleBuffer.hpp"
 #include "Constants.hpp"
@@ -73,14 +74,12 @@ private:
     std::atomic_bool                _finished; // loop() finished, waiting to join
     ActionConverter<float>          _actionConverter;
     SequenceStorage                 _sequenceStorage;
-    SingleBuffer<Image<uint8_t>>    _frame;
+    SequenceCache                   _sequenceCache;
+    SingleBuffer<Image<uint8_t>>    _frameRGB;
+    std::vector<float>              _frameYUVData;
+    Image<float>                    _frameYUV;
     nlohmann::json                  _experimentConfig;
     TrainingInfo                    _trainingInfo;
-    std::filesystem::path           _frameCachePath;
-    std::string                     _frameCacheRecordSequenceName;
-
-    size_t                          _batchEntryId;
-    bool                            _newPatchReady;
 
     std::unique_ptr<Model>          _model;
     Model*                          _agentModel;
@@ -90,17 +89,19 @@ private:
     Vec3f                           _playerInitPos;
     float                           _playerDistanceThreshold; // distance from start to start recording
 
+    void refreshSequenceStorage(int epoch, bool evaluation = false); // load new sequences to _sequenceStorage
+    void recordTrainingSequences();
+    void recordEvaluationSequences();
+    bool isEvaluationEpoch(int epoch) const;
+    bool terminationEpochReached(int epoch) const;
+    void updateCache(int epoch);
+
+    bool gameStep();
     bool startRecording();
-    void nextMap(size_t newBatchEntryId = 0, bool evaluating = false); // proceed to next map
+    int nextMap(bool evaluation = false); // proceed to next map, returns the map ID
     void evaluateModel();
     void createExperimentDirectories() const;
     void loadBaseExperimentTrainingInfo();
-
-    // Frame cache handling functions
-    int nFrameCacheSequences();
-    bool recordingToCache();
-    void recordFrameToCache(int frameId);
-    void loadSequenceStorageFromFrameCache(int offset);
 };
 
 } // namespace ml

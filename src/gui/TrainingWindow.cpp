@@ -120,9 +120,9 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
             // Task options
             if (_guiState->trainingTask == State::TrainingTask::FRAME_ENCODING) {
                 ImGui::Text("Frame encoding task options:");
-                ImGui::Checkbox("Use frame cache", &_guiState->useFrameCache);
-                if (_guiState->useFrameCache) {
-                    ImGui::InputText("Frame cache path", &_guiState->frameCachePath);
+                ImGui::Checkbox("Use sequence cache", &_guiState->useSequenceCache);
+                if (_guiState->useSequenceCache) {
+                    ImGui::InputText("Sequence cache path", &_guiState->sequenceCachePath);
                     ImGui::SetNextItemWidth(fontSize * 10.0f);
                     ImGui::InputInt("N. of cached sequences", &_guiState->nCachedSequences);
                 }
@@ -381,10 +381,10 @@ void gui::TrainingWindow::applyConfig(const nlohmann::json& config)
         _guiState->trainingTask = static_cast<State::TrainingTask>(config["trainingTask"].get<int32_t>());
     if (config.contains("modelTypeName"))
         _guiState->modelTypeName = config["modelTypeName"].get<std::string>();
-    if (config.contains("useFrameCache"))
-        _guiState->useFrameCache = config["useFrameCache"].get<bool>();
-    if (config.contains("frameCachePath"))
-        _guiState->frameCachePath = config["frameCachePath"].get<std::string>();
+    if (config.contains("useSequenceCache"))
+        _guiState->useSequenceCache = config["useSequenceCache"].get<bool>();
+    if (config.contains("sequenceCachePath"))
+        _guiState->sequenceCachePath = config["sequenceCachePath"].get<std::string>();
     if (config.contains("nCachedSequences"))
         _guiState->nCachedSequences = config["nCachedSequences"].get<int32_t>();
 
@@ -396,8 +396,8 @@ nlohmann::json gui::TrainingWindow::getConfig() const
     config["experimentName"] = _guiState->experimentName;
     config["trainingTask"] = _guiState->trainingTask;
     config["modelTypeName"] = _guiState->modelTypeName;
-    config["useFrameCache"] = _guiState->useFrameCache;
-    config["frameCachePath"] = _guiState->frameCachePath;
+    config["useSequenceCache"] = _guiState->useSequenceCache;
+    config["sequenceCachePath"] = _guiState->sequenceCachePath;
     config["nCachedSequences"] = _guiState->nCachedSequences;
     return config;
 }
@@ -420,16 +420,16 @@ void gui::TrainingWindow::parseBaseExperimentConfig(const std::filesystem::path&
     else
         printf("WARNING: No model_type specified in the base experiment config\n"); // TODO logging
 
-    if (_guiState->baseExperimentConfig.contains("use_frame_cache"))
-        _guiState->useFrameCache = _guiState->baseExperimentConfig["use_frame_cache"];
+    if (_guiState->baseExperimentConfig.contains("use_sequence_cache"))
+        _guiState->useSequenceCache = _guiState->baseExperimentConfig["use_sequence_cache"];
     else
-        printf("WARNING: No use_frame_cache specified in the base experiment config\n"); // TODO logging
+        printf("WARNING: No use_sequence_cache specified in the base experiment config\n"); // TODO logging
 
-    if (_guiState->useFrameCache) {
-        if (_guiState->baseExperimentConfig.contains("frame_cache_path"))
-            _guiState->frameCachePath = _guiState->baseExperimentConfig["frame_cache_path"];
+    if (_guiState->useSequenceCache) {
+        if (_guiState->baseExperimentConfig.contains("sequence_cache_path"))
+            _guiState->sequenceCachePath = _guiState->baseExperimentConfig["sequence_cache_path"];
         else
-            printf("WARNING: No frame_cache_path specified in the base experiment config\n"); // TODO logging
+            printf("WARNING: No sequence_cache_path specified in the base experiment config\n"); // TODO logging
 
         if (_guiState->baseExperimentConfig.contains("n_cached_sequences"))
             _guiState->nCachedSequences = _guiState->baseExperimentConfig["n_cached_sequences"];

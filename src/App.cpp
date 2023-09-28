@@ -230,10 +230,11 @@ void App::updateExperimentConfig(nlohmann::json& experimentConfig)
     // task-specific entries
     switch (_gui.getState().trainingTask) {
         case gui::State::TrainingTask::FRAME_ENCODING: {
-            experimentConfig["use_frame_cache"] = _gui.getState().useFrameCache;
-            if (_gui.getState().useFrameCache) {
-                experimentConfig["frame_cache_path"] = _gui.getState().frameCachePath;
+            experimentConfig["use_sequence_cache"] = _gui.getState().useSequenceCache;
+            if (_gui.getState().useSequenceCache) {
+                experimentConfig["sequence_cache_path"] = _gui.getState().sequenceCachePath;
                 experimentConfig["n_cached_sequences"] = _gui.getState().nCachedSequences;
+                experimentConfig["sequence_cache_training_record_interval"] = 64;
             }
         }   break;
         case gui::State::TrainingTask::AGENT_POLICY: {
