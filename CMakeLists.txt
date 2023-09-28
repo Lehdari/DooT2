@@ -54,6 +54,7 @@ set(DOOT2_ML_SOURCES
 set(DOOT2_UTIL_SOURCES
     src/util/ExperimentUtils.cpp
     src/util/Image.cpp
+    src/util/SequenceCache.cpp
     src/util/SequenceStorage.cpp
     src/util/TensorUtils.cpp
     src/util/TimeSeries.cpp
