@@ -98,6 +98,7 @@ void Trainer::loop()
         if (isEvaluationEpoch(epoch)) {
             refreshSequenceStorage(epoch, true); // Load new sequences for evaluation
             _model->waitForTrainingFinished();
+            saveExperiment();
             evaluateModel();
         }
 
