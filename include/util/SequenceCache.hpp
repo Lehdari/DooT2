@@ -15,6 +15,8 @@
 #include <vector>
 #include <unordered_map>
 
+#include "Image.hpp"
+
 
 class SequenceStorage;
 template <typename T_Data>
@@ -33,18 +35,32 @@ public:
 
     uint64_t nAvailableSequences(Type cacheType) const;
 
-    void recordEntry(Type cacheType, int batchId, int frameId, const Image<uint8_t>& image);
+    void recordEntry(
+        Type cacheType,
+        std::string_view sequenceName,
+        int batchId,
+        int frameId,
+        const Image<uint8_t>& image);
     //void recordEntry(Type cacheType, int batchId, int frameId, ...); // TODO add these for other entry types
     void finishRecord(Type cacheType);
     void deleteOldest(Type cacheType);
 
-    void loadToStorage(SequenceStorage& sequenceStorage, Type cacheType, int nSequences, int offset);
+    void loadFramesToStorage(
+        SequenceStorage& sequenceStorage,
+        Type cacheType,
+        std::string_view sequenceName,
+        int nSequences,
+        int offset);
 
 private:
     static std::unordered_map<Type, std::filesystem::path>  typeSubPath;
 
     std::filesystem::path                   _cachePath;
     std::unordered_map<Type, std::string>   _recordSequenceNames;
+    std::vector<float>                      _frameYUVData;
+    Image<float>                            _frameYUV;
+    std::vector<int64_t>                    _frameShape;
 
     void newRecordSequenceName(Type cacheType);
+    void initializeYUVFrame(int width, int height);
 };

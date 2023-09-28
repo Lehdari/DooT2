@@ -308,7 +308,8 @@ void Trainer::refreshSequenceStorage(int epoch, bool evaluation)
                 recordEvaluationSequences();
             }
             printf("Loading evaluation sequences\n"); fflush(stdout);
-            _sequenceCache.loadToStorage(_sequenceStorage, SequenceCache::Type::FRAME_ENCODING_EVALUATION, 1, epoch);
+            _sequenceCache.loadFramesToStorage(_sequenceStorage, SequenceCache::Type::FRAME_ENCODING_EVALUATION,
+                "frame", 1, epoch);
         }
         else {
             // Training sequences requested
@@ -319,8 +320,8 @@ void Trainer::refreshSequenceStorage(int epoch, bool evaluation)
                 recordTrainingSequences();
             }
             printf("Loading training sequences\n"); fflush(stdout);
-            _sequenceCache.loadToStorage(_sequenceStorage, SequenceCache::Type::FRAME_ENCODING_TRAINING_NORMAL,
-                _experimentConfig["n_cached_sequences"].get<int>(), epoch);
+            _sequenceCache.loadFramesToStorage(_sequenceStorage, SequenceCache::Type::FRAME_ENCODING_TRAINING_NORMAL,
+                "frame", _experimentConfig["n_cached_sequences"].get<int>(), epoch);
         }
     }
     else {
@@ -350,8 +351,8 @@ void Trainer::recordTrainingSequences()
                 }
 
                 // Record the frame
-                _sequenceCache.recordEntry(SequenceCache::Type::FRAME_ENCODING_TRAINING_NORMAL, b, i,
-                    *_frameRGB.read());
+                _sequenceCache.recordEntry(SequenceCache::Type::FRAME_ENCODING_TRAINING_NORMAL,
+                    "frame", b, i, *_frameRGB.read());
             }
 
             if (aborted)
@@ -386,8 +387,8 @@ void Trainer::recordEvaluationSequences()
                 }
 
                 // Record the frame
-                _sequenceCache.recordEntry(SequenceCache::Type::FRAME_ENCODING_EVALUATION, b, i,
-                    *_frameRGB.read());
+                _sequenceCache.recordEntry(SequenceCache::Type::FRAME_ENCODING_EVALUATION,
+                    "frame", b, i, *_frameRGB.read());
             }
 
             if (aborted)

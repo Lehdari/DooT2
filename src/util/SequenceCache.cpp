@@ -44,15 +44,20 @@ uint64_t SequenceCache::nAvailableSequences(SequenceCache::Type cacheType) const
     return n;
 }
 
-void SequenceCache::recordEntry(SequenceCache::Type cacheType, int batchId, int frameId, const Image<uint8_t>& image)
-{
+void SequenceCache::recordEntry(
+    SequenceCache::Type cacheType,
+    std::string_view sequenceName,
+    int batchId,
+    int frameId,
+    const Image<uint8_t>& image
+) {
     newRecordSequenceName(cacheType);
 
     std::stringstream batchEntryIdSs, frameIdSs;
     batchEntryIdSs << std::setw(5) << std::setfill('0') << batchId;
     frameIdSs << std::setw(5) << std::setfill('0') << frameId << ".png";
 
-    fs::path frameFilename = fs::path("temp") / _recordSequenceNames[cacheType] / batchEntryIdSs.str() /
+    fs::path frameFilename = fs::path("temp") / _recordSequenceNames[cacheType] / sequenceName / batchEntryIdSs.str() /
         frameIdSs.str();
 
     fs::create_directories(frameFilename.parent_path());
@@ -86,18 +91,13 @@ void SequenceCache::deleteOldest(SequenceCache::Type cacheType)
     fs::remove_all(sequencePaths[0]);
 }
 
-void SequenceCache::loadToStorage(
+void SequenceCache::loadFramesToStorage(
     SequenceStorage& sequenceStorage,
-    SequenceCache::Type cacheType,
+    Type cacheType,
+    std::string_view sequenceName,
     int nSequences,
     int offset
 ) {
-    static std::vector<float> frameYUVData(doot2::frameWidth*doot2::frameHeight*
-    getImageFormatNChannels(ImageFormat::YUV)); // external buffer to allow mapping to tensor
-    static Image<float> frameYUV(doot2::frameWidth, doot2::frameHeight, ImageFormat::YUV, frameYUVData.data());
-    static const std::vector<int64_t> frameShape{doot2::frameHeight, doot2::frameWidth,
-        getImageFormatNChannels(ImageFormat::YUV)};
-
     auto sequencePaths = [&](){
         std::vector<fs::path> paths;
         for (const auto& s : fs::directory_iterator(_cachePath / typeSubPath[cacheType])) {
@@ -109,6 +109,7 @@ void SequenceCache::loadToStorage(
     if (nSequences > sequencePaths.size())
         throw std::runtime_error("Number of sequences requested exceeds the n. of sequences cached\n");
 
+    bool firstImageLoaded = false;
     for (int i=0; i<doot2::sequenceLength; ++i) {
         auto& base = sequencePaths[(offset + i) % nSequences];
         std::stringstream frameFilename;
@@ -116,13 +117,17 @@ void SequenceCache::loadToStorage(
         for (int b=0; b<doot2::batchSize; ++b) {
             std::stringstream batchEntryDir;
             batchEntryDir << std::setw(5) << std::setfill('0') << b;
-            fs::path filename = base / batchEntryDir.str() / frameFilename.str();
+            fs::path filename = base / sequenceName / batchEntryDir.str() / frameFilename.str();
             //printf("loading from %s\n", filename.c_str());
 
             auto frame = readImageFromFile<uint8_t>(filename);
-            convertImage(frame, frameYUV, ImageFormat::YUV);
-            sequenceStorage.getBatch<float>("frame", i)[b] = torch::from_blob(
-                frameYUVData.data(), frameShape, torch::TensorOptions().device(torch::kCPU)
+            if (!firstImageLoaded) {
+                initializeYUVFrame(frame.width(), frame.height());
+                firstImageLoaded = true;
+            }
+            convertImage(frame, _frameYUV, ImageFormat::YUV);
+            sequenceStorage.getBatch<float>(std::string(sequenceName), i)[b] = torch::from_blob(
+                _frameYUVData.data(), _frameShape, torch::TensorOptions().device(torch::kCPU)
             );
         }
     }
@@ -137,4 +142,11 @@ void SequenceCache::newRecordSequenceName(Type cacheType)
         ss << std::put_time(std::gmtime(&now), "%Y%m%dT%H%M%S");
         _recordSequenceNames[cacheType] = ss.str();
     }
+}
+
+void SequenceCache::initializeYUVFrame(int width, int height)
+{
+    _frameYUVData.resize(width*height*getImageFormatNChannels(ImageFormat::YUV));
+    _frameYUV = Image<float>(width, height, ImageFormat::YUV, _frameYUVData.data());
+    _frameShape = { height, width, getImageFormatNChannels(ImageFormat::YUV) };
 }
