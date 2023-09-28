@@ -882,16 +882,15 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 // Encoding mask loss
                 torch::Tensor encodingMaskLoss = zero;
                 /* if (_useEncodingMaskLoss) */{
-                    double _encodingMaskLossWeight = std::pow(0.25, _lossLevel);
+                    double _encodingMaskLossWeight = std::pow(0.5, _lossLevel);
                     auto [encMaskVar, encMaskMean] = torch::var_mean(encMask, 0);
                     double targetMaskVar = 0.01;
-                    double targetMaskMean = 0.3+std::clamp(_lossLevel/5.0, 0.0, 1.0)*0.6; // from 0.3 to 0.9
+                    double targetMaskMean = 0.25+std::clamp(_lossLevel/5.0, 0.0, 1.0)*0.65; // from 0.25 to 0.9
                     encodingMaskLoss = _encodingMaskLossWeight * (
-                        torch::mse_loss(encMaskVar, targetMaskVar*torch::ones_like(encMaskVar)) +
+                        10.0*torch::mse_loss(encMaskVar, targetMaskVar*torch::ones_like(encMaskVar)) +
                         torch::mse_loss(encMaskMean, targetMaskMean*torch::ones_like(encMaskMean))
                     );
                 }
-
                 encodingMaskLossAcc += encodingMaskLoss.item<double>();
 
                 // stop gradient from flowing to the previous iteration
