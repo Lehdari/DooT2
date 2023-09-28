@@ -55,9 +55,11 @@ struct State {
         AGENT_POLICY = 1
     }               trainingTask                {TrainingTask::FRAME_ENCODING};
     std::string     modelTypeName               {"AutoEncoderModel"}; // type name of the model to be trained
+    int32_t         evaluationInterval          {16}; // the performance of the model will be evaluated between this many epochs
     bool            useSequenceCache            {false}; // Flag on whether to use cached frames on the frame encoding task
     std::string     sequenceCachePath           {"sequence_cache/"};
-    int32_t         nCachedSequences            {1}; // number of cached sequences to use on the frame encoding task
+    int32_t         nCachedSequences            {1}; // number of different cached sequences to use when using sequence cache
+    int32_t         sequenceCacheRecordInterval {64}; // replace the oldest training sequence batch between this many epochs
     bool            gridSearch                  {false};
     nlohmann::json  gridSearchModelConfigParams;
 };

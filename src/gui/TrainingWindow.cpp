@@ -117,6 +117,9 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
 
             ImGui::EndDisabled(); // !_guiState->experimentBase.empty()
 
+            ImGui::SetNextItemWidth(fontSize * 10.0f);
+            ImGui::InputInt("Model evaluation interval", &_guiState->evaluationInterval);
+
             // Task options
             if (_guiState->trainingTask == State::TrainingTask::FRAME_ENCODING) {
                 ImGui::Text("Frame encoding task options:");
@@ -125,6 +128,8 @@ void gui::TrainingWindow::render(ml::Trainer* trainer)
                     ImGui::InputText("Sequence cache path", &_guiState->sequenceCachePath);
                     ImGui::SetNextItemWidth(fontSize * 10.0f);
                     ImGui::InputInt("N. of cached sequences", &_guiState->nCachedSequences);
+                    ImGui::SetNextItemWidth(fontSize * 10.0f);
+                    ImGui::InputInt("Training data record interval", &_guiState->sequenceCacheRecordInterval);
                 }
             }
             else {
@@ -381,13 +386,16 @@ void gui::TrainingWindow::applyConfig(const nlohmann::json& config)
         _guiState->trainingTask = static_cast<State::TrainingTask>(config["trainingTask"].get<int32_t>());
     if (config.contains("modelTypeName"))
         _guiState->modelTypeName = config["modelTypeName"].get<std::string>();
+    if (config.contains("evaluationInterval"))
+        _guiState->evaluationInterval = config["evaluationInterval"].get<int32_t>();
     if (config.contains("useSequenceCache"))
         _guiState->useSequenceCache = config["useSequenceCache"].get<bool>();
     if (config.contains("sequenceCachePath"))
         _guiState->sequenceCachePath = config["sequenceCachePath"].get<std::string>();
     if (config.contains("nCachedSequences"))
         _guiState->nCachedSequences = config["nCachedSequences"].get<int32_t>();
-
+    if (config.contains("sequenceCacheRecordInterval"))
+        _guiState->sequenceCacheRecordInterval = config["sequenceCacheRecordInterval"].get<int32_t>();
 }
 
 nlohmann::json gui::TrainingWindow::getConfig() const
@@ -396,9 +404,11 @@ nlohmann::json gui::TrainingWindow::getConfig() const
     config["experimentName"] = _guiState->experimentName;
     config["trainingTask"] = _guiState->trainingTask;
     config["modelTypeName"] = _guiState->modelTypeName;
+    config["evaluationInterval"] = _guiState->evaluationInterval;
     config["useSequenceCache"] = _guiState->useSequenceCache;
     config["sequenceCachePath"] = _guiState->sequenceCachePath;
     config["nCachedSequences"] = _guiState->nCachedSequences;
+    config["sequenceCacheRecordInterval"] = _guiState->sequenceCacheRecordInterval;
     return config;
 }
 
