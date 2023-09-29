@@ -669,8 +669,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     const int sequenceLength = (int)storage.length();
 
     // Load the whole storage's pixel data to the GPU
-    auto* storageFrames = storage.getSequence<float>("frame");
-    auto seq = scaleSequences(storageFrames, sequenceLength);
+    auto seq = scaleSequences(storage);
 
     // Random sample the pixel diff to get an approximation
     if (_useEncodingDistanceLoss) {
@@ -1310,46 +1309,98 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     at::autocast::set_enabled(false);
 }
 
-MultiLevelImage MultiLevelAutoEncoderModel::scaleSequences(
-    const Sequence<float>* storageFrames, int sequenceLength)
+MultiLevelImage MultiLevelAutoEncoderModel::scaleSequences(const SequenceStorage& storage)
 {
-    assert(storageFrames != nullptr);
     MultiLevelImage image;
-    image.img7 = storageFrames->tensor().to(_device, torch::kBFloat16).permute({0, 1, 4, 2, 3}); // permute into TBCHW
-    assert(image.img7.sizes()[0] == sequenceLength);
+    const auto* storageFrames7 = storage.getSequence<float>("frame");
+    const auto* storageFrames6 = storage.getSequence<float>("frame6");
+    const auto* storageFrames5 = storage.getSequence<float>("frame5");
+    const auto* storageFrames4 = storage.getSequence<float>("frame4");
+    const auto* storageFrames3 = storage.getSequence<float>("frame3");
+    const auto* storageFrames2 = storage.getSequence<float>("frame2");
+    const auto* storageFrames1 = storage.getSequence<float>("frame1");
+    const auto* storageFrames0 = storage.getSequence<float>("frame0");
+
+    image.img7 = storageFrames7->tensor().to(_device, torch::kBFloat16).permute({0, 1, 4, 2, 3}); // permute into TBCHW
+    assert(image.img7.sizes()[0] == storage.length());
 
     // Create scaled sequence data
-    // Initialize to zeros
-    image.img6 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 240, 320},
-        TensorOptions().device(_device).dtype(torch::kBFloat16));
-    image.img5 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 120, 160},
-        TensorOptions().device(_device).dtype(torch::kBFloat16));
-    image.img4 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 60, 80},
-        TensorOptions().device(_device).dtype(torch::kBFloat16));
-    image.img3 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 30, 40},
-        TensorOptions().device(_device).dtype(torch::kBFloat16));
-    image.img2 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 15, 20},
-        TensorOptions().device(_device).dtype(torch::kBFloat16));
-    image.img1 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 15, 10},
-        TensorOptions().device(_device).dtype(torch::kBFloat16));
-    image.img0 = torch::zeros({sequenceLength, image.img7.sizes()[1], image.img7.sizes()[2], 5, 5},
-        TensorOptions().device(_device).dtype(torch::kBFloat16));
-
-    for (int t=0; t<sequenceLength; ++t) {
-        image.img6.index_put_({t}, tf::interpolate(image.img7.index({t}), tf::InterpolateFuncOptions()
-            .size(std::vector<long>{240, 320}).mode(kArea)));
-        image.img5.index_put_({t}, tf::interpolate(image.img6.index({t}), tf::InterpolateFuncOptions()
-            .size(std::vector<long>{120, 160}).mode(kArea)));
-        image.img4.index_put_({t}, tf::interpolate(image.img5.index({t}), tf::InterpolateFuncOptions()
-            .size(std::vector<long>{60, 80}).mode(kArea)));
-        image.img3.index_put_({t}, tf::interpolate(image.img4.index({t}), tf::InterpolateFuncOptions()
-            .size(std::vector<long>{30, 40}).mode(kArea)));
-        image.img2.index_put_({t}, tf::interpolate(image.img3.index({t}), tf::InterpolateFuncOptions()
-            .size(std::vector<long>{15, 20}).mode(kArea)));
-        image.img1.index_put_({t}, tf::interpolate(image.img2.index({t}), tf::InterpolateFuncOptions()
-            .size(std::vector<long>{15, 10}).mode(kArea)));
-        image.img0.index_put_({t}, tf::interpolate(image.img1.index({t}), tf::InterpolateFuncOptions()
-            .size(std::vector<long>{5, 5}).mode(kArea)));
+    if (storageFrames6 != nullptr) {
+        image.img6 = storageFrames6->tensor().to(_device, torch::kBFloat16).permute({0, 1, 4, 2, 3}); // permute into TBCHW
+        assert(image.img6.sizes()[0] == storage.length());
+    }
+    else {
+        image.img6 = torch::zeros({(long)storage.length(), image.img7.sizes()[1], image.img7.sizes()[2], 240, 320},
+            TensorOptions().device(_device).dtype(torch::kBFloat16));
+        for (int t = 0; t < storage.length(); ++t)
+            image.img6.index_put_({t}, tf::interpolate(image.img7.index({t}), tf::InterpolateFuncOptions()
+                .size(std::vector<long>{240, 320}).mode(kArea)));
+    }
+    if (storageFrames5 != nullptr) {
+        image.img5 = storageFrames5->tensor().to(_device, torch::kBFloat16).permute({0, 1, 4, 2, 3}); // permute into TBCHW
+        assert(image.img5.sizes()[0] == storage.length());
+    }
+    else {
+        image.img5 = torch::zeros({(long)storage.length(), image.img7.sizes()[1], image.img7.sizes()[2], 120, 160},
+            TensorOptions().device(_device).dtype(torch::kBFloat16));
+        for (int t = 0; t < storage.length(); ++t)
+            image.img5.index_put_({t}, tf::interpolate(image.img6.index({t}), tf::InterpolateFuncOptions()
+                .size(std::vector<long>{120, 160}).mode(kArea)));
+    }
+    if (storageFrames4 != nullptr) {
+        image.img4 = storageFrames4->tensor().to(_device, torch::kBFloat16).permute({0, 1, 4, 2, 3}); // permute into TBCHW
+        assert(image.img4.sizes()[0] == storage.length());
+    }
+    else {
+        image.img4 = torch::zeros({(long)storage.length(), image.img7.sizes()[1], image.img7.sizes()[2], 60, 80},
+            TensorOptions().device(_device).dtype(torch::kBFloat16));
+        for (int t = 0; t < storage.length(); ++t)
+            image.img4.index_put_({t}, tf::interpolate(image.img5.index({t}), tf::InterpolateFuncOptions()
+                .size(std::vector<long>{60, 80}).mode(kArea)));
+    }
+    if (storageFrames3 != nullptr) {
+        image.img3 = storageFrames3->tensor().to(_device, torch::kBFloat16).permute({0, 1, 4, 2, 3}); // permute into TBCHW
+        assert(image.img3.sizes()[0] == storage.length());
+    }
+    else {
+        image.img3 = torch::zeros({(long)storage.length(), image.img7.sizes()[1], image.img7.sizes()[2], 30, 40},
+            TensorOptions().device(_device).dtype(torch::kBFloat16));
+        for (int t = 0; t < storage.length(); ++t)
+            image.img3.index_put_({t}, tf::interpolate(image.img4.index({t}), tf::InterpolateFuncOptions()
+                .size(std::vector<long>{30, 40}).mode(kArea)));
+    }
+    if (storageFrames2 != nullptr) {
+        image.img2 = storageFrames2->tensor().to(_device, torch::kBFloat16).permute({0, 1, 4, 2, 3}); // permute into TBCHW
+        assert(image.img2.sizes()[0] == storage.length());
+    }
+    else {
+        image.img2 = torch::zeros({(long)storage.length(), image.img7.sizes()[1], image.img7.sizes()[2], 15, 20},
+            TensorOptions().device(_device).dtype(torch::kBFloat16));
+        for (int t = 0; t < storage.length(); ++t)
+            image.img2.index_put_({t}, tf::interpolate(image.img3.index({t}), tf::InterpolateFuncOptions()
+                .size(std::vector<long>{15, 20}).mode(kArea)));
+    }
+    if (storageFrames1 != nullptr) {
+        image.img1 = storageFrames1->tensor().to(_device, torch::kBFloat16).permute({0, 1, 4, 2, 3}); // permute into TBCHW
+        assert(image.img1.sizes()[0] == storage.length());
+    }
+    else {
+        image.img1 = torch::zeros({(long)storage.length(), image.img7.sizes()[1], image.img7.sizes()[2], 15, 10},
+            TensorOptions().device(_device).dtype(torch::kBFloat16));
+        for (int t = 0; t < storage.length(); ++t)
+            image.img1.index_put_({t}, tf::interpolate(image.img2.index({t}), tf::InterpolateFuncOptions()
+                .size(std::vector<long>{15, 10}).mode(kArea)));
+    }
+    if (storageFrames0 != nullptr) {
+        image.img0 = storageFrames0->tensor().to(_device, torch::kBFloat16).permute({0, 1, 4, 2, 3}); // permute into TBCHW
+        assert(image.img0.sizes()[0] == storage.length());
+    }
+    else {
+        image.img0 = torch::zeros({(long)storage.length(), image.img7.sizes()[1], image.img7.sizes()[2], 5, 5},
+            TensorOptions().device(_device).dtype(torch::kBFloat16));
+        for (int t = 0; t < storage.length(); ++t)
+            image.img0.index_put_({t}, tf::interpolate(image.img1.index({t}), tf::InterpolateFuncOptions()
+                .size(std::vector<long>{5, 5}).mode(kArea)));
     }
 
     image.level = _lossLevel;

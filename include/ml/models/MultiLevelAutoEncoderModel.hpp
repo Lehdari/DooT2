@@ -112,7 +112,7 @@ private:
 
     void trainImpl(SequenceStorage& storage) override;
 
-    MultiLevelImage scaleSequences(const Sequence<float>* storageFrames, int sequenceLength);
+    MultiLevelImage scaleSequences(const SequenceStorage& storage);
 
     static void scaleDisplayImages(const MultiLevelImage& orig, MultiLevelImage& image, torch::DeviceType device);
 
