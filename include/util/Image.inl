@@ -8,7 +8,7 @@
 // with this source code package.
 //
 
-INLINE int getImageFormatNChannels(ImageFormat imageFormat)
+constexpr int getImageFormatNChannels(ImageFormat imageFormat)
 {
     switch (imageFormat) {
         case ImageFormat::BGRA:

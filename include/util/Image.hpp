@@ -30,7 +30,7 @@ enum class ImageFormat : uint32_t {
     UNCHANGED   = 0             // only allowed as an argument to convertImage
 };
 
-inline int getImageFormatNChannels(ImageFormat imageFormat);
+constexpr int getImageFormatNChannels(ImageFormat imageFormat);
 
 
 template <typename T_Data>

@@ -13,6 +13,7 @@ add_subdirectory(ext)
 find_package(SDL2 REQUIRED)
 find_package(Eigen3 3.4 REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(OpenMP REQUIRED)
 
 # Source files
 set(DOOT2_GUI_SOURCES
@@ -89,6 +90,8 @@ target_link_libraries(doot2
     PUBLIC  torch_interface
     PUBLIC  nlohmann_json
     PUBLIC  pthread
+    PUBLIC  OpenMP::OpenMP_CXX
+
 )
 target_compile_definitions(doot2
     PUBLIC  ASSETS_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/assets\"
