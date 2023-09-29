@@ -48,6 +48,8 @@ public:
     int height() const noexcept;
     const ImageFormat& format() const noexcept;
     const T_Data* data() const noexcept;
+    T_Data* operator()(int x, int y);
+    const T_Data* operator()(int x, int y) const;
 
     // Set pixel data (will read width * height * nchannels * sizeof(T_Data) bytes from data)
     void copyFrom(const T_Data* data);

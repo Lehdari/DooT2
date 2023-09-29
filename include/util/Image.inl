@@ -103,6 +103,18 @@ const T_Data* Image<T_Data>::data() const noexcept
     return _data;
 }
 
+template<typename T_Data>
+T_Data* Image<T_Data>::operator()(int x, int y)
+{
+    return _data + (y*_width + x)*getImageFormatNChannels(_format);
+}
+
+template<typename T_Data>
+const T_Data* Image<T_Data>::operator()(int x, int y) const
+{
+    return _data + (y*_width + x)*getImageFormatNChannels(_format);
+}
+
 template <typename T_Data>
 void Image<T_Data>::copyFrom(const T_Data* data)
 {
