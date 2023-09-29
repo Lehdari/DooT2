@@ -96,7 +96,7 @@ std::tuple<torch::Tensor, torch::Tensor> MultiLevelFrameEncoderImpl::forward(con
     x = _linear1a(_bn2a(x));
 
     // Update the mask straight-through gradient scale
-    constexpr double maskGradientRelativeScale = 0.01;
+    constexpr double maskGradientRelativeScale = 0.001;
     double m = 0.99*_maskGradientScale.item<double>() +
         0.01*(maskGradientRelativeScale / x.abs().mean().item<double>());
     _maskGradientScale = torch::ones({})*m;

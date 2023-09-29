@@ -93,6 +93,14 @@ namespace {
             (xNorm-yNorm).square() / constexprSqrt(doot2::encodingLength)); // distance loss
     }
 
+    INLINE torch::Tensor bathtubLoss(const torch::Tensor& x, double alpha)
+    {
+        double a = alpha*alpha / (2.0*alpha*alpha - 2.0*alpha + 1.0);
+        double b = std::sqrt(a*(1.0-a));
+        double c = 1.0 / (3.61512 - 1.96*b);
+        return torch::mean(c * (a*(1/x-1) + (1-a)*(1/(1-x)-1) - 2.0*b));
+    }
+
 } // namespace
 
 Json MultiLevelAutoEncoderModel::getDefaultModelConfig()
@@ -881,14 +889,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 // Encoding mask loss
                 torch::Tensor encodingMaskLoss = zero;
                 /* if (_useEncodingMaskLoss) */{
-                    double _encodingMaskLossWeight = std::pow(0.5, _lossLevel);
-                    auto [encMaskVar, encMaskMean] = torch::var_mean(encMask, 0);
-                    double targetMaskVar = 0.01;
-                    double targetMaskMean = 0.25+std::clamp(_lossLevel/5.0, 0.0, 1.0)*0.65; // from 0.25 to 0.9
-                    encodingMaskLoss = _encodingMaskLossWeight * (
-                        10.0*torch::mse_loss(encMaskVar, targetMaskVar*torch::ones_like(encMaskVar)) +
-                        torch::mse_loss(encMaskMean, targetMaskMean*torch::ones_like(encMaskMean))
-                    );
+                    encodingMaskLoss = bathtubLoss(encMask, 0.1 + std::clamp(_lossLevel / 5.0, 0.0, 1.0) * 0.8);
                 }
                 encodingMaskLossAcc += encodingMaskLoss.item<double>();
 
