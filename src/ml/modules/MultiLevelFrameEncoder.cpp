@@ -32,9 +32,8 @@ MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl(int featureMultiplier) :
     _resBlock4          (2048, 2048, 2048),
     _bn2a               (nn::BatchNorm1dOptions(2048)),
     _bn2b               (nn::BatchNorm1dOptions(2048)),
-    _linear1a           (nn::LinearOptions(2048, 2048).bias(false)),
-    _linear1b           (nn::LinearOptions(2048, 2048).bias(false)),
-    _maskGradientScale  (torch::ones({}))
+    _linear1a           (nn::LinearOptions(2048, 2048)),
+    _linear1b           (nn::LinearOptions(2048, 2048))
 {
     register_module("encoder1", _encoder1);
     register_module("encoder2", _encoder2);
@@ -61,8 +60,6 @@ MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl(int featureMultiplier) :
     w = _linear1b->named_parameters(false).find("weight");
     if (w == nullptr) throw std::runtime_error("Unable to find layer weights");
     torch::nn::init::normal_(*w, 0.0, 0.001);
-
-    _maskGradientScale = register_parameter("maskGradientScale", torch::ones({}), false);
 }
 
 std::tuple<torch::Tensor, torch::Tensor> MultiLevelFrameEncoderImpl::forward(const MultiLevelImage& img)
@@ -96,17 +93,13 @@ std::tuple<torch::Tensor, torch::Tensor> MultiLevelFrameEncoderImpl::forward(con
     x = _linear1a(_bn2a(x));
 
     // Update the mask straight-through gradient scale
-    constexpr double maskGradientRelativeScale = 0.001;
-    double m = 0.99*_maskGradientScale.item<double>() +
-        0.01*(maskGradientRelativeScale / x.abs().mean().item<double>());
-    _maskGradientScale = torch::ones({})*m;
-
+    constexpr double maskGradientRelativeScale = 0.01;
     torch::Tensor mask;
     if (this->is_training()) {
         torch::Tensor s = torch::rand(maskProb.sizes(),
             TensorOptions().device(maskProb.device()).dtype(maskProb.dtype()));
         mask = torch::where(maskProb < s, torch::zeros_like(maskProb), torch::ones_like(maskProb))
-            + (maskProb - maskProb.detach())*_maskGradientScale; // straight-through gradient
+            + (maskProb - maskProb.detach())*maskGradientRelativeScale; // straight-through gradient
     }
     else {
         mask = maskProb; // deterministic during inference

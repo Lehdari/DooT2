@@ -48,9 +48,6 @@ private:
     torch::nn::BatchNorm1d      _bn2b;
     torch::nn::Linear           _linear1a;
     torch::nn::Linear           _linear1b;
-
-    // Parameters
-    torch::Tensor               _maskGradientScale;
 };
 TORCH_MODULE(MultiLevelFrameEncoder);
 
