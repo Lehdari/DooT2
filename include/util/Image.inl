@@ -213,19 +213,19 @@ inline void Image<T_Data>::convertImageFormat_(
     case 0: // UNCHANGED, do nothing
         return;
     case 1: {
-        static const auto conversionMatrix =
+        const auto conversionMatrix =
             getImageFormatConversionMatrix<T_Data, T_NChannelsSrc, 1>(srcFormat, destFormat);
         applyFormatConversion<T_NChannelsSrc, 1>(conversionMatrix,
             srcBuffer, nSrcBufferElements, destBuffer, nDestBufferElements);
     }   return;
     case 3: {
-        static const auto conversionMatrix =
+        const auto conversionMatrix =
             getImageFormatConversionMatrix<T_Data, T_NChannelsSrc, 3>(srcFormat, destFormat);
         applyFormatConversion<T_NChannelsSrc, 3>(conversionMatrix,
             srcBuffer, nSrcBufferElements, destBuffer, nDestBufferElements);
     }   return;
     case 4: {
-        static const auto conversionMatrix =
+        const auto conversionMatrix =
             getImageFormatConversionMatrix<T_Data, T_NChannelsSrc, 4>(srcFormat, destFormat);
         applyFormatConversion<T_NChannelsSrc, 4>(conversionMatrix,
             srcBuffer, nSrcBufferElements, destBuffer, nDestBufferElements);

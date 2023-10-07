@@ -96,6 +96,8 @@ private:
     // State parameters (will be written to state_params.json)
     int64_t                                 _trainingIteration;
     double                                  _lossLevel; // determines the resolution of the encoding
+    double                                  _lossLevelErrorIntegrate; // integrated reconstruction loss error required by the I-term of the loss level control
+    double                                  _lossLevelErrorFiltered; // filtered reconstruction loss error required by the D-term of the loss level control
     double                                  _batchPixelDiff; // estimate for average pixel difference between frames from different sequences
     double                                  _batchEncDiff; // estimate for average encoding distance between frames from different sequences
 

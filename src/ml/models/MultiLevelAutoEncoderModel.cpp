@@ -254,6 +254,8 @@ void MultiLevelAutoEncoderModel::init(const Json& experimentConfig)
     // Setup the state parameters
     _trainingIteration = 0;
     _lossLevel = 0.0;
+    _lossLevelErrorIntegrate = 0.0;
+    _lossLevelErrorFiltered = 0.0;
     _batchPixelDiff = 1.0;
     _batchEncDiff = sqrt(doot2::encodingLength);
 
@@ -317,6 +319,10 @@ void MultiLevelAutoEncoderModel::init(const Json& experimentConfig)
 
         if (stateParams.contains("trainingIteration")) _trainingIteration = stateParams["trainingIteration"];
         if (stateParams.contains("lossLevel")) _lossLevel = stateParams["lossLevel"];
+        if (stateParams.contains("lossLevelErrorIntegrate")) _lossLevelErrorIntegrate =
+            stateParams["lossLevelErrorIntegrate"];
+        if (stateParams.contains("lossLevelErrorFiltered")) _lossLevelErrorFiltered =
+            stateParams["lossLevelErrorFiltered"];
         if (stateParams.contains("batchPixelDiff")) _batchPixelDiff = stateParams["batchPixelDiff"];
         if (stateParams.contains("batchEncDiff")) _batchEncDiff = stateParams["batchEncDiff"];
     }
@@ -457,6 +463,11 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         timeSeriesWriteHandle->addSeries<double>("auxiliaryLosses", 0.0);
         timeSeriesWriteHandle->addSeries<double>("loss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("lossLevel", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("lossLevelErrorIntegrate", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("lossLevelErrorFiltered", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("controlP", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("controlI", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("controlD", 0.0);
         timeSeriesWriteHandle->addSeries<double>("optimizerLearningRate", 0.0);
         timeSeriesWriteHandle->addSeries<double>("optimizerBeta1", 0.0);
         timeSeriesWriteHandle->addSeries<double>("optimizerWeightDecay", 0.0);
@@ -508,6 +519,8 @@ void MultiLevelAutoEncoderModel::save(const fs::path& subdir)
             Json stateParams;
             stateParams["trainingIteration"] = _trainingIteration;
             stateParams["lossLevel"] = _lossLevel;
+            stateParams["lossLevelErrorIntegrate"] = _lossLevelErrorIntegrate;
+            stateParams["lossLevelErrorFiltered"] = _lossLevelErrorFiltered;
             stateParams["batchPixelDiff"] = _batchPixelDiff;
             stateParams["batchEncDiff"] = _batchEncDiff;
 
@@ -1251,13 +1264,32 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         auxiliaryLossesAcc /= framesPerCycle;
 
         // Loss level adjustment
-        constexpr double controlP = 0.01;
-        // use hyperbolic error metric (asymptotically larger adjustments when loss approaches 0)
-        double error = 1.0 - (_targetReconstructionLoss / (reconstructionLossesAcc + 1.0e-8));
-        if (error > 0.0)
-            error *= 0.1;
-        _lossLevel -= error*controlP; // P control should suffice
-        _lossLevel = std::clamp(_lossLevel, 0.0, 7.0);
+        double controlP, controlI, controlD;
+        {
+            constexpr double P = 0.005;
+            constexpr double I = 0.00002;
+            constexpr double D = 0.05;
+            constexpr double errorFilter = 0.95;
+            double error = _targetReconstructionLoss - reconstructionLossesAcc;
+            if (error < 0.0) // damp the integrated error when lossLevel is larger than target
+                _lossLevelErrorIntegrate *= 0.99;
+            _lossLevelErrorIntegrate += error;
+            double errorDeriv = -_lossLevelErrorFiltered;
+            _lossLevelErrorFiltered = errorFilter * _lossLevelErrorFiltered + (1.0 - errorFilter) * error;
+            errorDeriv += _lossLevelErrorFiltered;
+
+            _lossLevel += _lossLevelErrorFiltered * P + _lossLevelErrorIntegrate * I + errorDeriv * D;
+
+            _lossLevel = std::clamp(_lossLevel, 0.0, 7.0);
+            if (_lossLevel < 1.0e-8) {
+                _lossLevelErrorIntegrate = 0.0;
+                _lossLevelErrorFiltered = 0.0;
+            }
+
+            controlP = _lossLevelErrorFiltered * P;
+            controlI = _lossLevelErrorIntegrate * I;
+            controlD = errorDeriv * D;
+        }
 
         // Write the time series
         {
@@ -1286,6 +1318,11 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 "auxiliaryLosses", auxiliaryLossesAcc,
                 "loss", lossAcc,
                 "lossLevel", _lossLevel,
+                "lossLevelErrorIntegrate", _lossLevelErrorIntegrate,
+                "lossLevelErrorFiltered", _lossLevelErrorFiltered,
+                "controlP", controlP,
+                "controlI", controlI,
+                "controlD", controlD,
                 "optimizerLearningRate", _optimizerLearningRate,
                 "optimizerBeta1", _optimizerBeta1,
                 "optimizerWeightDecay", _optimizerWeightDecay,
