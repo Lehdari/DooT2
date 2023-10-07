@@ -889,7 +889,10 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 // Encoding mask loss
                 torch::Tensor encodingMaskLoss = zero;
                 /* if (_useEncodingMaskLoss) */{
-                    encodingMaskLoss = bathtubLoss(encMask, 0.1 + std::clamp(_lossLevel / 5.0, 0.0, 1.0) * 0.8);
+                    double _encodingMaskLossWeight = 0.1*std::pow(0.65, _lossLevel);
+                    double maskTarget = 0.3 + std::clamp(_lossLevel / 5.0, 0.0, 1.0) * 0.6; // from 0.3 to 0.9
+                    encodingMaskLoss = _encodingMaskLossWeight*
+                        bathtubLoss(0.001+encMask.to(torch::kFloat32)*0.998, maskTarget).to(encMask.dtype());
                 }
                 encodingMaskLossAcc += encodingMaskLoss.item<double>();
 
@@ -957,9 +960,17 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 frameClassificationLossAcc += frameClassificationLoss.item<double>();
 
                 // Total auxiliary losses
-                torch::Tensor auxiliaryLosses = encodingDistributionLoss + encodingDistanceLoss + encodingMeanLoss +
-                    encodingCovarianceLoss + encodingPrevDistanceLoss + encodingDiscriminationLoss +
-                    encodingCircularLoss + encodingMaskLoss + discriminationLoss + frameClassificationLoss;
+                torch::Tensor auxiliaryLosses =
+                    encodingDistributionLoss.to(torch::kFloat32) +
+                    encodingDistanceLoss.to(torch::kFloat32) +
+                    encodingMeanLoss.to(torch::kFloat32) +
+                    encodingCovarianceLoss.to(torch::kFloat32) +
+                    encodingPrevDistanceLoss.to(torch::kFloat32) +
+                    encodingDiscriminationLoss.to(torch::kFloat32) +
+                    encodingCircularLoss.to(torch::kFloat32) +
+                    encodingMaskLoss.to(torch::kFloat32) +
+                    discriminationLoss.to(torch::kFloat32) +
+                    frameClassificationLoss.to(torch::kFloat32);
                 auxiliaryLossesAcc += auxiliaryLosses.item<double>();
 
                 // Frame decoding losses
