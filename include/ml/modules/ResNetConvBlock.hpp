@@ -24,7 +24,8 @@ public:
         int outputChannels,
         int groups = 1,
         bool useSqueezeExcitation = false,
-        double normalInitializationStd=0.0
+        double normalInitializationStd = 0.0,
+        bool useEdgePadding = false // false: zero padding
     );
 
     torch::Tensor forward(torch::Tensor x);
@@ -32,6 +33,7 @@ public:
 private:
     bool                        _skipLayer; // true if input size differs from output size, so the adapter layer is required
     bool                        _useSqueezeExcitation;
+    bool                        _useEdgePadding;
 
     torch::nn::Conv2d           _conv1;
     torch::nn::BatchNorm2d      _bn1;
