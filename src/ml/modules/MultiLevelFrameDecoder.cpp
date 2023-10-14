@@ -33,7 +33,7 @@ MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
     _conv_UV            (nn::Conv2dOptions(8, 2, {1, 1})),
     _resBlock4          (512, 1024, 512, 1024, 64, 16, true, 0.0, true),
     _decoder1           (0.0, 512, 512, 1024, 2, 3, 64, 2, 16),
-    _decoder2           (1.0, 512, 256, 1024, 2, 1, 64, 4, 32),
+    _decoder2           (1.0, 512, 256, 1024, 2, 1, 64, 2, 32),
     _decoder3           (2.0, 256, 128, 1024, 2, 2, 32, 4, 64),
     _decoder4           (3.0, 128, 64, 1024, 2, 2, 16, 4, 128),
     _decoder5           (4.0, 64, 32, 1024, 2, 2, 8, 4, 256),

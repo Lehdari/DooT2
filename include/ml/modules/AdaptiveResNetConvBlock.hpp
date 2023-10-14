@@ -12,7 +12,7 @@
 
 #include <torch/torch.h>
 #include "ml/modules/AdaptiveConv2d.hpp"
-#include "ml/modules/SqueezeExcitation.hpp"
+#include "ml/modules/AdaptiveSqueezeExcitation.hpp"
 
 
 namespace ml {
@@ -41,7 +41,7 @@ private:
     torch::nn::BatchNorm2d      _bn1;
     AdaptiveConv2d              _conv2;
     torch::nn::BatchNorm2d      _bn2;
-    SqueezeExcitation           _se1;
+    AdaptiveSqueezeExcitation   _se1;
     torch::nn::Conv2d           _conv3;
     torch::nn::Conv2d           _convSkip;
 };

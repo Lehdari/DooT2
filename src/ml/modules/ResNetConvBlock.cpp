@@ -36,9 +36,9 @@ ResNetConvBlockImpl::ResNetConvBlockImpl(
     _convSkip               (nn::Conv2dOptions(inputChannels, outputChannels, {1, 1}).bias(false))
 {
     register_module("conv1", _conv1);
-    register_module("bn2", _bn1);
+    register_module("bn1", _bn1);
     register_module("conv2", _conv2);
-    register_module("bn3", _bn2);
+    register_module("bn2", _bn2);
     if (_useSqueezeExcitation)
         register_module("se1", _se1);
     register_module("conv3", _conv3);

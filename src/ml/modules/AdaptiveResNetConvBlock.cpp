@@ -33,14 +33,14 @@ AdaptiveResNetConvBlockImpl::AdaptiveResNetConvBlockImpl(
     _conv2                  (hiddenChannels, hiddenChannels, contextChannels, std::vector<long>{3,3}, groups,
                              filterBankSize, std::vector<long>{1,1,1,1}, 0.0, useReflectionPadding),
     _bn2                    (nn::BatchNorm2dOptions(hiddenChannels)),
-    _se1                    (hiddenChannels, outputChannels, hiddenChannels),
+    _se1                    (hiddenChannels, outputChannels, hiddenChannels, contextChannels),
     _conv3                  (nn::Conv2dOptions(hiddenChannels, outputChannels, {1, 1}).bias(false)),
     _convSkip               (nn::Conv2dOptions(inputChannels, outputChannels, {1, 1}).bias(false))
 {
     register_module("conv1", _conv1);
-    register_module("bn2", _bn1);
+    register_module("bn1", _bn1);
     register_module("conv2", _conv2);
-    register_module("bn3", _bn2);
+    register_module("bn2", _bn2);
     if (_useSqueezeExcitation)
         register_module("se1", _se1);
     register_module("conv3", _conv3);
@@ -61,7 +61,7 @@ torch::Tensor AdaptiveResNetConvBlockImpl::forward(torch::Tensor x, const torch:
     y = _conv2(y, context);
     y = gelu(_bn2(y), "tanh");
     if (_useSqueezeExcitation)
-        y = _se1(y);
+        y = _se1(y, context);
     y = _conv3(y);
 
     if (_skipLayer)

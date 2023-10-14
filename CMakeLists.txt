@@ -34,6 +34,7 @@ set(DOOT2_ML_SOURCES
     src/ml/models/RandomWalkerModel.cpp
     src/ml/modules/AdaptiveConv2d.cpp
     src/ml/modules/AdaptiveResNetConvBlock.cpp
+    src/ml/modules/AdaptiveSqueezeExcitation.cpp
     src/ml/modules/Attention.cpp
     src/ml/modules/Attention2D.cpp
     src/ml/modules/Discriminator.cpp
