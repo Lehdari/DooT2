@@ -49,26 +49,35 @@ Trainer::Trainer(
 {
 
     // Setup sequence storage
-    _sequenceStorage.addSequence<Action>("action", Action(Action::ACTION_NONE, 0));
-    _sequenceStorage.addSequence<float>("frame", torch::zeros({
-        doot2::frameHeight, doot2::frameWidth, getImageFormatNChannels(ImageFormat::YUV)}));
-    _sequenceStorage.addSequence<float>("frame6", torch::zeros({
-        doot2::frameHeight/2, doot2::frameWidth/2, getImageFormatNChannels(ImageFormat::YUV)}));
-    _sequenceStorage.addSequence<float>("frame5", torch::zeros({
-        doot2::frameHeight/4, doot2::frameWidth/4, getImageFormatNChannels(ImageFormat::YUV)}));
-    _sequenceStorage.addSequence<float>("frame4", torch::zeros({
-        doot2::frameHeight/8, doot2::frameWidth/8, getImageFormatNChannels(ImageFormat::YUV)}));
-    _sequenceStorage.addSequence<float>("frame3", torch::zeros({
-        doot2::frameHeight/16, doot2::frameWidth/16, getImageFormatNChannels(ImageFormat::YUV)}));
-    _sequenceStorage.addSequence<float>("frame2", torch::zeros({
-        doot2::frameHeight/32, doot2::frameWidth/32, getImageFormatNChannels(ImageFormat::YUV)}));
-    _sequenceStorage.addSequence<float>("frame1", torch::zeros({
-        doot2::frameHeight/32, doot2::frameWidth/64, getImageFormatNChannels(ImageFormat::YUV)}));
-    _sequenceStorage.addSequence<float>("frame0", torch::zeros({
-        doot2::frameHeight/96, doot2::frameWidth/128, getImageFormatNChannels(ImageFormat::YUV)}));
-//    _sequenceStorage.addSequence<float>("encoding");
-    _sequenceStorage.addSequence<double>("reward", 0.0);
-    _sequenceStorage.resize(sequenceLengthIn);
+    for (int i=0; i<2; ++i) {
+        {
+            auto storage = _sequenceStorage.write();
+            storage->addSequence<Action>("action", Action(Action::ACTION_NONE, 0));
+            storage->addSequence<float>("frame", torch::zeros({
+                doot2::frameHeight, doot2::frameWidth, getImageFormatNChannels(ImageFormat::YUV)
+            }));
+            /*
+            storage->addSequence<float>("frame6", torch::zeros({
+                doot2::frameHeight/2, doot2::frameWidth/2, getImageFormatNChannels(ImageFormat::YUV)}));
+            storage->addSequence<float>("frame5", torch::zeros({
+                doot2::frameHeight/4, doot2::frameWidth/4, getImageFormatNChannels(ImageFormat::YUV)}));
+            storage->addSequence<float>("frame4", torch::zeros({
+                doot2::frameHeight/8, doot2::frameWidth/8, getImageFormatNChannels(ImageFormat::YUV)}));
+            storage->addSequence<float>("frame3", torch::zeros({
+                doot2::frameHeight/16, doot2::frameWidth/16, getImageFormatNChannels(ImageFormat::YUV)}));
+            storage->addSequence<float>("frame2", torch::zeros({
+                doot2::frameHeight/32, doot2::frameWidth/32, getImageFormatNChannels(ImageFormat::YUV)}));
+            storage->addSequence<float>("frame1", torch::zeros({
+                doot2::frameHeight/32, doot2::frameWidth/64, getImageFormatNChannels(ImageFormat::YUV)}));
+            storage->addSequence<float>("frame0", torch::zeros({
+                doot2::frameHeight/96, doot2::frameWidth/128, getImageFormatNChannels(ImageFormat::YUV)}));
+                */
+            //    _sequenceStorage.addSequence<float>("encoding");
+            storage->addSequence<double>("reward", 0.0);
+            storage->resize(sequenceLengthIn);
+        }
+        _sequenceStorage.read(); // read swaps the buffers so that both buffers get initialized
+    }
 
     // Setup action converter
     _actionConverter.setAngleIndex(0);
@@ -104,7 +113,7 @@ void Trainer::loop()
             refreshSequenceStorage(epoch); // Load new sequences for training
             _model->waitForTrainingFinished();
             if (_quit) break; // quit() might've been called in the meanwhile
-            _model->trainAsync(_sequenceStorage); // Launch asynchronous training
+            _model->trainAsync(_sequenceStorage.read()); // Launch asynchronous training
             ++epoch;
         }
 
@@ -314,6 +323,8 @@ const SingleBuffer<Image<uint8_t>>::ReadHandle Trainer::getFrameReadHandle()
 
 void Trainer::refreshSequenceStorage(int epoch, bool evaluation)
 {
+    auto storage = _sequenceStorage.write();
+
     if (_experimentConfig.contains("use_sequence_cache") &&
         _experimentConfig["use_sequence_cache"].get<bool>()) {
         // Using sequence cache
@@ -323,7 +334,7 @@ void Trainer::refreshSequenceStorage(int epoch, bool evaluation)
                 // Cache does not have enough sequences, record new ones until it does
                 recordEvaluationSequences();
             }
-            _sequenceCache.loadFramesToStorage(_sequenceStorage, SequenceCache::Type::FRAME_ENCODING_EVALUATION,
+            _sequenceCache.loadFramesToStorage(*storage, SequenceCache::Type::FRAME_ENCODING_EVALUATION,
                 "frame", 1, epoch);
             /*
             _sequenceCache.loadFramesToStorage(_sequenceStorage, SequenceCache::Type::FRAME_ENCODING_EVALUATION,
@@ -349,8 +360,9 @@ void Trainer::refreshSequenceStorage(int epoch, bool evaluation)
                 // Cache does not have enough sequences, record new ones until it does
                 recordTrainingSequences();
             }
-            _sequenceCache.loadFramesToStorage(_sequenceStorage, SequenceCache::Type::FRAME_ENCODING_TRAINING_NORMAL,
+            _sequenceCache.loadFramesToStorage(*storage, SequenceCache::Type::FRAME_ENCODING_TRAINING_NORMAL,
                 "frame", _experimentConfig["n_cached_sequences"].get<int>(), epoch);
+            /*
             _sequenceCache.loadFramesToStorage(_sequenceStorage, SequenceCache::Type::FRAME_ENCODING_TRAINING_NORMAL,
                 "frame6", _experimentConfig["n_cached_sequences"].get<int>(), epoch);
             _sequenceCache.loadFramesToStorage(_sequenceStorage, SequenceCache::Type::FRAME_ENCODING_TRAINING_NORMAL,
@@ -365,6 +377,7 @@ void Trainer::refreshSequenceStorage(int epoch, bool evaluation)
                 "frame1", _experimentConfig["n_cached_sequences"].get<int>(), epoch);
             _sequenceCache.loadFramesToStorage(_sequenceStorage, SequenceCache::Type::FRAME_ENCODING_TRAINING_NORMAL,
                 "frame0", _experimentConfig["n_cached_sequences"].get<int>(), epoch);
+            */
         }
     }
     else {
@@ -612,7 +625,8 @@ void Trainer::evaluateModel()
     double performanceMin = std::numeric_limits<double>::max();
     int nSamples = 0;
     for (int i=0; i<doot2::batchSize; ++i) {
-        auto* storageFrames = _sequenceStorage.getSequence<float>("frame");
+        auto storage = _sequenceStorage.read();
+        auto* storageFrames = storage->getSequence<float>("frame");
         assert(storageFrames != nullptr);
         torch::Tensor pixelDataIn = storageFrames->tensor();
         for (int t=0; t<storageFrames->length(); ++t) {

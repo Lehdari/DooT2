@@ -53,8 +53,8 @@ public:
     // Train the model
     void train(SequenceStorage& storage);
 
-    // Train the model in separate thread, makes hard copy of the storage, returns immediately
-    void trainAsync(SequenceStorage storage);
+    // Train the model in separate thread, uses double buffer read handle
+    void trainAsync(const DoubleBuffer<SequenceStorage>::ReadHandle&& storageReadHandle);
 
     // Check if the asynchronous training is finished
     bool trainingFinished() const noexcept;
@@ -77,8 +77,8 @@ protected:
 
     std::atomic_bool        _abortTraining{false};
 
-    // Required for storing the copy of the storage made in trainAsync
-    void trainAsyncThreadWrapper(SequenceStorage&& storage);
+    // Required for keeping track of the async training calls
+    void trainAsyncThreadWrapper(SequenceStorage& storage);
 
     virtual void trainImpl(SequenceStorage& storage) = 0;
 };

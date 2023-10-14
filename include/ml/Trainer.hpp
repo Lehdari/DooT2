@@ -13,6 +13,7 @@
 
 #include "ActionConverter.hpp"
 #include "ml/TrainingInfo.hpp"
+#include "util/DoubleBuffer.hpp"
 #include "util/Image.hpp"
 #include "util/SequenceCache.hpp"
 #include "util/SequenceStorage.hpp"
@@ -73,7 +74,7 @@ private:
     std::condition_variable         _pauseCV;
     std::atomic_bool                _finished; // loop() finished, waiting to join
     ActionConverter<float>          _actionConverter;
-    SequenceStorage                 _sequenceStorage;
+    DoubleBuffer<SequenceStorage>   _sequenceStorage;
     SequenceCache                   _sequenceCache;
     SingleBuffer<Image<uint8_t>>    _frameRGB;
     std::vector<float>              _frameYUVData;

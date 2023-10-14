@@ -49,10 +49,12 @@ void Model::train(SequenceStorage& storage)
     _trainingCv.notify_all();
 }
 
-void Model::trainAsync(SequenceStorage storage)
+void Model::trainAsync(const DoubleBuffer<SequenceStorage>::ReadHandle&& storageReadHandle)
 {
     ++_nAsyncCalls;
-    std::thread t(&Model::trainAsyncThreadWrapper, this, std::move(storage));
+    // const_cast is required because pytorch does not allow const buffers to be mapped into tensors
+    std::thread t(&Model::trainAsyncThreadWrapper, this,
+        std::ref(const_cast<SequenceStorage&>(*storageReadHandle)));
     t.detach();
 }
 
@@ -67,7 +69,7 @@ void Model::waitForTrainingFinished() noexcept
     _trainingCv.wait(lock, [&]{ return trainingFinished(); });
 }
 
-void Model::trainAsyncThreadWrapper(SequenceStorage&& storage)
+void Model::trainAsyncThreadWrapper(SequenceStorage& storage)
 {
     train(storage);
     if (--_nAsyncCalls < 0)
