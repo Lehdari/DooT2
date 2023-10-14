@@ -75,6 +75,186 @@ namespace {
         return yuvLoss(targetLaplacian, predLaplacian);
     }
 
+    // returns YUV local mean (B*3*H*W), YUV local variance (B*3*H*W), UV local covariance (B*1*H*W)
+    inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> localVariance(const torch::Tensor& yuvImage)
+    {
+        using namespace torch::indexing;
+
+        auto device = yuvImage.device();
+        auto dtype = yuvImage.dtype();
+
+        // Gaussian kernel
+        static float kernelData[5] = { 1.0/16.0, 4.0/16.0, 6.0/16.0, 4.0/16.0, 1.0/16.0 };
+        static torch::Tensor kernelV = torch::from_blob(kernelData, {5,1}).repeat({1,1,1,1}).to(device, dtype);
+        static torch::Tensor kernelH = torch::from_blob(kernelData, {1,5}).repeat({1,1,1,1}).to(device, dtype);
+        static torch::Tensor kernelV3 = torch::from_blob(kernelData, {5,1}).repeat({3,1,1,1}).to(device, dtype);
+        static torch::Tensor kernelH3 = torch::from_blob(kernelData, {1,5}).repeat({3,1,1,1}).to(device, dtype);
+
+        torch::Tensor mean = torch::reflection_pad2d(yuvImage, {0,0,2,2});
+        mean = tf::conv2d(mean, kernelV3, tf::Conv2dFuncOptions().groups(3));
+        mean = torch::reflection_pad2d(mean, {2,2,0,0});
+        mean = tf::conv2d(mean, kernelH3, tf::Conv2dFuncOptions().groups(3));
+
+        torch::Tensor var = torch::reflection_pad2d(yuvImage.square(), {0,0,2,2});
+        var = tf::conv2d(var, kernelV3, tf::Conv2dFuncOptions().groups(3));
+        var = torch::reflection_pad2d(var, {2,2,0,0});
+        var = tf::conv2d(var, kernelH3, tf::Conv2dFuncOptions().groups(3));
+        var -= mean.square();
+
+        torch::Tensor uvCovar = yuvImage.index({Slice(), Slice(1,2), Slice(), Slice()}) *
+            yuvImage.index({Slice(), Slice(2,3), Slice(), Slice()}).to(device, dtype);
+        uvCovar = torch::reflection_pad2d(uvCovar, {0,0,2,2}).to(device, dtype);
+        uvCovar = tf::conv2d(uvCovar, kernelV, tf::Conv2dFuncOptions()).to(device, dtype);
+        uvCovar = torch::reflection_pad2d(uvCovar, {2,2,0,0}).to(device, dtype);
+        uvCovar = tf::conv2d(uvCovar, kernelH, tf::Conv2dFuncOptions()).to(device, dtype);
+        uvCovar -= (mean.index({Slice(), Slice(1,2), Slice(), Slice()}) *
+            mean.index({Slice(), Slice(2,3), Slice(), Slice()})).to(device, dtype);
+
+        return {mean, var, uvCovar};
+    }
+
+    // returns Variance Y error, Variance UV error, L1 Y error, L1 UV error
+    inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+        yuvImageErrors(const torch::Tensor& yuvImageTarget, const torch::Tensor& yuvImagePred, bool debug=false)
+    {
+        using namespace torch::indexing;
+        constexpr double eps = 5.0e-4;
+
+        auto device = yuvImageTarget.device();
+        auto dtype = yuvImageTarget.dtype();
+
+        if (debug) {
+            static double k[5] = { 1.0/16.0, 4.0/16.0, 6.0/16.0, 4.0/16.0, 1.0/16.0 };
+            torch::Tensor img = yuvImageTarget.index({0}).to(torch::kCPU, torch::kFloat32);
+            double mean[2] = {};
+            double var[2] = {};
+            double var2[2] = {};
+            for (int j=0; j<5; ++j) {
+                for (int i=0; i<5; ++i) {
+                    for (int c=0; c<2; ++c)
+                        mean[c] += k[i]*k[j]*img.index({c+1, j, i}).item<double>();
+                }
+            }
+            for (int j=0; j<5; ++j) {
+                for (int i=0; i<5; ++i) {
+                    for (int c=0; c<2; ++c)
+                        var[c] += k[i]*k[j]*std::pow(img.index({c+1, j, i}).item<double>()-mean[c], 2.0);
+                }
+            }
+            for (int j=0; j<5; ++j) {
+                for (int i=0; i<5; ++i) {
+                    for (int c=0; c<2; ++c)
+                        var2[c] += k[i]*k[j]*std::pow(img.index({c+1, j, i}).item<double>(), 2.0);
+                }
+            }
+            for (int c=0; c<2; ++c)
+                var2[c] -= mean[c]*mean[c];
+            printf("GT mean: [ %10.7f %10.7f ]^T\n", mean[0], mean[1]);
+            printf("GT var:  [ %10.7f %10.7f ]^T\n", var[0], var[1]);
+            printf("GT var2: [ %10.7f %10.7f ]^T\n", var2[0], var2[1]);
+        }
+
+        auto [mean, var, uvCovar] = localVariance(yuvImageTarget);
+        var = (var + eps).to(device, dtype); // Add epsilon to variance for variance error stability
+        torch::Tensor diff = (yuvImagePred-yuvImageTarget).to(device, dtype);
+        torch::Tensor yVarErr = 1.0 - torch::exp(-0.5 * (
+            diff.index({Slice(), Slice(0,1), Slice(), Slice()}).square() /
+            (var.index({Slice(), Slice(0,1), Slice(), Slice()}))).to(device, dtype));
+
+        if (debug) {
+            printf("uvMean: [ %10.7f %10.7f ]^T\n", mean.index({0,1,2,2}).item<double>(), mean.index({0,2,2,2}).item<double>());
+            printf("uvVar: [ %10.7f %10.7f ]^T\n", var.index({0,1,2,2}).item<double>(), var.index({0,2,2,2}).item<double>());
+            printf("uvCovar: %10.7f\n", uvCovar.index({0,0,2,2}).item<double>());
+        }
+
+        // Construct tensor of inverses of UV covariance matrices
+        torch::Tensor uvVarErr = (torch::cat({
+            var.index({Slice(), Slice(2,3), Slice(), Slice()}),
+            -uvCovar, -uvCovar,
+            var.index({Slice(), Slice(1,2), Slice(), Slice()})
+        }, 1) * (
+        1.0 / (
+            var.index({Slice(), Slice(1,2), Slice(), Slice()}) * var.index({Slice(), Slice(2,3), Slice(), Slice()}) -
+            uvCovar.square()
+        )))
+        .reshape({diff.sizes()[0], 2, 2, diff.sizes()[2], diff.sizes()[3]}).permute({0,3,4,1,2}).to(device, dtype);
+
+        if (debug) {
+            printf("covar matrix inverse:\n[ %8.5f %8.5f ]\n[ %8.5f %8.5f ]\n",
+                uvVarErr.index({0,2,2,0,0}).item<double>(),
+                uvVarErr.index({0,2,2,0,1}).item<double>(),
+                uvVarErr.index({0,2,2,1,0}).item<double>(),
+                uvVarErr.index({0,2,2,1,1}).item<double>()
+            );
+
+            {
+                double a = var.index({0,1,2,2}).item<double>();
+                double d = var.index({0,2,2,2}).item<double>();
+                double b = uvCovar.index({0,0,2,2}).item<double>();
+                printf("check:\n[ %8.5f %8.5f ]\n[ %8.5f %8.5f ]\n",
+                    (1.0/(a*d-b*b)) * d,
+                    (1.0/(a*d-b*b)) * -b,
+                    (1.0/(a*d-b*b)) * -b,
+                    (1.0/(a*d-b*b)) * a
+                );
+            }
+        }
+
+        // diff^T * sigma^-1 * diff
+        torch::Tensor uvDiff = diff.index({Slice(), Slice(1,3), Slice(), Slice()}).permute({0,2,3,1}).to(device, dtype);
+        uvVarErr = torch::matmul(uvVarErr, uvDiff.unsqueeze(-1)).squeeze(-1).to(device, dtype);
+        uvVarErr = torch::linalg_vecdot(uvDiff, uvVarErr).unsqueeze(-1).permute({0,3,1,2}).to(device, dtype);
+        if (debug) {
+            printf("uvDiff: [ %8.5f %8.5f ]^T\n", diff.index({0,1,2,2}).item<double>(), diff.index({0,2,2,2}).item<double>());
+            printf("diff^T * sigma^-1 * diff: %8.5f\n", uvVarErr.index({0,0,2,2}).item<double>());
+        }
+
+        // final error
+        uvVarErr = (1.0 - torch::exp(-0.5 * uvVarErr)).to(device, dtype);
+
+        return {
+            yVarErr,
+            uvVarErr,
+            diff.index({Slice(), Slice(0,1), Slice(), Slice()}).abs().to(device, dtype),
+            (diff.index({Slice(), Slice(1,3), Slice(), Slice()}).norm(2, 1, true) * 2.0).to(device, dtype)
+        };
+    }
+
+    inline torch::Tensor yuvImageCombinedError(
+        const torch::Tensor& yuvImageTarget,
+        const torch::Tensor& yuvImagePred,
+        double yVarErrorWeight = 1.0,
+        double uvVarErrorWeight = 0.5,
+        double yL1ErrorWeight = 3.0,
+        double uvL1ErrorWeight = 1.0
+        )
+    {
+        auto device = yuvImageTarget.device();
+        auto dtype = yuvImageTarget.dtype();
+
+        auto [yVarError, uvVarError, yL1Error, uvL1Error] = yuvImageErrors(yuvImageTarget, yuvImagePred);
+        return (yVarError*yVarErrorWeight +
+            uvVarError*uvVarErrorWeight +
+            yL1Error*yL1ErrorWeight +
+            uvL1Error*uvL1ErrorWeight).to(device, dtype);
+    }
+
+    inline torch::Tensor yuvImageLoss(
+        const torch::Tensor& yuvImageTarget,
+        const torch::Tensor& yuvImagePred,
+        double yVarErrorWeight = 1.0,
+        double uvVarErrorWeight = 0.5,
+        double yL1ErrorWeight = 3.0,
+        double uvL1ErrorWeight = 1.0)
+    {
+        auto device = yuvImageTarget.device();
+        auto dtype = yuvImageTarget.dtype();
+
+        torch::Tensor combinerErrorImage = yuvImageCombinedError(yuvImageTarget, yuvImagePred,
+            yVarErrorWeight, uvVarErrorWeight, yL1ErrorWeight, uvL1ErrorWeight);
+        return combinerErrorImage.mean();
+    }
+
     INLINE double distributionLossKernelWidth(double batchSize)
     {
         // Function fitted to kernel widths acquired by empirical tests
@@ -485,6 +665,18 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         *(_trainingInfo->images)["input2"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["input1"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["input0"].write() = Image<float>(width, height, ImageFormat::YUV);
+        // TODO temp
+        for (auto i=0; i<8; ++i) {
+            *(_trainingInfo->images)["mean" + std::to_string(i)].write() = Image<float>(width, height, ImageFormat::YUV);
+            *(_trainingInfo->images)["variance" + std::to_string(i)].write() = Image<float>(width, height, ImageFormat::RGB);
+            *(_trainingInfo->images)["uvCovar" + std::to_string(i)].write() = Image<float>(width, height, ImageFormat::GRAY);
+            *(_trainingInfo->images)["varErrorY" + std::to_string(i)].write() = Image<float>(width, height, ImageFormat::GRAY);
+            *(_trainingInfo->images)["varErrorUV" + std::to_string(i)].write() = Image<float>(width, height, ImageFormat::GRAY);
+            *(_trainingInfo->images)["l1ErrorY" + std::to_string(i)].write() = Image<float>(width, height, ImageFormat::GRAY);
+            *(_trainingInfo->images)["l1ErrorUV" + std::to_string(i)].write() = Image<float>(width, height, ImageFormat::GRAY);
+            *(_trainingInfo->images)["totalLoss" + std::to_string(i)].write() = Image<float>(width, height, ImageFormat::GRAY);
+        }
+        // TODO end of temp
         *(_trainingInfo->images)["prediction7"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["prediction6"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["prediction5"].write() = Image<float>(width, height, ImageFormat::YUV);
@@ -988,6 +1180,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 auxiliaryLossesAcc += auxiliaryLosses.item<double>();
 
                 // Frame decoding losses
+#if 0
                 torch::Tensor frameLoss = _frameLossWeight*(
                     frameLossWeight0 * yuvLoss(in.img0, out.img0) +
                     (_lossLevel > 0.0 ? frameLossWeight1 * yuvLoss(in.img1, out.img1) : zero) +
@@ -1018,9 +1211,29 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     (_lossLevel > 5.0 ? frameLossWeight6 * imageLaplacianLoss(in.img6, out.img6) : zero) +
                     (_lossLevel > 6.0 ? frameLossWeight7 * imageLaplacianLoss(in.img7, out.img7) : zero));
                 frameLaplacianLossAcc += frameLaplacianLoss.item<double>();
+#endif
 
                 // Frame reconstruction losses
-                torch::Tensor reconstructionLosses = frameLoss + frameGradLoss + frameLaplacianLoss;
+//                torch::Tensor reconstructionLosses = frameLoss + frameGradLoss + frameLaplacianLoss;
+
+                at::autocast::set_enabled(false);
+
+                torch::Tensor reconstructionLosses = 1.0*(
+                    frameLossWeight0 * yuvImageLoss(out.img0.to(torch::kFloat32), in.img0.to(torch::kFloat32)) +
+                    (_lossLevel > 0.0 ? frameLossWeight1 *
+                        yuvImageLoss(out.img1.to(torch::kFloat32), in.img1.to(torch::kFloat32)) : zero) +
+                    (_lossLevel > 1.0 ? frameLossWeight2 *
+                        yuvImageLoss(out.img2.to(torch::kFloat32), in.img2.to(torch::kFloat32)) : zero) +
+                    (_lossLevel > 2.0 ? frameLossWeight3 *
+                        yuvImageLoss(out.img3.to(torch::kFloat32), in.img3.to(torch::kFloat32)) : zero) +
+                    (_lossLevel > 3.0 ? frameLossWeight4 *
+                        yuvImageLoss(out.img4.to(torch::kFloat32), in.img4.to(torch::kFloat32)) : zero) +
+                    (_lossLevel > 4.0 ? frameLossWeight5 *
+                        yuvImageLoss(out.img5.to(torch::kFloat32), in.img5.to(torch::kFloat32)) : zero) +
+                    (_lossLevel > 5.0 ? frameLossWeight6 *
+                        yuvImageLoss(out.img6.to(torch::kFloat32), in.img6.to(torch::kFloat32)) : zero) +
+                    (_lossLevel > 6.0 ? frameLossWeight7 *
+                        yuvImageLoss(out.img7.to(torch::kFloat32), in.img7.to(torch::kFloat32)) : zero));
                 reconstructionLossesAcc += reconstructionLosses.item<double>();
 
                 // Total loss
@@ -1029,6 +1242,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
                 // Encoder-decoder backward pass
                 loss.backward();
+
+                at::autocast::set_enabled(true);
 
                 // Display
                 if (b == displayFrameId) {
@@ -1053,6 +1268,63 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     _trainingInfo->images["input2"].write()->copyFrom(inImage.img2.data_ptr<float>());
                     _trainingInfo->images["input1"].write()->copyFrom(inImage.img1.data_ptr<float>());
                     _trainingInfo->images["input0"].write()->copyFrom(inImage.img0.data_ptr<float>());
+
+                    // TODO temp
+                    at::autocast::set_enabled(false);
+                    torch::Tensor* inRefs[] = {&in.img0, &in.img1, &in.img2, &in.img3, &in.img4, &in.img5, &in.img6, &in.img7};
+                    torch::Tensor* outRefs[] = {&out.img0, &out.img1, &out.img2, &out.img3, &out.img4, &out.img5, &out.img6, &out.img7};
+                    for (auto i=0; i<8; ++i) {
+                        auto [mean, variance, uvCovar] = localVariance(
+                            inRefs[i]->index({displaySeqId}).unsqueeze(0).to(torch::kFloat32));
+                        auto [varErrorY, varErrorUV, l1ErrorY, l1ErrorUV] = yuvImageErrors(
+                            inRefs[i]->index({displaySeqId}).unsqueeze(0).to(torch::kFloat32),
+                            outRefs[i]->index({displaySeqId}).unsqueeze(0).to(torch::kFloat32));
+                        auto totalLoss = yuvImageCombinedError(
+                            inRefs[i]->index({displaySeqId}).unsqueeze(0).to(torch::kFloat32),
+                            outRefs[i]->index({displaySeqId}).unsqueeze(0).to(torch::kFloat32));
+                        mean = tf::interpolate(mean
+                            .to(torch::kFloat32), tf::InterpolateFuncOptions()
+                            .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
+                            .permute({0, 2, 3, 1}).squeeze().contiguous().to(torch::kCPU);
+                        _trainingInfo->images["mean" + std::to_string(i)].write()->copyFrom(mean.data_ptr<float>());
+                        variance = tf::interpolate((variance * 30.0)
+                            .to(torch::kFloat32), tf::InterpolateFuncOptions()
+                            .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
+                            .permute({0, 2, 3, 1}).squeeze().contiguous().to(torch::kCPU);
+                        _trainingInfo->images["variance" + std::to_string(i)].write()->copyFrom(variance.data_ptr<float>());
+                        uvCovar = tf::interpolate((uvCovar * 200.0 + 0.5)
+                            .to(torch::kFloat32), tf::InterpolateFuncOptions()
+                            .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
+                            .permute({0, 2, 3, 1}).squeeze().contiguous().to(torch::kCPU);
+                        _trainingInfo->images["uvCovar" + std::to_string(i)].write()->copyFrom(uvCovar.data_ptr<float>());
+                        varErrorY = tf::interpolate((varErrorY * 1.0)
+                            .to(torch::kFloat32), tf::InterpolateFuncOptions()
+                            .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
+                            .permute({0, 2, 3, 1}).squeeze().contiguous().to(torch::kCPU);
+                        _trainingInfo->images["varErrorY" + std::to_string(i)].write()->copyFrom(varErrorY.data_ptr<float>());
+                        varErrorUV = tf::interpolate((varErrorUV * 0.5)
+                            .to(torch::kFloat32), tf::InterpolateFuncOptions()
+                            .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
+                            .permute({0, 2, 3, 1}).squeeze().contiguous().to(torch::kCPU);
+                        _trainingInfo->images["varErrorUV" + std::to_string(i)].write()->copyFrom(varErrorUV.data_ptr<float>());
+                        l1ErrorY = tf::interpolate((l1ErrorY * 3.0)
+                            .to(torch::kFloat32), tf::InterpolateFuncOptions()
+                            .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
+                            .permute({0, 2, 3, 1}).squeeze().contiguous().to(torch::kCPU);
+                        _trainingInfo->images["l1ErrorY" + std::to_string(i)].write()->copyFrom(l1ErrorY.data_ptr<float>());
+                        l1ErrorUV = tf::interpolate((l1ErrorUV * 1.0)
+                            .to(torch::kFloat32), tf::InterpolateFuncOptions()
+                            .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
+                            .permute({0, 2, 3, 1}).squeeze().contiguous().to(torch::kCPU);
+                        _trainingInfo->images["l1ErrorUV" + std::to_string(i)].write()->copyFrom(l1ErrorUV.data_ptr<float>());
+                        totalLoss = tf::interpolate(totalLoss
+                            .to(torch::kFloat32), tf::InterpolateFuncOptions()
+                            .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
+                            .permute({0, 2, 3, 1}).squeeze().contiguous().to(torch::kCPU);
+                        _trainingInfo->images["totalLoss" + std::to_string(i)].write()->copyFrom(totalLoss.data_ptr<float>());
+                    }
+                    at::autocast::set_enabled(true);
+                    // TODO end of temp
 
                     // Output images
                     MultiLevelImage outImage;
@@ -1268,7 +1540,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         double controlP, controlI, controlD;
         {
             constexpr double P = 0.005;
-            constexpr double I = 0.00002;
+            constexpr double I = 0.0002;
             constexpr double D = 0.05;
             constexpr double errorFilter = 0.95;
             double error = _targetReconstructionLoss - reconstructionLossesAcc;
