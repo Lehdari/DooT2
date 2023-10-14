@@ -816,6 +816,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 _frameDecoder->zero_grad();
             }
 
+            int displayFrameId = rnd() % _virtualBatchSize;
             for (int64_t b=0; b<_virtualBatchSize; ++b) {
                 // frame (time point) to use this iteration
                 int t = v*_virtualBatchSize + b;
@@ -1030,7 +1031,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 loss.backward();
 
                 // Display
-                if (b == 0) {
+                if (b == displayFrameId) {
                     int displaySeqId = rnd() % doot2::batchSize;
 
                     // Input images
