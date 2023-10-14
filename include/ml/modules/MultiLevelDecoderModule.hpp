@@ -11,7 +11,7 @@
 #pragma once
 
 #include "ml/MultiLevelImage.hpp"
-#include "ml/modules/ResNetConvBlock.hpp"
+#include "ml/modules/AdaptiveResNetConvBlock.hpp"
 
 #include <torch/torch.h>
 
@@ -24,15 +24,18 @@ public:
         double level,
         int inputChannels,
         int outputChannels,
+        int contextChannels,
         int xUpscale,
         int yUpscale,
         int resBlockGroups = 1,
-        int resBlockScaling = 1
+        int resBlockScaling = 1,
+        int filterBankSize = 16
     );
 
     // outputs tuple of main tensor, auxiliary image
     std::tuple<torch::Tensor, torch::Tensor> forward(
         torch::Tensor x,
+        const torch::Tensor& context,
         double level,
         const torch::Tensor* imgPrev = nullptr
     );
@@ -42,8 +45,8 @@ private:
     int                     _outputChannels;
     int                     _xUpScale;
     int                     _yUpScale;
-    ResNetConvBlock         _resBlock1;
-    ResNetConvBlock         _resBlock2;
+    AdaptiveResNetConvBlock _resBlock1;
+    AdaptiveResNetConvBlock _resBlock2;
     torch::nn::Conv2d       _convAux;
     torch::nn::BatchNorm2d  _bnAux;
     torch::nn::Conv2d       _conv_Y;

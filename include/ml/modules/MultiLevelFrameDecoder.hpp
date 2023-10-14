@@ -14,7 +14,7 @@
 
 #include "ml/MultiLevelImage.hpp"
 #include "ml/modules/MultiLevelDecoderModule.hpp"
-#include "ml/modules/ResNetConvBlock.hpp"
+#include "ml/modules/AdaptiveResNetConvBlock.hpp"
 #include "ml/modules/ResNetLinearBlock.hpp"
 
 
@@ -28,19 +28,20 @@ public:
     MultiLevelImage forward(torch::Tensor x, double level);
 
 private:
-    ResNetLinearBlock           _resBlock1;
+    ResNetLinearBlock           _resBlock1a;
+    ResNetLinearBlock           _resBlock1b;
     torch::nn::BatchNorm1d      _bn1;
     torch::nn::ConvTranspose2d  _convTranspose1a;
     torch::nn::ConvTranspose2d  _convTranspose1b;
     torch::nn::BatchNorm2d      _bn2a;
     torch::nn::BatchNorm2d      _bn2b;
-    ResNetConvBlock             _resBlock2;
-    ResNetConvBlock             _resBlock3;
+    AdaptiveResNetConvBlock     _resBlock2;
+    AdaptiveResNetConvBlock     _resBlock3;
     torch::nn::Conv2d           _convAux;
     torch::nn::BatchNorm2d      _bnAux;
     torch::nn::Conv2d           _conv_Y;
     torch::nn::Conv2d           _conv_UV;
-    ResNetConvBlock             _resBlock4;
+    AdaptiveResNetConvBlock     _resBlock4;
     MultiLevelDecoderModule     _decoder1;
     MultiLevelDecoderModule     _decoder2;
     MultiLevelDecoderModule     _decoder3;

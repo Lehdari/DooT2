@@ -20,17 +20,21 @@ MultiLevelDecoderModuleImpl::MultiLevelDecoderModuleImpl(
     double level,
     int inputChannels,
     int outputChannels,
+    int contextChannels,
     int xUpscale,
     int yUpscale,
     int resBlockGroups,
-    int resBlockScaling
+    int resBlockScaling,
+    int filterBankSize
 ) :
     _level          (level),
     _outputChannels (outputChannels),
     _xUpScale       (xUpscale),
     _yUpScale       (yUpscale),
-    _resBlock1      (inputChannels, inputChannels*resBlockScaling, _outputChannels, resBlockGroups, true, 0.001),
-    _resBlock2      (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, resBlockGroups, true, 0.001),
+    _resBlock1      (inputChannels, inputChannels*resBlockScaling, _outputChannels, contextChannels,
+                     resBlockGroups, filterBankSize, true, 0.001),
+    _resBlock2      (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, contextChannels,
+                     resBlockGroups, filterBankSize, true, 0.001),
     _convAux        (nn::Conv2dOptions(outputChannels, 8, {1, 1}).bias(false)),
     _bnAux          (nn::BatchNorm2dOptions(8)),
     _conv_Y         (nn::Conv2dOptions(8, 1, {1, 1})),
@@ -58,7 +62,7 @@ MultiLevelDecoderModuleImpl::MultiLevelDecoderModuleImpl(
 }
 
 std::tuple<torch::Tensor, torch::Tensor> MultiLevelDecoderModuleImpl::forward(
-    torch::Tensor x, double level, const torch::Tensor* imgPrev)
+    torch::Tensor x, const torch::Tensor& context, double level, const torch::Tensor* imgPrev)
 {
     using namespace torch::indexing;
 
@@ -74,7 +78,7 @@ std::tuple<torch::Tensor, torch::Tensor> MultiLevelDecoderModuleImpl::forward(
             .align_corners(false))
             .to(originalType);
 
-        x = _resBlock2(_resBlock1(x));
+        x = _resBlock2(_resBlock1(x, context), context);
 
         // auxiliary image output
         y = gelu(_bnAux(_convAux(x)), "tanh");
