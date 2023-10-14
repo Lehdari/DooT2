@@ -31,6 +31,8 @@ public:
         FRAME_ENCODING_EVALUATION
     };
 
+    explicit SequenceCache(int maxLoadingThreads = 16);
+
     void setPath(const std::filesystem::path& cachePath);
 
     uint64_t nAvailableSequences(Type cacheType) const;
@@ -55,10 +57,11 @@ public:
 private:
     static std::unordered_map<Type, std::filesystem::path>  typeSubPath;
 
+    int                                     _nLoadingThreads;
     std::filesystem::path                   _cachePath;
     std::unordered_map<Type, std::string>   _recordSequenceNames;
-    std::vector<float>                      _frameYUVData;
-    Image<float>                            _frameYUV;
+    std::vector<std::vector<float>>         _frameYUVData;
+    std::vector<Image<float>>               _frameYUV;
     std::vector<int64_t>                    _frameShape;
 
     void newRecordSequenceName(Type cacheType);

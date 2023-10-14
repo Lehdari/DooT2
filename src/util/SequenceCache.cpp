@@ -26,6 +26,11 @@ std::unordered_map<SequenceCache::Type, std::filesystem::path> SequenceCache::ty
 }();
 
 
+SequenceCache::SequenceCache(int maxLoadingThreads) :
+    _nLoadingThreads    (std::min(omp_get_max_threads(), maxLoadingThreads))
+{
+}
+
 void SequenceCache::setPath(const std::filesystem::path& cachePath)
 {
     _cachePath = cachePath;
@@ -109,28 +114,41 @@ void SequenceCache::loadFramesToStorage(
     if (nSequences > sequencePaths.size())
         throw std::runtime_error("Number of sequences requested exceeds the n. of sequences cached\n");
 
-    bool firstImageLoaded = false;
+    // Load single image to initialize the conversion buffers
+    {
+        auto setupFrame = readImageFromFile<uint8_t>(
+            sequencePaths[offset % nSequences] / sequenceName / "00000" / "00000.png");
+        initializeYUVFrame(setupFrame.width(), setupFrame.height());
+    }
+
+    // Set number of loading threads
+    auto ompDynamicPrev = omp_get_dynamic();
+    omp_set_dynamic(0);
+    omp_set_num_threads(_nLoadingThreads);
+
+    #pragma omp parallel for
     for (int i=0; i<doot2::sequenceLength; ++i) {
+        int threadId = omp_get_thread_num();
+
         auto& base = sequencePaths[(offset + i) % nSequences];
         std::stringstream frameFilename;
         frameFilename << std::setw(5) << std::setfill('0') << i << ".png";
+
         for (int b=0; b<doot2::batchSize; ++b) {
             std::stringstream batchEntryDir;
             batchEntryDir << std::setw(5) << std::setfill('0') << b;
             fs::path filename = base / sequenceName / batchEntryDir.str() / frameFilename.str();
-            //printf("loading from %s\n", filename.c_str());
 
             auto frame = readImageFromFile<uint8_t>(filename);
-            if (!firstImageLoaded) {
-                initializeYUVFrame(frame.width(), frame.height());
-                firstImageLoaded = true;
-            }
-            convertImage(frame, _frameYUV, ImageFormat::YUV);
+
+            convertImage(frame, _frameYUV[threadId], ImageFormat::YUV);
             sequenceStorage.getBatch<float>(std::string(sequenceName), i)[b] = torch::from_blob(
-                _frameYUVData.data(), _frameShape, torch::TensorOptions().device(torch::kCPU)
+                _frameYUVData[threadId].data(), _frameShape, torch::TensorOptions().device(torch::kCPU)
             );
         }
     }
+
+    omp_set_dynamic(ompDynamicPrev);
 }
 
 void SequenceCache::newRecordSequenceName(Type cacheType)
@@ -146,7 +164,12 @@ void SequenceCache::newRecordSequenceName(Type cacheType)
 
 void SequenceCache::initializeYUVFrame(int width, int height)
 {
-    _frameYUVData.resize(width*height*getImageFormatNChannels(ImageFormat::YUV));
-    _frameYUV = Image<float>(width, height, ImageFormat::YUV, _frameYUVData.data());
-    _frameShape = { height, width, getImageFormatNChannels(ImageFormat::YUV) };
+    _frameYUVData.resize(_nLoadingThreads);
+    _frameYUV.resize(_nLoadingThreads);
+    _frameShape = {height, width, getImageFormatNChannels(ImageFormat::YUV)};
+
+    for (auto i=0; i<_nLoadingThreads; ++i) {
+        _frameYUVData[i].resize(width * height * getImageFormatNChannels(ImageFormat::YUV));
+        _frameYUV[i] = Image<float>(width, height, ImageFormat::YUV, _frameYUVData[i].data());
+    }
 }
