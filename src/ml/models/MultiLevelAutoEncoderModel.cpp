@@ -120,36 +120,36 @@ Json MultiLevelAutoEncoderModel::getDefaultModelConfig()
     modelConfig["optimizer_weight_decay"] = 0.05;
     modelConfig["optimizer_learning_rate_initial"] = 0.0001;
     modelConfig["optimizer_beta1_initial"] = 0.0;
-    modelConfig["optimizer_weight_decay_initial"] = 0.05;
+    modelConfig["optimizer_weight_decay_initial"] = 0.0;
     modelConfig["optimizer_learning_rate_final"] = 0.001;
     modelConfig["optimizer_beta1_final"] = 0.9;
     modelConfig["optimizer_weight_decay_final"] = 0.05;
-    modelConfig["warmup_duration"] = 1000;
-    modelConfig["n_training_cycles"] = 4;
-    modelConfig["virtual_batch_size"] = 8;
+    modelConfig["warmup_duration"] = 2048;
+    modelConfig["n_training_cycles"] = 1;
+    modelConfig["virtual_batch_size"] = 256;
     modelConfig["frame_loss_weight"] = 4.0;
     modelConfig["frame_grad_loss_weight"] = 1.5;
     modelConfig["frame_laplacian_loss_weight"] = 1.5;
-    modelConfig["use_frame_classification_loss"] = true;
+    modelConfig["use_frame_classification_loss"] = false;
     modelConfig["frame_classification_loss_weight"] = 0.3;
     modelConfig["use_encoding_mean_loss"] = false;
     modelConfig["encoding_mean_loss_weight"] = 0.001;
-    modelConfig["use_encoding_distribution_loss"] = true;
+    modelConfig["use_encoding_distribution_loss"] = false;
     modelConfig["encoding_distribution_loss_weight"] = 100.0;
     modelConfig["use_encoding_distance_loss"] = false;
     modelConfig["encoding_distance_loss_weight"] = 0.001;
-    modelConfig["use_encoding_covariance_loss"] = true;
+    modelConfig["use_encoding_covariance_loss"] = false;
     modelConfig["encoding_covariance_loss_weight"] = 0.02;
-    modelConfig["use_encoding_prev_distance_loss"] = true;
+    modelConfig["use_encoding_prev_distance_loss"] = false;
     modelConfig["encoding_prev_distance_loss_weight"] = 0.4;
-    modelConfig["use_encoding_discrimination_loss"] = true;
+    modelConfig["use_encoding_discrimination_loss"] = false;
     modelConfig["encoding_discrimination_loss_weight"] = 0.3;
-    modelConfig["use_encoding_circular_loss"] = true;
+    modelConfig["use_encoding_circular_loss"] = false;
     modelConfig["encoding_circular_loss_weight"] = 0.25;
-    modelConfig["use_discriminator"] = true;
+    modelConfig["use_discriminator"] = false;
     modelConfig["discrimination_loss_weight"] = 0.4;
     modelConfig["discriminator_virtual_batch_size"] = 8;
-    modelConfig["target_reconstruction_loss"] = 0.3;
+    modelConfig["target_reconstruction_loss"] = 0.1;
 
     return modelConfig;
 }
@@ -169,36 +169,36 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
     _optimizerWeightDecay               (0.05),
     _optimizerLearningRateInitial       (0.0001),
     _optimizerBeta1Initial              (0.0),
-    _optimizerWeightDecayInitial        (0.05),
+    _optimizerWeightDecayInitial        (0.0),
     _optimizerLearningRateFinal         (0.001),
     _optimizerBeta1Final                (0.9),
     _optimizerWeightDecayFinal          (0.05),
-    _warmupDuration                     (1000),
-    _nTrainingCycles                    (4),
-    _virtualBatchSize                   (8),
+    _warmupDuration                     (2048),
+    _nTrainingCycles                    (1),
+    _virtualBatchSize                   (256),
     _frameLossWeight                    (3.0),
     _frameGradLossWeight                (1.5),
     _frameLaplacianLossWeight           (1.5),
-    _useFrameClassificationLoss         (true),
+    _useFrameClassificationLoss         (false),
     _frameClassificationLossWeight      (0.3),
     _useEncodingMeanLoss                (false),
     _encodingMeanLossWeight             (0.001),
-    _useEncodingDistributionLoss        (true),
+    _useEncodingDistributionLoss        (false),
     _encodingDistributionLossWeight     (100.0),
     _useEncodingDistanceLoss            (false),
     _encodingDistanceLossWeight         (0.001),
-    _useEncodingCovarianceLoss          (true),
+    _useEncodingCovarianceLoss          (false),
     _encodingCovarianceLossWeight       (0.02),
-    _useEncodingPrevDistanceLoss        (true),
+    _useEncodingPrevDistanceLoss        (false),
     _encodingPrevDistanceLossWeight     (0.4),
-    _useEncodingDiscriminationLoss      (true),
+    _useEncodingDiscriminationLoss      (false),
     _encodingDiscriminationLossWeight   (0.4),
-    _useEncodingCircularLoss            (true),
+    _useEncodingCircularLoss            (false),
     _encodingCircularLossWeight         (0.25),
-    _useDiscriminator                   (true),
+    _useDiscriminator                   (false),
     _discriminationLossWeight           (0.4),
     _discriminatorVirtualBatchSize      (8),
-    _targetReconstructionLoss           (0.3),
+    _targetReconstructionLoss           (0.1),
     _trainingIteration                  (0),
     _lossLevel                          (0.0),
     _batchPixelDiff                     (1.0),
