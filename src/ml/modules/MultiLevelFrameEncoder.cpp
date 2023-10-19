@@ -17,16 +17,16 @@ using namespace torch;
 
 MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl(int featureMultiplier) :
     _encoder1           (5.5, 3, 8, 2, 2, 1, 4), // 320x240
-    _encoder2           (4.5, 8, 16, 2, 2, 1, 4), // 160x120
-    _encoder3           (3.5, 16, 32, 2, 2, 1, 4), // 80x60
-    _encoder4           (2.5, 32, 64, 2, 2, 2, 4), // 40x30
-    _encoder5           (1.5, 64, 128, 2, 2, 4, 4), // 20x15
-    _encoder6           (0.5, 128, 256, 2, 1, 8, 4), // 10x15
-    _encoder7           (-0.5, 256, 512, 2, 3, 16, 4), // 5x5
+    _encoder2           (4.5, 8, 16, 2, 2, 2, 4), // 160x120
+    _encoder3           (3.5, 16, 32, 2, 2, 4, 4), // 80x60
+    _encoder4           (2.5, 32, 64, 2, 2, 8, 4), // 40x30
+    _encoder5           (1.5, 64, 128, 2, 2, 16, 4), // 20x15
+    _encoder6           (0.5, 128, 256, 2, 1, 32, 4), // 10x15
+    _encoder7           (-0.5, 256, 512, 2, 3, 64, 2), // 5x5
     _bn1                (nn::BatchNorm2dOptions(512)),
     _conv1              (nn::Conv2dOptions(512, 512, {2, 2}).bias(false).groups(512)),
-    _resBlock1          (512, 2048, 256, 16, true, 0.001),
-    _resBlock2          (256, 1024, 128, 8, true, 0.001),
+    _resBlock1          (512, 1024, 256, 64, true, 0.001),
+    _resBlock2          (256, 1024, 128, 64, true, 0.001),
     _resBlock3a         (2048, 1024, 2048, 0.001),
     _resBlock3b         (2048, 1024, 2048),
     _resBlock4          (2048, 2048, 2048),
