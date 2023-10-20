@@ -33,8 +33,10 @@ public:
 
 private:
     torch::Tensor               _weight;
-    torch::nn::Linear           _linear1; // two linear layers for context mapping
-    torch::nn::Linear           _linear2;
+    torch::nn::Linear           _linear1a; // two linear layers for filter selection with context
+    torch::nn::Linear           _linear2a;
+    torch::nn::Linear           _linear1b; // two linear layers for filter modulation with context
+    torch::nn::Linear           _linear2b;
 
     int                         _groups;
     const std::vector<long>     _padding;

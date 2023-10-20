@@ -40,10 +40,12 @@ AdaptiveConv2dImpl::AdaptiveConv2dImpl(
 ):
     _weight         (torch::zeros({filterBankSize, outputChannels, inputChannels/groups, kernelSize[0],
                      kernelSize[1]})),
-    _linear1        (nn::LinearOptions(contextChannels, contextMappingHiddenChannels(contextChannels,
+    _linear1a       (nn::LinearOptions(contextChannels, contextMappingHiddenChannels(contextChannels,
                      filterBankSize))),
-    _linear2        (nn::LinearOptions(contextMappingHiddenChannels(contextChannels, filterBankSize),
+    _linear2a       (nn::LinearOptions(contextMappingHiddenChannels(contextChannels, filterBankSize),
                      filterBankSize)),
+    _linear1b       (nn::LinearOptions(contextChannels, outputChannels)),
+    _linear2b       (nn::LinearOptions(outputChannels, outputChannels)),
     _groups         (groups),
     _padding        (padding),
     _paddingMode    (*std::max_element(_padding.begin(), _padding.end()) == 0 ? 0 :
@@ -57,8 +59,10 @@ AdaptiveConv2dImpl::AdaptiveConv2dImpl(
         torch::nn::init::uniform_(_weight, -stdv, stdv);
     }
     register_parameter("weight", _weight);
-    register_module("linear1", _linear1);
-    register_module("linear2", _linear2);
+    register_module("linear1a", _linear1a);
+    register_module("linear2a", _linear2a);
+    register_module("linear1b", _linear1b);
+    register_module("linear2b", _linear2b);
 }
 
 torch::Tensor AdaptiveConv2dImpl::forward(torch::Tensor x, const torch::Tensor& context)
@@ -79,15 +83,22 @@ torch::Tensor AdaptiveConv2dImpl::forward(torch::Tensor x, const torch::Tensor& 
     }
 
     // Filter soft-selection weights with 2-layer MLP and softmax
-    torch::Tensor y = tf::softmax(_linear2(gelu(_linear1(context), "tanh")), tf::SoftmaxFuncOptions(1));
-
+    torch::Tensor y = tf::softmax(_linear2a(gelu(_linear1a(context), "tanh")), tf::SoftmaxFuncOptions(1));
     assert(y.sizes()[0] == b);
+
+    // Filter modulation weights
+    torch::Tensor z = torch::sigmoid(_linear2b(gelu(_linear1b(context), "tanh")));
+    assert(z.sizes()[0] == b);
+
     auto f = y.sizes()[1]; // filter bank size
 
     // Select filters from batch by multiplication-summation:
     // _weight and y are both casted to 6D ("B x F x O x I x Kh x Kw") and summed along F
     // to produce a filter for each entry in the batch.
     torch::Tensor weight = (_weight.unsqueeze(0) * y.view({b, f, 1, 1, 1, 1})).sum(1);
+
+    // filter weight modulation along output dimension ("B x O x I x Kh x Kw")
+    weight = weight * z.view({b, o, 1, 1, 1});
 
     // Batched convolution is not supported so weight and input are both converted so that batch dimensionality
     // is moved to the channels. The batches are kept separate with the groups (hence b*_groups) and casted
