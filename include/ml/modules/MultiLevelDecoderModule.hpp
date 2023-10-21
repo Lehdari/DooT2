@@ -11,6 +11,7 @@
 #pragma once
 
 #include "ml/MultiLevelImage.hpp"
+#include "ml/modules/AdaptiveConvTranspose2d.hpp"
 #include "ml/modules/AdaptiveResNetConvBlock.hpp"
 
 #include <torch/torch.h>
@@ -27,6 +28,7 @@ public:
         int contextChannels,
         int xUpscale,
         int yUpscale,
+        int upscaleConvGroups = 1,
         int resBlockGroups = 1,
         int resBlockScaling = 1,
         int filterBankSize = 16
@@ -45,6 +47,7 @@ private:
     int                     _outputChannels;
     int                     _xUpScale;
     int                     _yUpScale;
+    AdaptiveConvTranspose2d _convTranspose1;
     AdaptiveResNetConvBlock _resBlock1;
     AdaptiveResNetConvBlock _resBlock2;
     torch::nn::Conv2d       _convAux;

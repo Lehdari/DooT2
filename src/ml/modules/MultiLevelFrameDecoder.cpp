@@ -32,13 +32,13 @@ MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
     _conv_Y             (nn::Conv2dOptions(8, 1, {1, 1})),
     _conv_UV            (nn::Conv2dOptions(8, 2, {1, 1})),
     _resBlock4          (512, 1024, 512, 1024, 64, 4, true, 0.0, true),
-    _decoder1           (0.0, 512, 512, 1024, 2, 3, 64, 2, 4),
-    _decoder2           (1.0, 512, 256, 1024, 2, 1, 32, 2, 4),
-    _decoder3           (2.0, 256, 128, 1024, 2, 2, 16, 4, 8),
-    _decoder4           (3.0, 128, 64, 1024, 2, 2, 8, 4, 8),
-    _decoder5           (4.0, 64, 32, 1024, 2, 2, 4, 4, 16),
-    _decoder6           (5.0, 32, 16, 1024, 2, 2, 2, 4, 16),
-    _decoder7           (6.0, 16, 8, 1024, 2, 2, 1, 4, 16)
+    _decoder1           (0.0, 512, 512, 1024, 2, 3, 32, 64, 2, 4),
+    _decoder2           (1.0, 512, 256, 1024, 2, 1, 16, 32, 2, 4),
+    _decoder3           (2.0, 256, 128, 1024, 2, 2, 8, 16, 4, 8),
+    _decoder4           (3.0, 128, 64, 1024, 2, 2, 4, 8, 4, 8),
+    _decoder5           (4.0, 64, 32, 1024, 2, 2, 2, 4, 4, 16),
+    _decoder6           (5.0, 32, 16, 1024, 2, 2, 1, 2, 4, 16),
+    _decoder7           (6.0, 16, 8, 1024, 2, 2, 1, 1, 4, 16)
 {
     register_module("resBlock1a", _resBlock1a);
     register_module("resBlock1b ", _resBlock1b );
