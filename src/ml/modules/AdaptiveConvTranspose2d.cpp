@@ -31,16 +31,18 @@ AdaptiveConvTranspose2dImpl::AdaptiveConvTranspose2dImpl(
     int inputChannels,
     int outputChannels,
     int contextChannels,
-    int xUpscale,
-    int yUpscale,
+    const std::vector<long>& kernelSize,
     int groups,
     int filterBankSize,
+    const std::vector<long>& stride,
+    const std::vector<long>& cropping,
     double normalInitializationStd
 ):
-    _xUpScale       (xUpscale),
-    _yUpScale       (yUpscale),
     _groups         (groups),
-    _weight         (torch::zeros({filterBankSize, inputChannels, outputChannels/groups, yUpscale+2, xUpscale+2})),
+    _stride         (stride),
+    _cropping       (cropping),
+    _weight         (torch::zeros({filterBankSize, inputChannels, outputChannels/groups,
+                     kernelSize.at(0), kernelSize.at(1)})),
     _linear1a       (nn::LinearOptions(contextChannels, contextMappingHiddenChannels(contextChannels,
                      filterBankSize))),
     _linear2a       (nn::LinearOptions(contextMappingHiddenChannels(contextChannels, filterBankSize),
@@ -55,11 +57,15 @@ AdaptiveConvTranspose2dImpl::AdaptiveConvTranspose2dImpl(
         double stdv = 1.0 / std::sqrt(inputChannels);
         torch::nn::init::uniform_(_weight, -stdv, stdv);
     }
+
     register_parameter("weight", _weight);
     register_module("linear1a", _linear1a);
     register_module("linear2a", _linear2a);
     register_module("linear1b", _linear1b);
     register_module("linear2b", _linear2b);
+
+    assert(_stride.size() == 2);
+    assert(_cropping.size() == 4);
 }
 
 torch::Tensor AdaptiveConvTranspose2dImpl::forward(torch::Tensor x, const torch::Tensor& context)
@@ -93,8 +99,8 @@ torch::Tensor AdaptiveConvTranspose2dImpl::forward(torch::Tensor x, const torch:
     // back to expected batch size and n. of channels after the convolution.
     weight = weight.view({b*c, _weight.sizes()[2], _weight.sizes()[3], _weight.sizes()[4]});
     x = tf::conv_transpose2d(x.view({1, b*c, x.sizes()[2], x.sizes()[3]}), weight, tf::ConvTranspose2dFuncOptions()
-        .groups(b*_groups).stride({_yUpScale, _xUpScale}));
+        .groups(b*_groups).stride({_stride[0], _stride[1]}));
     x = x.view({b, o, x.sizes()[2], x.sizes()[3]});
 
-    return x.index({Slice(), Slice(), Slice(1,-1), Slice(1,-1)});
+    return x.index({Slice(), Slice(), Slice(_cropping[0],-_cropping[1]), Slice(_cropping[2],-_cropping[3])});
 }

@@ -21,19 +21,20 @@ public:
         int inputChannels,
         int outputChannels,
         int contextInputChannels,
-        int xUpscale,
-        int yUpscale,
+        const std::vector<long>& kernelSize,
         int groups = 1,
         int filterBankSize = 16,
+        const std::vector<long>& stride = {1,1},
+        const std::vector<long>& cropping = {0,0,0,0}, // top, bottom, left, right crop on output
         double normalInitializationStd = 0.0
     );
 
     torch::Tensor forward(torch::Tensor x, const torch::Tensor& context);
 
 private:
-    int                         _xUpScale;
-    int                         _yUpScale;
     int                         _groups;
+    std::vector<long>           _stride;
+    std::vector<long>           _cropping;
 
     torch::Tensor               _weight;
     torch::nn::Linear           _linear1a; // two linear layers for filter selection with context
