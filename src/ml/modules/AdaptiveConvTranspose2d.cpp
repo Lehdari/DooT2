@@ -102,5 +102,12 @@ torch::Tensor AdaptiveConvTranspose2dImpl::forward(torch::Tensor x, const torch:
         .groups(b*_groups).stride({_stride[0], _stride[1]}));
     x = x.view({b, o, x.sizes()[2], x.sizes()[3]});
 
-    return x.index({Slice(), Slice(), Slice(_cropping[0],-_cropping[1]), Slice(_cropping[2],-_cropping[3])});
+    auto sliceY = Slice(_cropping[0], -_cropping[1]);
+    if (_cropping[1] <= 0)
+        sliceY = Slice(_cropping[0], None);
+    auto sliceX = Slice(_cropping[2], -_cropping[3]);
+    if (_cropping[3] <= 0)
+        sliceX = Slice(_cropping[2], None);
+
+    return x.index({Slice(), Slice(), sliceY, sliceX});
 }
