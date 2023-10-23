@@ -30,19 +30,25 @@ public:
 
 private:
     ResNetLinearBlock           _resBlock1a;
+    ResNetLinearBlock           _resBlock2a;
+    ResNetLinearBlock           _resBlock3a;
+    ResNetLinearBlock           _resBlock4a;
     ResNetLinearBlock           _resBlock1b;
+    ResNetLinearBlock           _resBlock2b;
+    ResNetLinearBlock           _resBlock3b;
+    ResNetLinearBlock           _resBlock4b;
     torch::nn::BatchNorm1d      _bn1;
     AdaptiveConvTranspose2d     _convTranspose1a;
     AdaptiveConvTranspose2d     _convTranspose1b;
     torch::nn::BatchNorm2d      _bn2a;
     torch::nn::BatchNorm2d      _bn2b;
-    AdaptiveResNetConvBlock     _resBlock2;
-    AdaptiveResNetConvBlock     _resBlock3;
+    AdaptiveResNetConvBlock     _resConvBlock1;
+    AdaptiveResNetConvBlock     _resConvBlock2;
     torch::nn::Conv2d           _convAux;
     torch::nn::BatchNorm2d      _bnAux;
     torch::nn::Conv2d           _conv_Y;
     torch::nn::Conv2d           _conv_UV;
-    AdaptiveResNetConvBlock     _resBlock4;
+    AdaptiveResNetConvBlock     _resConvBlock3;
     MultiLevelDecoderModule     _decoder1;
     MultiLevelDecoderModule     _decoder2;
     MultiLevelDecoderModule     _decoder3;
