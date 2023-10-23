@@ -21,8 +21,8 @@ MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
     _resBlock1a         (2048, 2048, 2048),
     _resBlock1b         (2048, 1024, 1024),
     _bn1                (nn::BatchNorm1dOptions(2048)),
-    _convTranspose1a    (nn::ConvTranspose2dOptions(128, 128, {2, 2})),
-    _convTranspose1b    (nn::ConvTranspose2dOptions(2048, 128, {5, 5}).groups(8)),
+    _convTranspose1a    (128, 128, 1024, std::vector<long>{2, 2}, 1, 16),
+    _convTranspose1b    (2048, 128, 1024, std::vector<long>{5, 5}, 64, 8),
     _bn2a               (nn::BatchNorm2dOptions(128)),
     _bn2b               (nn::BatchNorm2dOptions(128)),
     _resBlock2          (256, 1024, 512, 1024, 64, 4, true, 0.0, true),
@@ -93,9 +93,9 @@ MultiLevelImage MultiLevelFrameDecoderImpl::forward(torch::Tensor x, double leve
     // 2-way deconv into 5x5x256
     x = gelu(_bn1(x), "tanh");
     torch::Tensor y = torch::reshape(x, {batchSize, 128, 4, 4});
-    y = _bn2a(_convTranspose1a(y));
+    y = _bn2a(_convTranspose1a(y, context));
     x = torch::reshape(x, {batchSize, 2048, 1, 1});
-    x = _bn2b(_convTranspose1b(x));
+    x = _bn2b(_convTranspose1b(x, context));
     x = gelu(torch::cat({x, y}, 1), "tanh");
 
     // First residual conv blocks

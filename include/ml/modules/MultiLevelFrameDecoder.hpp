@@ -14,6 +14,7 @@
 
 #include "ml/MultiLevelImage.hpp"
 #include "ml/modules/MultiLevelDecoderModule.hpp"
+#include "ml/modules/AdaptiveConvTranspose2d.hpp"
 #include "ml/modules/AdaptiveResNetConvBlock.hpp"
 #include "ml/modules/ResNetLinearBlock.hpp"
 
@@ -31,8 +32,8 @@ private:
     ResNetLinearBlock           _resBlock1a;
     ResNetLinearBlock           _resBlock1b;
     torch::nn::BatchNorm1d      _bn1;
-    torch::nn::ConvTranspose2d  _convTranspose1a;
-    torch::nn::ConvTranspose2d  _convTranspose1b;
+    AdaptiveConvTranspose2d     _convTranspose1a;
+    AdaptiveConvTranspose2d     _convTranspose1b;
     torch::nn::BatchNorm2d      _bn2a;
     torch::nn::BatchNorm2d      _bn2b;
     AdaptiveResNetConvBlock     _resBlock2;
