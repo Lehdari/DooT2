@@ -17,6 +17,7 @@
 #include "ml/modules/AdaptiveConvTranspose2d.hpp"
 #include "ml/modules/AdaptiveResNetConvBlock.hpp"
 #include "ml/modules/ResNetLinearBlock.hpp"
+#include "ml/modules/ResNetFourierConvBlock.hpp"
 
 
 namespace ml {
@@ -42,6 +43,7 @@ private:
     AdaptiveConvTranspose2d     _convTranspose1b;
     torch::nn::BatchNorm2d      _bn2a;
     torch::nn::BatchNorm2d      _bn2b;
+    ResNetFourierConvBlock      _resFourierConvBlock1;
     AdaptiveResNetConvBlock     _resConvBlock1;
     AdaptiveResNetConvBlock     _resConvBlock2;
     torch::nn::Conv2d           _convAux;

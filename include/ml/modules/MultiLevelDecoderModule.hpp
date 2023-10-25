@@ -13,6 +13,7 @@
 #include "ml/MultiLevelImage.hpp"
 #include "ml/modules/AdaptiveConvTranspose2d.hpp"
 #include "ml/modules/AdaptiveResNetConvBlock.hpp"
+#include "ml/modules/ResNetFourierConvBlock.hpp"
 
 #include <torch/torch.h>
 
@@ -48,8 +49,9 @@ private:
     int                     _xUpScale;
     int                     _yUpScale;
     AdaptiveConvTranspose2d _convTranspose1;
-    AdaptiveResNetConvBlock _resBlock1;
-    AdaptiveResNetConvBlock _resBlock2;
+    ResNetFourierConvBlock  _resFourierConvBlock1;
+    AdaptiveResNetConvBlock _resConvBlock1;
+    AdaptiveResNetConvBlock _resConvBlock2;
     torch::nn::Conv2d       _convAux;
     torch::nn::BatchNorm2d  _bnAux;
     torch::nn::Conv2d       _conv_Y;
