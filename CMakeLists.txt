@@ -41,6 +41,7 @@ set(DOOT2_ML_SOURCES
     src/ml/modules/Discriminator.cpp
     src/ml/modules/EncodingDiscriminator.cpp
     src/ml/modules/FlowDecoder.cpp
+    src/ml/modules/FourierConv2d.cpp
     src/ml/modules/FrameDecoder.cpp
     src/ml/modules/FrameEncoder.cpp
     src/ml/modules/LinearResidualModule.cpp
@@ -50,6 +51,7 @@ set(DOOT2_ML_SOURCES
     src/ml/modules/MultiLevelFrameEncoder.cpp
     src/ml/modules/ResNetConvBlock.cpp
     src/ml/modules/ResNetDownscaleConvBlock.cpp
+    src/ml/modules/ResNetFourierConvBlock.cpp
     src/ml/modules/ResNetLinearBlock.cpp
     src/ml/modules/ResNeXtModule.cpp
     src/ml/modules/SqueezeExcitation.cpp
