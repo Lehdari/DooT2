@@ -28,7 +28,7 @@ using namespace std::chrono;
 
 
 namespace {
-
+#if 0
     INLINE torch::Tensor yuvLoss(const torch::Tensor& target, const torch::Tensor& pred) {
         return torch::mean(torch::abs(target-pred), {0, 2, 3}) // reduce only batch and spatial dimensions, preserve channels
             .dot(torch::tensor({1.8f, 1.1f, 1.1f}, // higher weight on Y channel
@@ -74,7 +74,7 @@ namespace {
 
         return yuvLoss(targetLaplacian, predLaplacian);
     }
-
+#endif
     // returns YUV local mean (B*3*H*W), YUV local variance (B*3*H*W), UV local covariance (B*1*H*W)
     inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> localVariance(const torch::Tensor& yuvImage)
     {
@@ -255,6 +255,79 @@ namespace {
         return combinerErrorImage.mean();
     }
 
+    inline std::tuple<torch::Tensor, torch::Tensor> imageSpectrum(const torch::Tensor& image)
+    {
+        torch::Tensor spectrum = torch::fft_rfft2(image.to(torch::kFloat32)); // [B * C/2 * H * W/2] complex tensor, C: _globalInputChannels
+        torch::Tensor amp = spectrum.abs();
+        torch::Tensor phase = spectrum.angle();
+
+        return { amp, phase };
+    }
+
+    inline std::tuple<torch::Tensor, torch::Tensor> imageSpectrumErrors(
+        const torch::Tensor& imageTarget, const torch::Tensor& imagePred)
+    {
+        torch::Tensor spectrumTarget = torch::fft_rfft2(imageTarget.to(torch::kFloat32)); // [B * C/2 * H * W/2] complex tensor, C: _globalInputChannels
+        torch::Tensor spectrumPred = torch::fft_rfft2(imagePred.to(torch::kFloat32)); // [B * C/2 * H * W/2] complex tensor, C: _globalInputChannels
+
+        constexpr float eps = 1.0e-6;
+
+        torch::Tensor targetAbs = spectrumTarget.abs();
+        targetAbs = torch::max(targetAbs, eps*torch::ones_like(targetAbs));
+        torch::Tensor predAbs = spectrumPred.abs();
+        predAbs = torch::max(predAbs, eps*torch::ones_like(predAbs));
+
+        spectrumTarget = torch::view_as_real(spectrumTarget);
+        spectrumPred = torch::view_as_real(spectrumPred);
+
+        torch::Tensor ampLoss = (predAbs - targetAbs).square();
+        torch::Tensor phaseDiff = M_1_PI*acos(clamp((
+            (spectrumTarget / targetAbs.unsqueeze(-1)) * // division by abs for normalization
+            (spectrumPred / predAbs.unsqueeze(-1))
+            ).sum(-1),
+            -1.0+eps, 1.0-eps));
+        // filtering for phase loss discontinuity at origin
+        torch::Tensor spectrumTargetDot = (spectrumTarget * spectrumTarget).sum(-1);
+        spectrumTargetDot = torch::max(spectrumTargetDot, eps*torch::ones_like(spectrumTargetDot));
+        torch::Tensor dirDiff = 0.5 - 0.5*((spectrumPred * spectrumTarget).sum(-1) / spectrumTargetDot);
+        torch::Tensor a = clamp(1.0 - predAbs / targetAbs, 0.0, 1.0).square();
+//        printf("a: [ %d %d %d %d ]\n", a.sizes()[0], a.sizes()[1], a.sizes()[2], a.sizes()[3]);
+//        printf("phaseDiff: [ %d %d %d %d ]\n", phaseDiff.sizes()[0], phaseDiff.sizes()[1], phaseDiff.sizes()[2], phaseDiff.sizes()[3]);
+//        printf("dirDiff: [ %d %d %d %d ]\n", dirDiff.sizes()[0], dirDiff.sizes()[1], dirDiff.sizes()[2], dirDiff.sizes()[3]);
+//        printf("targetAbs: [ %d %d %d %d ]\n", targetAbs.sizes()[0], targetAbs.sizes()[1], targetAbs.sizes()[2], targetAbs.sizes()[3]);
+//        fflush(stdout);
+        torch::Tensor phaseLoss = ((1.0-a)*phaseDiff.square() + a*dirDiff) * targetAbs;
+
+        return { ampLoss, phaseLoss };
+//        printf("targetAbs: [%d %d %d %d]\n",
+//            targetAbs.sizes()[0], targetAbs.sizes()[1], targetAbs.sizes()[2], targetAbs.sizes()[3]);
+//        fflush(stdout);
+
+        // Amplitude error is L2 loss for log amplitudes
+//        torch::Tensor errAmp = torch::abs(targetAbs - predAbs);
+
+//        printf("spectrumTarget.abs().max(): %0.5f\n", spectrumTarget.abs().max().item<double>());
+//        printf("spectrumPred.abs().max(): %0.5f\n", spectrumPred.abs().max().item<double>());
+
+        // Phase error based on dot products on the complex plane
+//        torch::Tensor errPhase = torch::acos(torch::clamp((
+//            (torch::view_as_real(spectrumTarget) / targetAbs.unsqueeze(-1)) * // division by abs for normalization
+//            (torch::view_as_real(spectrumPred) / predAbs.unsqueeze(-1))
+//            ).sum(-1), -0.9999, 0.9999));
+//
+//        return { errAmp, errPhase };
+    }
+
+    inline torch::Tensor imageSpectrumLoss(
+        const torch::Tensor& imageTarget, const torch::Tensor& imagePred)
+    {
+        auto [errAmp, errPhase] = imageSpectrumErrors(imageTarget, imagePred);
+
+//        printf("errAmp: %0.5f errPhase: %0.5f\n", errAmp.mean().item<double>(), errPhase.mean().item<double>());
+
+        return errAmp.mean() + errPhase.mean();
+    }
+
     INLINE double distributionLossKernelWidth(double batchSize)
     {
         // Function fitted to kernel widths acquired by empirical tests
@@ -279,6 +352,16 @@ namespace {
         double b = std::sqrt(a*(1.0-a));
         double c = 1.0 / (3.61512 - 1.96*b);
         return torch::mean(c * (a*(1/x-1) + (1-a)*(1/(1-x)-1) - 2.0*b));
+    }
+
+    INLINE torch::Tensor createHannWindow(const std::vector<long>& size, torch::Device device, double eps=0.1)
+    {
+        auto m = torch::meshgrid({
+            torch::linspace(0.0, 2.0*M_PI, size[0]),
+            torch::linspace(0.0, 2.0*M_PI, size[1])}, "ij");
+        m[0] = 0.5-0.5*torch::cos(m[0]);
+        m[1] = 0.5-0.5*torch::cos(m[1]);
+        return ((m[0]*m[1])*(1.0-eps) + eps).view({1,1,size[0],size[1]}).to(device);
     }
 
 } // namespace
@@ -639,6 +722,7 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         timeSeriesWriteHandle->addSeries<double>("discriminatorLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingCircularLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingMaskLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("spectrumLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("reconstructionLosses", 0.0);
         timeSeriesWriteHandle->addSeries<double>("auxiliaryLosses", 0.0);
         timeSeriesWriteHandle->addSeries<double>("loss", 0.0);
@@ -673,6 +757,12 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
             *(_trainingInfo->images)["l2ErrorY" + std::to_string(i)].write() = Image<float>(width, height, ImageFormat::GRAY);
             *(_trainingInfo->images)["l2ErrorUV" + std::to_string(i)].write() = Image<float>(width, height, ImageFormat::GRAY);
             *(_trainingInfo->images)["totalLoss" + std::to_string(i)].write() = Image<float>(width, height, ImageFormat::GRAY);
+            *(_trainingInfo->images)["spectrumAmp" + std::to_string(i)].write() = Image<float>(width/2, height, ImageFormat::GRAY);
+            *(_trainingInfo->images)["spectrumPhase" + std::to_string(i)].write() = Image<float>(width/2, height, ImageFormat::GRAY);
+            *(_trainingInfo->images)["spectrumAmpPrediction" + std::to_string(i)].write() = Image<float>(width/2, height, ImageFormat::GRAY);
+            *(_trainingInfo->images)["spectrumPhasePrediction" + std::to_string(i)].write() = Image<float>(width/2, height, ImageFormat::GRAY);
+            *(_trainingInfo->images)["spectrumAmpError" + std::to_string(i)].write() = Image<float>(width/2, height, ImageFormat::GRAY);
+            *(_trainingInfo->images)["spectrumPhaseError" + std::to_string(i)].write() = Image<float>(width/2, height, ImageFormat::GRAY);
         }
         // TODO end of temp
         *(_trainingInfo->images)["prediction7"].write() = Image<float>(width, height, ImageFormat::YUV);
@@ -948,6 +1038,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
     double discriminatorLossAcc = 0.0;
     double encodingCircularLossAcc = 0.0;
     double encodingMaskLossAcc = 0.0;
+    double spectrumLossAcc = 0.0;
     double reconstructionLossesAcc = 0.0;
     double auxiliaryLossesAcc = 0.0;
     double maxEncodingCovariance = 1.0; // max value in the covariance matrix
@@ -957,7 +1048,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         for (int64_t v=0; v<nVirtualBatchesPerCycle; ++v) {
             MultiLevelImage rOut;
             torch::Tensor covarianceMatrix, enc, encPrev, encRandom, encCircular;
-
+#if 0
             // Discriminator training passes
             if (_useDiscriminator) {
                 for (int d = 0; d < _discriminatorVirtualBatchSize; ++d) {
@@ -1006,7 +1097,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 }
                 _frameDecoder->zero_grad();
             }
-
+#endif
             int displayFrameId = rnd() % _virtualBatchSize;
             for (int64_t b=0; b<_virtualBatchSize; ++b) {
                 // frame (time point) to use this iteration
@@ -1165,6 +1256,60 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 }
                 frameClassificationLossAcc += frameClassificationLoss.item<double>();
 
+                at::autocast::set_enabled(false);
+
+                static torch::Tensor hannWindow0 = createHannWindow(
+                    {seq.img0.index({t}).sizes()[2], seq.img0.index({t}).sizes()[3]}, _device);
+                static torch::Tensor hannWindow1 = createHannWindow(
+                    {seq.img1.index({t}).sizes()[2], seq.img1.index({t}).sizes()[3]}, _device);
+                static torch::Tensor hannWindow2 = createHannWindow(
+                    {seq.img2.index({t}).sizes()[2], seq.img2.index({t}).sizes()[3]}, _device);
+                static torch::Tensor hannWindow3 = createHannWindow(
+                    {seq.img3.index({t}).sizes()[2], seq.img3.index({t}).sizes()[3]}, _device);
+                static torch::Tensor hannWindow4 = createHannWindow(
+                    {seq.img4.index({t}).sizes()[2], seq.img4.index({t}).sizes()[3]}, _device);
+                static torch::Tensor hannWindow5 = createHannWindow(
+                    {seq.img5.index({t}).sizes()[2], seq.img5.index({t}).sizes()[3]}, _device);
+                static torch::Tensor hannWindow6 = createHannWindow(
+                    {seq.img6.index({t}).sizes()[2], seq.img6.index({t}).sizes()[3]}, _device);
+
+                // Spectrum loss
+                constexpr double _spectrumLossWeight = 100.0;
+                torch::Tensor spectrumLoss = /*std::min(_lossLevel, 1.0) * */ _spectrumLossWeight * (
+                    frameLossWeight0 * imageSpectrumLoss(
+                        out.img0.to(torch::kFloat32) * hannWindow0,
+                        seq.img0.index({t}).to(torch::kFloat32) * hannWindow0) +
+                    (_lossLevel > 0.0 ? frameLossWeight1 *
+                        imageSpectrumLoss(
+                        out.img1.to(torch::kFloat32) * hannWindow1,
+                        seq.img1.index({t}).to(torch::kFloat32) * hannWindow1) : zero) +
+                    (_lossLevel > 1.0 ? frameLossWeight2 *
+                        imageSpectrumLoss(
+                        out.img2.to(torch::kFloat32) * hannWindow2,
+                        seq.img2.index({t}).to(torch::kFloat32) * hannWindow2) : zero) +
+                    (_lossLevel > 2.0 ? frameLossWeight3 *
+                        imageSpectrumLoss(
+                        out.img3.to(torch::kFloat32) * hannWindow3,
+                        seq.img3.index({t}).to(torch::kFloat32) * hannWindow3) : zero) +
+                    (_lossLevel > 3.0 ? frameLossWeight4 *
+                        imageSpectrumLoss(
+                        out.img4.to(torch::kFloat32) * hannWindow4,
+                        seq.img4.index({t}).to(torch::kFloat32) * hannWindow4) : zero) +
+                    (_lossLevel > 4.0 ? frameLossWeight5 *
+                        imageSpectrumLoss(
+                        out.img5.to(torch::kFloat32) * hannWindow5,
+                        seq.img5.index({t}).to(torch::kFloat32) * hannWindow5) : zero) +
+                    (_lossLevel > 5.0 ? frameLossWeight6 *
+                        imageSpectrumLoss(
+                        out.img6.to(torch::kFloat32) * hannWindow6,
+                        seq.img6.index({t}).to(torch::kFloat32) * hannWindow6) : zero)/* +
+                    (_lossLevel > 6.0 ? frameLossWeight7 *
+                        imageSpectrumLoss(
+                        out.img7.to(torch::kFloat32),
+                        seq.img7.index({t}).to(torch::kFloat32)) : zero)*/);
+//                printf("spectrumLoss: %0.5f\n", spectrumLoss.item<double>());
+                spectrumLossAcc += spectrumLoss.item<double>();
+
                 // Total auxiliary losses
                 torch::Tensor auxiliaryLosses =
                     encodingDistributionLoss.to(torch::kFloat32) +
@@ -1176,7 +1321,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     encodingCircularLoss.to(torch::kFloat32) +
                     encodingMaskLoss.to(torch::kFloat32) +
                     discriminationLoss.to(torch::kFloat32) +
-                    frameClassificationLoss.to(torch::kFloat32);
+                    frameClassificationLoss.to(torch::kFloat32) +
+                    spectrumLoss.to(torch::kFloat32);
                 auxiliaryLossesAcc += auxiliaryLosses.item<double>();
 
                 // Frame decoding losses
@@ -1215,8 +1361,6 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
                 // Frame reconstruction losses
 //                torch::Tensor reconstructionLosses = frameLoss + frameGradLoss + frameLaplacianLoss;
-
-                at::autocast::set_enabled(false);
 
                 torch::Tensor reconstructionLosses = 1.0*(
                     frameLossWeight0 * yuvImageLoss(out.img0.to(torch::kFloat32), in.img0.to(torch::kFloat32)) +
@@ -1315,6 +1459,44 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                             .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
                             .permute({0, 2, 3, 1}).squeeze().contiguous().to(torch::kCPU);
                         _trainingInfo->images["totalLoss" + std::to_string(i)].write()->copyFrom(totalLoss.data_ptr<float>());
+
+                        auto [spectrumAmp, spectrumPhase] = imageSpectrum(
+                            inRefs[i]->index({displaySeqId}).unsqueeze(0).to(torch::kFloat32));
+                        spectrumAmp = tf::interpolate((spectrumAmp.index({Slice(), Slice(0,1)}) * 0.1)
+                            .to(torch::kFloat32), tf::InterpolateFuncOptions()
+                            .size(std::vector<long>{480, 320}).mode(kNearestExact).align_corners(false))
+                            .permute({0, 2, 3, 1}).squeeze().contiguous().to(torch::kCPU);
+                        _trainingInfo->images["spectrumAmp" + std::to_string(i)].write()->copyFrom(spectrumAmp.data_ptr<float>());
+                        spectrumPhase = tf::interpolate((spectrumPhase.index({Slice(), Slice(0,1)}) * M_1_PI * 0.5 + 0.5)
+                            .to(torch::kFloat32), tf::InterpolateFuncOptions()
+                            .size(std::vector<long>{480, 320}).mode(kNearestExact).align_corners(false))
+                            .permute({0, 2, 3, 1}).squeeze().contiguous().to(torch::kCPU);
+                        _trainingInfo->images["spectrumPhase" + std::to_string(i)].write()->copyFrom(spectrumPhase.data_ptr<float>());
+                        auto [spectrumAmpPrediction, spectrumPhasePrediction] = imageSpectrum(
+                            outRefs[i]->index({displaySeqId}).unsqueeze(0).to(torch::kFloat32));
+                        spectrumAmpPrediction = tf::interpolate((spectrumAmpPrediction.index({Slice(), Slice(0,1)}) * 0.1)
+                            .to(torch::kFloat32), tf::InterpolateFuncOptions()
+                            .size(std::vector<long>{480, 320}).mode(kNearestExact).align_corners(false))
+                            .permute({0, 2, 3, 1}).squeeze().contiguous().to(torch::kCPU);
+                        _trainingInfo->images["spectrumAmpPrediction" + std::to_string(i)].write()->copyFrom(spectrumAmpPrediction.data_ptr<float>());
+                        spectrumPhasePrediction = tf::interpolate((spectrumPhasePrediction.index({Slice(), Slice(0,1)}) * M_1_PI * 0.5 + 0.5)
+                            .to(torch::kFloat32), tf::InterpolateFuncOptions()
+                            .size(std::vector<long>{480, 320}).mode(kNearestExact).align_corners(false))
+                            .permute({0, 2, 3, 1}).squeeze().contiguous().to(torch::kCPU);
+                        _trainingInfo->images["spectrumPhasePrediction" + std::to_string(i)].write()->copyFrom(spectrumPhasePrediction.data_ptr<float>());
+                        auto [spectrumAmpError, spectrumPhaseError] = imageSpectrumErrors(
+                            inRefs[i]->index({displaySeqId}).unsqueeze(0).to(torch::kFloat32),
+                            outRefs[i]->index({displaySeqId}).unsqueeze(0).to(torch::kFloat32));
+                        spectrumAmpError = tf::interpolate((spectrumAmpError.index({Slice(), Slice(0,1)}) * 0.1)
+                            .to(torch::kFloat32), tf::InterpolateFuncOptions()
+                            .size(std::vector<long>{480, 320}).mode(kNearestExact).align_corners(false))
+                            .permute({0, 2, 3, 1}).squeeze().contiguous().to(torch::kCPU);
+                        _trainingInfo->images["spectrumAmpError" + std::to_string(i)].write()->copyFrom(spectrumAmpError.data_ptr<float>());
+                        spectrumPhaseError = tf::interpolate((spectrumPhaseError.index({Slice(), Slice(0,1)}) * M_1_PI)
+                            .to(torch::kFloat32), tf::InterpolateFuncOptions()
+                            .size(std::vector<long>{480, 320}).mode(kNearestExact).align_corners(false))
+                            .permute({0, 2, 3, 1}).squeeze().contiguous().to(torch::kCPU);
+                        _trainingInfo->images["spectrumPhaseError" + std::to_string(i)].write()->copyFrom(spectrumPhaseError.data_ptr<float>());
                     }
                     at::autocast::set_enabled(true);
                     // TODO end of temp
@@ -1396,7 +1578,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
                 c10::cuda::CUDACachingAllocator::emptyCache();
             }
-
+#if 0
             // Encoding discriminator training pass
             if (_useEncodingDiscriminationLoss) {
                 _encodingDiscriminator->zero_grad();
@@ -1484,7 +1666,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     _trainingInfo->images["random_encoding"].write()->copyFrom(rndEncodingImage.contiguous().data_ptr<float>());
                 }
             }
-
+#endif
             // Update training parameters according to scheduling
             updateTrainingParameters(nVirtualBatchesPerCycle);
             ++_trainingIteration;
@@ -1526,6 +1708,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         discriminatorLossAcc /= (double)nVirtualBatchesPerCycle*(double)_discriminatorVirtualBatchSize;
         encodingCircularLossAcc /= framesPerCycle;
         encodingMaskLossAcc /= framesPerCycle;
+        spectrumLossAcc /= framesPerCycle;
         reconstructionLossesAcc /= framesPerCycle;
         auxiliaryLossesAcc /= framesPerCycle;
 
@@ -1580,6 +1763,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 "discriminatorLoss", discriminatorLossAcc,
                 "encodingCircularLoss", encodingCircularLossAcc,
                 "encodingMaskLoss", encodingMaskLossAcc,
+                "spectrumLoss", spectrumLossAcc,
                 "reconstructionLosses", reconstructionLossesAcc,
                 "auxiliaryLosses", auxiliaryLossesAcc,
                 "loss", lossAcc,
@@ -1613,6 +1797,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         discriminatorLossAcc = 0.0;
         encodingCircularLossAcc = 0.0;
         encodingMaskLossAcc = 0.0;
+        spectrumLossAcc = 0.0;
         reconstructionLossesAcc = 0.0;
         auxiliaryLossesAcc = 0.0;
 
