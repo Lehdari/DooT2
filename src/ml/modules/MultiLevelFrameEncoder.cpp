@@ -64,17 +64,37 @@ MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl(int featureMultiplier) :
 
 std::tuple<torch::Tensor, torch::Tensor> MultiLevelFrameEncoderImpl::forward(const MultiLevelImage& img)
 {
-    using namespace torch::indexing;
-
-    int b = img.img7.sizes()[0];
-
-    torch::Tensor x = _encoder1(img.img7, img.img6, img.level); // 320x240
-    x = _encoder2(x, img.img5, img.level); // 160x120
+//    torch::Tensor x = _encoder1(img.img7, img.img6, img.level); // 320x240
+//    x = _encoder2(x, img.img5, img.level); // 160x120
+    torch::Tensor x = _encoder2(img.img6, img.img5, img.level); // 160x120
     x = _encoder3(x, img.img4, img.level); // 80x60
     x = _encoder4(x, img.img3, img.level); // 40x30
     x = _encoder5(x, img.img2, img.level); // 20x15
     x = _encoder6(x, img.img1, img.level); // 10x15
     x = _encoder7(x, img.img0, img.level); // 5x5
+
+    return forwardCommon(x);
+}
+
+std::tuple<torch::Tensor, torch::Tensor> MultiLevelFrameEncoderImpl::forwardSeq(const MultiLevelImage& seq, int t)
+{
+    using namespace torch::indexing;
+
+//    torch::Tensor x = _encoder1(seq.img7, seq.img6, seq.level); // 320x240
+//    x = _encoder2(x, seq.img5, seq.level); // 160x120
+    torch::Tensor x = _encoder2(seq.img6.index({t}), seq.img5.index({t}), seq.level); // 160x120
+    x = _encoder3(x, seq.img4.index({t}), seq.level); // 80x60
+    x = _encoder4(x, seq.img3.index({t}), seq.level); // 40x30
+    x = _encoder5(x, seq.img2.index({t}), seq.level); // 20x15
+    x = _encoder6(x, seq.img1.index({t}), seq.level); // 10x15
+    x = _encoder7(x, seq.img0.index({t}), seq.level); // 5x5
+
+    return forwardCommon(x);
+}
+
+std::tuple<torch::Tensor, torch::Tensor> MultiLevelFrameEncoderImpl::forwardCommon(torch::Tensor& x)
+{
+    int b = x.sizes()[0];
 
     x = _conv1(gelu(_bn1(x), "tanh"));
     x = _resBlock1(x);
