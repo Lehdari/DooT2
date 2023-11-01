@@ -91,6 +91,8 @@ private:
     bool                                    _useDiscriminator;
     double                                  _discriminationLossWeight;
     int64_t                                 _discriminatorVirtualBatchSize;
+    double                                  _spectrumLossWeight;
+    double                                  _spectrumLossFiltering;
     double                                  _targetReconstructionLoss; // when loss is under this value, lossLevel is increased
 
     // State parameters (will be written to state_params.json)
