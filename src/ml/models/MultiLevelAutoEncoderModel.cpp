@@ -461,6 +461,8 @@ MultiLevelAutoEncoderModel::MultiLevelAutoEncoderModel() :
     _useDiscriminator                   (false),
     _discriminationLossWeight           (0.4),
     _discriminatorVirtualBatchSize      (8),
+    _spectrumLossFiltering              (0.99),
+    _spectrumLossWeight                 (1.0),
     _targetReconstructionLoss           (0.1),
     _trainingIteration                  (0),
     _lossLevel                          (0.0),
@@ -723,6 +725,7 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         timeSeriesWriteHandle->addSeries<double>("encodingCircularLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("encodingMaskLoss", 0.0);
         timeSeriesWriteHandle->addSeries<double>("spectrumLoss", 0.0);
+        timeSeriesWriteHandle->addSeries<double>("spectrumLossWeight", 0.0);
         timeSeriesWriteHandle->addSeries<double>("reconstructionLosses", 0.0);
         timeSeriesWriteHandle->addSeries<double>("auxiliaryLosses", 0.0);
         timeSeriesWriteHandle->addSeries<double>("loss", 0.0);
@@ -1274,7 +1277,6 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     {seq.img6.index({t}).sizes()[2], seq.img6.index({t}).sizes()[3]}, _device);
 
                 // Spectrum loss
-                constexpr double _spectrumLossWeight = 100.0;
                 torch::Tensor spectrumLoss = /*std::min(_lossLevel, 1.0) * */ _spectrumLossWeight * (
                     frameLossWeight0 * imageSpectrumLoss(
                         out.img0.to(torch::kFloat32) * hannWindow0,
@@ -1712,6 +1714,10 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         reconstructionLossesAcc /= framesPerCycle;
         auxiliaryLossesAcc /= framesPerCycle;
 
+        // Update spectrum loss weight so that it tends to match with reconstruction losses
+        _spectrumLossWeight *= _spectrumLossFiltering + (1.0-_spectrumLossFiltering)*
+            (reconstructionLossesAcc / spectrumLossAcc);
+
         // Loss level adjustment
         double controlP, controlI, controlD;
         {
@@ -1764,6 +1770,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 "encodingCircularLoss", encodingCircularLossAcc,
                 "encodingMaskLoss", encodingMaskLossAcc,
                 "spectrumLoss", spectrumLossAcc,
+                "spectrumLossWeight", _spectrumLossWeight,
                 "reconstructionLosses", reconstructionLossesAcc,
                 "auxiliaryLosses", auxiliaryLossesAcc,
                 "loss", lossAcc,
