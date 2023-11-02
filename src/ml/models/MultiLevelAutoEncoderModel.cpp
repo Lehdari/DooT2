@@ -280,7 +280,7 @@ namespace {
         spectrumTarget = torch::view_as_real(spectrumTarget);
         spectrumPred = torch::view_as_real(spectrumPred);
 
-        torch::Tensor ampLoss = (predAbs - targetAbs).square();
+        torch::Tensor ampLoss = (predAbs - targetAbs).abs();
         torch::Tensor phaseDiff = M_1_PI*acos(clamp((
             (spectrumTarget / targetAbs.unsqueeze(-1)) * // division by abs for normalization
             (spectrumPred / predAbs.unsqueeze(-1))
@@ -296,7 +296,7 @@ namespace {
 //        printf("dirDiff: [ %d %d %d %d ]\n", dirDiff.sizes()[0], dirDiff.sizes()[1], dirDiff.sizes()[2], dirDiff.sizes()[3]);
 //        printf("targetAbs: [ %d %d %d %d ]\n", targetAbs.sizes()[0], targetAbs.sizes()[1], targetAbs.sizes()[2], targetAbs.sizes()[3]);
 //        fflush(stdout);
-        torch::Tensor phaseLoss = ((1.0-a)*phaseDiff.square() + a*dirDiff) * targetAbs;
+        torch::Tensor phaseLoss = ((1.0-a)*phaseDiff + a*dirDiff) * targetAbs;
 
         return { ampLoss, phaseLoss };
 //        printf("targetAbs: [%d %d %d %d]\n",
