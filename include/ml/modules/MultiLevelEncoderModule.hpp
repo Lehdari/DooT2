@@ -11,7 +11,7 @@
 #pragma once
 
 #include "ml/MultiLevelImage.hpp"
-#include "ml/modules/ResNetConvBlock.hpp"
+#include "ml/modules/ResNetFourierConvBlock.hpp"
 #include "ml/modules/ResNetDownscaleConvBlock.hpp"
 
 #include <torch/torch.h>
@@ -39,8 +39,8 @@ private:
     ResNetDownscaleConvBlock    _downscaleResBlock;
     torch::nn::Conv2d           _conv1Aux; // layers for the downscaled secondary input
     torch::nn::BatchNorm2d      _bn1Aux;
-    ResNetConvBlock             _resBlock1;
-    ResNetConvBlock             _resBlock2;
+    ResNetFourierConvBlock      _resFourierConvBlock1;
+    ResNetFourierConvBlock      _resFourierConvBlock2;
 };
 TORCH_MODULE(MultiLevelEncoderModule);
 

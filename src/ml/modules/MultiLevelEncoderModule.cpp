@@ -25,20 +25,20 @@ MultiLevelEncoderModuleImpl::MultiLevelEncoderModuleImpl(
     int resBlockGroups,
     int resBlockScaling
 ) :
-    _level              (level),
-    _outputChannels     (outputChannels),
-    _downscaleResBlock  (inputChannels, _outputChannels*resBlockScaling, _outputChannels, xDownScale, yDownScale,
-                         resBlockGroups, true, 0.0, 0.001),
-    _conv1Aux           (nn::Conv2dOptions(3, _outputChannels, {1, 1}).bias(false)),
-    _bn1Aux             (nn::BatchNorm2dOptions(_outputChannels)),
-    _resBlock1          (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, resBlockGroups, true, 0.001),
-    _resBlock2          (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, resBlockGroups, true, 0.001)
+    _level                  (level),
+    _outputChannels         (outputChannels),
+    _downscaleResBlock      (inputChannels, _outputChannels*resBlockScaling, _outputChannels, xDownScale, yDownScale,
+                             resBlockGroups, true, 0.0, 0.001),
+    _conv1Aux               (nn::Conv2dOptions(3, _outputChannels, {1, 1}).bias(false)),
+    _bn1Aux                 (nn::BatchNorm2dOptions(_outputChannels)),
+    _resFourierConvBlock1   (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, resBlockGroups),
+    _resFourierConvBlock2   (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, resBlockGroups)
 {
     register_module("downscaleResBlock", _downscaleResBlock);
     register_module("conv1Aux", _conv1Aux);
     register_module("bn1Aux", _bn1Aux);
-    register_module("resBlock1", _resBlock1);
-    register_module("resBlock2", _resBlock2);
+    register_module("resFourierConvBlock1", _resFourierConvBlock1);
+    register_module("resFourierConvBlock2", _resFourierConvBlock2);
 }
 
 torch::Tensor MultiLevelEncoderModuleImpl::forward(const Tensor& main, const Tensor& aux, double level)
@@ -49,11 +49,11 @@ torch::Tensor MultiLevelEncoderModuleImpl::forward(const Tensor& main, const Ten
         y = gelu(_bn1Aux(_conv1Aux(aux)));
         float w = (float)std::clamp(_level+1.0-level, 0.0, 1.0);
         x = w*y + (1.0f-w)*x;
-        x = _resBlock2(_resBlock1(x));
+        x = _resFourierConvBlock2(_resFourierConvBlock1(x));
     }
     else if (level > _level-1.0) {
         x = gelu(_bn1Aux(_conv1Aux(aux)));
-        x = _resBlock2(_resBlock1(x));
+        x = _resFourierConvBlock2(_resFourierConvBlock1(x));
     }
     else
         x = torch::zeros({aux.sizes()[0], _outputChannels, aux.sizes()[2], aux.sizes()[3]},
