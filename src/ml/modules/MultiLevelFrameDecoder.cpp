@@ -31,14 +31,13 @@ MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
     _convTranspose1b        (2048, 128, 1024, std::vector<long>{5, 5}, 64, 8),
     _bn2a                   (nn::BatchNorm2dOptions(128)),
     _bn2b                   (nn::BatchNorm2dOptions(128)),
-    _resFourierConvBlock1   (256, 1024, 512, 64),
-    _resConvBlock1          (512, 1024, 512, 1024, 64, 4, true, 0.0, true),
-    _resConvBlock2          (512, 1024, 512, 1024, 64, 4, true, 0.0, true),
+    _resFourierConvBlock1   (256, 1024, 512, 1024, 64, 4),
+    _resFourierConvBlock2   (512, 1024, 512, 1024, 64, 4),
     _convAux                (nn::Conv2dOptions(512, 8, {1, 1}).bias(false)),
     _bnAux                  (nn::BatchNorm2dOptions(8)),
     _conv_Y                 (nn::Conv2dOptions(8, 1, {1, 1})),
     _conv_UV                (nn::Conv2dOptions(8, 2, {1, 1})),
-    _resConvBlock3          (512, 1024, 512, 1024, 64, 4, true, 0.0, true),
+    _resConvBlock1          (512, 1024, 512, 1024, 64, 4, true, 0.0, true),
     _decoder1               (0.0, 512, 512, 1024, 2, 3, 32, 64, 2, 4),
     _decoder2               (1.0, 512, 256, 1024, 2, 1, 16, 32, 2, 4),
     _decoder3               (2.0, 256, 128, 1024, 2, 2, 8, 16, 4, 8),
@@ -61,13 +60,12 @@ MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
     register_module("bn2a", _bn2a);
     register_module("bn2b", _bn2b);
     register_module("resFourierConvBlock1", _resFourierConvBlock1);
-    register_module("resConvBlock1", _resConvBlock1);
-    register_module("resConvBlock2", _resConvBlock2);
+    register_module("resFourierConvBlock2", _resFourierConvBlock2);
     register_module("convAux", _convAux);
     register_module("bnAux", _bnAux);
     register_module("conv_Y", _conv_Y);
     register_module("conv_UV", _conv_UV);
-    register_module("resConvBlock3", _resConvBlock3);
+    register_module("resConvBlock1", _resConvBlock1);
     register_module("decoder1", _decoder1);
     register_module("decoder2", _decoder2);
     register_module("decoder3", _decoder3);
@@ -111,9 +109,8 @@ MultiLevelImage MultiLevelFrameDecoderImpl::forward(torch::Tensor x, double leve
     x = gelu(torch::cat({x, y}, 1), "tanh");
 
     // First residual conv blocks
-    x = _resFourierConvBlock1(x);
-    x = _resConvBlock1(x, context);
-    x = _resConvBlock2(x, context);
+    x = _resFourierConvBlock1(x, context);
+    x = _resFourierConvBlock2(x, context);
 
     // 5x5 auxiliary image output
     MultiLevelImage img;
@@ -124,7 +121,7 @@ MultiLevelImage MultiLevelFrameDecoderImpl::forward(torch::Tensor x, double leve
     img.img0 = torch::cat({y_Y, y_UV}, 1);
 
     // Second residual conv block
-    x = _resConvBlock3(x, context);
+    x = _resConvBlock1(x, context);
 
     // Rest of the decoder layers
     std::tie(x, img.img1) = _decoder1(x, context, level, &img.img0); // 10x15
