@@ -36,11 +36,10 @@ MultiLevelDecoderModuleImpl::MultiLevelDecoderModuleImpl(
                              std::vector<long>{_yUpScale+2, _xUpScale+2}, upscaleConvGroups, filterBankSize,
                              std::vector<long>{_yUpScale, _xUpScale},
                              std::vector<long>{1,1,1,1}),
-    _resFourierConvBlock1   (_outputChannels, _outputChannels, _outputChannels, resBlockGroups),
-    _resConvBlock1          (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, contextChannels,
-                             resBlockGroups, filterBankSize, true, 0.001),
-    _resConvBlock2          (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, contextChannels,
-                             resBlockGroups, filterBankSize, true, 0.001),
+    _resFourierConvBlock1   (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, contextChannels,
+                             resBlockGroups, filterBankSize),
+    _resFourierConvBlock2   (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, contextChannels,
+                             resBlockGroups, filterBankSize),
     _convAux                (nn::Conv2dOptions(outputChannels, 8, {1, 1}).bias(false)),
     _bnAux                  (nn::BatchNorm2dOptions(8)),
     _conv_Y                 (nn::Conv2dOptions(8, 1, {1, 1})),
@@ -48,8 +47,7 @@ MultiLevelDecoderModuleImpl::MultiLevelDecoderModuleImpl(
 {
     register_module("convTranspose1", _convTranspose1);
     register_module("resFourierConvBlock1", _resFourierConvBlock1);
-    register_module("resConvBlock1", _resConvBlock1);
-    register_module("resConvBlock2", _resConvBlock2);
+    register_module("resFourierConvBlock2", _resFourierConvBlock2);
     register_module("convAux", _convAux);
     register_module("bnAux", _bnAux);
     register_module("conv_Y", _conv_Y);
@@ -81,7 +79,7 @@ std::tuple<torch::Tensor, torch::Tensor> MultiLevelDecoderModuleImpl::forward(
     if (level > _level) {
         auto originalType = x.scalar_type();
         x = _convTranspose1(x, context);
-        x = _resConvBlock2(_resConvBlock1(x, context), context);
+        x = _resFourierConvBlock2(_resFourierConvBlock1(x, context), context);
 
         // auxiliary image output
         y = gelu(_bnAux(_convAux(x)), "tanh");
