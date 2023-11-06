@@ -1715,8 +1715,9 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
         auxiliaryLossesAcc /= framesPerCycle;
 
         // Update spectrum loss weight so that it tends to match with reconstruction losses
-        _spectrumLossWeight *= _spectrumLossFiltering + (1.0-_spectrumLossFiltering)*
-            (reconstructionLossesAcc / spectrumLossAcc);
+        if (_lossLevel > 0.0)
+            _spectrumLossWeight *= _spectrumLossFiltering + (1.0-_spectrumLossFiltering)*
+                (reconstructionLossesAcc / spectrumLossAcc);
 
         // Loss level adjustment
         double controlP, controlI, controlD;
