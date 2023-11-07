@@ -64,12 +64,11 @@ MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl(int featureMultiplier) :
 
 std::tuple<torch::Tensor, torch::Tensor> MultiLevelFrameEncoderImpl::forward(const MultiLevelImage& img)
 {
-    using namespace torch::indexing;
-
     int b = img.img7.sizes()[0];
 
-    torch::Tensor x = _encoder1(img.img7, img.img6, img.level); // 320x240
-    x = _encoder2(x, img.img5, img.level); // 160x120
+//    torch::Tensor x = _encoder1(img.img7, img.img6, img.level); // 320x240
+//    x = _encoder2(x, img.img5, img.level); // 160x120
+    torch::Tensor x = _encoder2(img.img6, img.img5, img.level); // 160x120
     x = _encoder3(x, img.img4, img.level); // 80x60
     x = _encoder4(x, img.img3, img.level); // 40x30
     x = _encoder5(x, img.img2, img.level); // 20x15

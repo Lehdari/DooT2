@@ -53,8 +53,8 @@ Trainer::Trainer(
         {
             auto storage = _sequenceStorage.write();
             storage->addSequence<Action>("action", Action(Action::ACTION_NONE, 0));
-            storage->addSequence<float>("frame", torch::zeros({
-                doot2::frameHeight, doot2::frameWidth, getImageFormatNChannels(ImageFormat::YUV)}));
+//            storage->addSequence<float>("frame", torch::zeros({
+//                doot2::frameHeight, doot2::frameWidth, getImageFormatNChannels(ImageFormat::YUV)}));
             storage->addSequence<float>("frame6", torch::zeros({
                 doot2::frameHeight/2, doot2::frameWidth/2, getImageFormatNChannels(ImageFormat::YUV)}));
             storage->addSequence<float>("frame5", torch::zeros({
@@ -332,8 +332,9 @@ void Trainer::refreshSequenceStorage(int epoch, bool evaluation)
                 // Cache does not have enough sequences, record new ones until it does
                 recordEvaluationSequences();
             }
-            _sequenceCache.loadFramesToStorage(*storage, SequenceCache::Type::FRAME_ENCODING_EVALUATION,
-                "frame", 1, epoch);
+//            _sequenceCache.loadFramesToStorage(*storage, SequenceCache::Type::FRAME_ENCODING_EVALUATION,
+//                "frame", 1, epoch);
+
             _sequenceCache.loadFramesToStorage(*storage, SequenceCache::Type::FRAME_ENCODING_EVALUATION,
                 "frame6", 1, epoch);
             _sequenceCache.loadFramesToStorage(*storage, SequenceCache::Type::FRAME_ENCODING_EVALUATION,
@@ -356,8 +357,9 @@ void Trainer::refreshSequenceStorage(int epoch, bool evaluation)
                 // Cache does not have enough sequences, record new ones until it does
                 recordTrainingSequences();
             }
-            _sequenceCache.loadFramesToStorage(*storage, SequenceCache::Type::FRAME_ENCODING_TRAINING_NORMAL,
-                "frame", _experimentConfig["n_cached_sequences"].get<int>(), epoch);
+//            _sequenceCache.loadFramesToStorage(*storage, SequenceCache::Type::FRAME_ENCODING_TRAINING_NORMAL,
+//                "frame", _experimentConfig["n_cached_sequences"].get<int>(), epoch);
+
             _sequenceCache.loadFramesToStorage(*storage, SequenceCache::Type::FRAME_ENCODING_TRAINING_NORMAL,
                 "frame6", _experimentConfig["n_cached_sequences"].get<int>(), epoch);
             _sequenceCache.loadFramesToStorage(*storage, SequenceCache::Type::FRAME_ENCODING_TRAINING_NORMAL,

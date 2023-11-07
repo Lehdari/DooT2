@@ -666,9 +666,7 @@ void MultiLevelAutoEncoderModel::setTrainingInfo(TrainingInfo* trainingInfo)
         *(_trainingInfo->images)["input1"].write() = Image<float>(width, height, ImageFormat::YUV);
         *(_trainingInfo->images)["input0"].write() = Image<float>(width, height, ImageFormat::YUV);
         // TODO temp
-        for (auto i=0; i<8; ++i) {
-            *(_trainingInfo->images)["mean" + std::to_string(i)].write() = Image<float>(width, height, ImageFormat::YUV);
-            *(_trainingInfo->images)["variance" + std::to_string(i)].write() = Image<float>(width, height, ImageFormat::RGB);
+        for (auto i=0; i<7; ++i) {
             *(_trainingInfo->images)["uvCovar" + std::to_string(i)].write() = Image<float>(width, height, ImageFormat::GRAY);
             *(_trainingInfo->images)["varErrorY" + std::to_string(i)].write() = Image<float>(width, height, ImageFormat::GRAY);
             *(_trainingInfo->images)["varErrorUV" + std::to_string(i)].write() = Image<float>(width, height, ImageFormat::GRAY);
@@ -976,7 +974,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                             seq.img4.index({(int) t}),
                             seq.img5.index({(int) t}),
                             seq.img6.index({(int) t}),
-                            seq.img7.index({(int) t}),
+                            torch::zeros({16, 3, 480, 640}, TensorOptions().device(_device)),
+                            //seq.img7.index({(int) t}),
                             _lossLevel
                         };
 
@@ -1022,7 +1021,8 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     seq.img4.index({(int)t}),
                     seq.img5.index({(int)t}),
                     seq.img6.index({(int)t}),
-                    seq.img7.index({(int)t}),
+                    torch::zeros({16, 3, 480, 640}, TensorOptions().device(_device)),
+                    //seq.img7.index({(int) t}),
                     _lossLevel
                 };
 
@@ -1256,7 +1256,10 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                             in.img0.index({displaySeqId}), in.img1.index({displaySeqId}),
                             in.img2.index({displaySeqId}), in.img3.index({displaySeqId}),
                             in.img4.index({displaySeqId}), in.img5.index({displaySeqId}),
-                            in.img6.index({displaySeqId}), in.img7.index({displaySeqId}), 0.0
+                            in.img6.index({displaySeqId}),
+                            //in.img7.index({displaySeqId}), 0.0
+                            torch::zeros({3, 480, 640}, TensorOptions().device(_device)),
+                            0.0
                         },
                         inImage, torch::kCPU
                     );
@@ -1273,7 +1276,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     at::autocast::set_enabled(false);
                     torch::Tensor* inRefs[] = {&in.img0, &in.img1, &in.img2, &in.img3, &in.img4, &in.img5, &in.img6, &in.img7};
                     torch::Tensor* outRefs[] = {&out.img0, &out.img1, &out.img2, &out.img3, &out.img4, &out.img5, &out.img6, &out.img7};
-                    for (auto i=0; i<8; ++i) {
+                    for (auto i=0; i<7; ++i) {
                         auto [mean, variance, uvCovar] = localVariance(
                             inRefs[i]->index({displaySeqId}).unsqueeze(0).to(torch::kFloat32));
                         auto [varErrorY, varErrorUV, l2ErrorY, l2ErrorUV] = yuvImageErrors(
@@ -1282,16 +1285,6 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                         auto totalLoss = yuvImageCombinedError(
                             inRefs[i]->index({displaySeqId}).unsqueeze(0).to(torch::kFloat32),
                             outRefs[i]->index({displaySeqId}).unsqueeze(0).to(torch::kFloat32));
-                        mean = tf::interpolate(mean
-                            .to(torch::kFloat32), tf::InterpolateFuncOptions()
-                            .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
-                            .permute({0, 2, 3, 1}).squeeze().contiguous().to(torch::kCPU);
-                        _trainingInfo->images["mean" + std::to_string(i)].write()->copyFrom(mean.data_ptr<float>());
-                        variance = tf::interpolate((variance * 30.0)
-                            .to(torch::kFloat32), tf::InterpolateFuncOptions()
-                            .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
-                            .permute({0, 2, 3, 1}).squeeze().contiguous().to(torch::kCPU);
-                        _trainingInfo->images["variance" + std::to_string(i)].write()->copyFrom(variance.data_ptr<float>());
                         uvCovar = tf::interpolate((uvCovar * 200.0 + 0.5)
                             .to(torch::kFloat32), tf::InterpolateFuncOptions()
                             .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
@@ -1643,8 +1636,8 @@ MultiLevelImage MultiLevelAutoEncoderModel::scaleSequences(const SequenceStorage
     const auto* storageFrames1 = storage.getSequence<float>("frame1");
     const auto* storageFrames0 = storage.getSequence<float>("frame0");
 
-    image.img7 = storageFrames7->tensor().to(_device, torch::kBFloat16).permute({0, 1, 4, 2, 3}); // permute into TBCHW
-    assert(image.img7.sizes()[0] == storage.length());
+//    image.img7 = storageFrames7->tensor().to(_device, torch::kBFloat16).permute({0, 1, 4, 2, 3}); // permute into TBCHW
+//    assert(image.img7.sizes()[0] == storage.length());
 
     // Create scaled sequence data
     if (storageFrames6 != nullptr) {
