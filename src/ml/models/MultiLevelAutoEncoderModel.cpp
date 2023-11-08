@@ -1107,6 +1107,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                 int t = v*_virtualBatchSize + b;
 
                 // Prepare the inputs (original and scaled)
+#if 0
                 MultiLevelImage in {
                     seq.img0.index({(int)t}),
                     seq.img1.index({(int)t}),
@@ -1119,10 +1120,12 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     //seq.img7.index({(int) t}),
                     _lossLevel
                 };
+#endif
+                seq.level = _lossLevel;
 
                 // Frame encode
                 torch::Tensor encMask;
-                std::tie(enc, encMask) = _frameEncoder(in);
+                std::tie(enc, encMask) = _frameEncoder->forwardSeq(seq, t);
 
                 // Compute distance from encoding mean to origin and encoding mean loss
                 torch::Tensor encodingMeanLoss = zero;
@@ -1174,6 +1177,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
                 // Loss from distance to previous encoding
                 torch::Tensor encodingPrevDistanceLoss = zero;
+#if 0
                 if (_useEncodingPrevDistanceLoss && b>0) {
                     // Use pixel difference to previous frames as a basis for target encoding distance to the previous
                     torch::Tensor prevPixelDiff = (in.img7-seq.img7.index({(int)t-1})).abs().mean({1, 2, 3});
@@ -1184,6 +1188,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                         _encodingPrevDistanceLossWeight *
                         ((float)_virtualBatchSize / ((float)_virtualBatchSize-1)); // normalize to match the actual v. batch size
                 }
+#endif
                 encodingPrevDistanceLossAcc += encodingPrevDistanceLoss.item<double>();
 
                 // Encoding mask loss
@@ -1365,21 +1370,22 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 //                torch::Tensor reconstructionLosses = frameLoss + frameGradLoss + frameLaplacianLoss;
 
                 torch::Tensor reconstructionLosses = 1.0*(
-                    frameLossWeight0 * yuvImageLoss(out.img0.to(torch::kFloat32), in.img0.to(torch::kFloat32)) +
+                    frameLossWeight0 *
+                        yuvImageLoss(out.img0.to(torch::kFloat32), seq.img0.index({t}).to(torch::kFloat32)) +
                     (_lossLevel > 0.0 ? frameLossWeight1 *
-                        yuvImageLoss(out.img1.to(torch::kFloat32), in.img1.to(torch::kFloat32)) : zero) +
+                        yuvImageLoss(out.img1.to(torch::kFloat32), seq.img1.index({t}).to(torch::kFloat32)) : zero) +
                     (_lossLevel > 1.0 ? frameLossWeight2 *
-                        yuvImageLoss(out.img2.to(torch::kFloat32), in.img2.to(torch::kFloat32)) : zero) +
+                        yuvImageLoss(out.img2.to(torch::kFloat32), seq.img2.index({t}).to(torch::kFloat32)) : zero) +
                     (_lossLevel > 2.0 ? frameLossWeight3 *
-                        yuvImageLoss(out.img3.to(torch::kFloat32), in.img3.to(torch::kFloat32)) : zero) +
+                        yuvImageLoss(out.img3.to(torch::kFloat32), seq.img3.index({t}).to(torch::kFloat32)) : zero) +
                     (_lossLevel > 3.0 ? frameLossWeight4 *
-                        yuvImageLoss(out.img4.to(torch::kFloat32), in.img4.to(torch::kFloat32)) : zero) +
+                        yuvImageLoss(out.img4.to(torch::kFloat32), seq.img4.index({t}).to(torch::kFloat32)) : zero) +
                     (_lossLevel > 4.0 ? frameLossWeight5 *
-                        yuvImageLoss(out.img5.to(torch::kFloat32), in.img5.to(torch::kFloat32)) : zero) +
+                        yuvImageLoss(out.img5.to(torch::kFloat32), seq.img5.index({t}).to(torch::kFloat32)) : zero) +
                     (_lossLevel > 5.0 ? frameLossWeight6 *
-                        yuvImageLoss(out.img6.to(torch::kFloat32), in.img6.to(torch::kFloat32)) : zero) +
+                        yuvImageLoss(out.img6.to(torch::kFloat32), seq.img6.index({t}).to(torch::kFloat32)) : zero) +
                     (_lossLevel > 6.0 ? frameLossWeight7 *
-                        yuvImageLoss(out.img7.to(torch::kFloat32), in.img7.to(torch::kFloat32)) : zero));
+                        yuvImageLoss(out.img7.to(torch::kFloat32), seq.img7.index({t}).to(torch::kFloat32)) : zero));
                 reconstructionLossesAcc += reconstructionLosses.item<double>();
 
                 // Total loss
@@ -1399,10 +1405,10 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                     MultiLevelImage inImage;
                     scaleDisplayImages(
                         MultiLevelImage {
-                            in.img0.index({displaySeqId}), in.img1.index({displaySeqId}),
-                            in.img2.index({displaySeqId}), in.img3.index({displaySeqId}),
-                            in.img4.index({displaySeqId}), in.img5.index({displaySeqId}),
-                            in.img6.index({displaySeqId}),
+                            seq.img0.index({t}).index({displaySeqId}), seq.img1.index({t}).index({displaySeqId}),
+                            seq.img2.index({t}).index({displaySeqId}), seq.img3.index({t}).index({displaySeqId}),
+                            seq.img4.index({t}).index({displaySeqId}), seq.img5.index({t}).index({displaySeqId}),
+                            seq.img6.index({t}).index({displaySeqId}),
                             //in.img7.index({displaySeqId}), 0.0
                             torch::zeros({3, 480, 640}, TensorOptions().device(_device)),
                             0.0
@@ -1420,6 +1426,18 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
                     // TODO temp
                     at::autocast::set_enabled(false);
+                    MultiLevelImage in {
+                        seq.img0.index({(int)t}),
+                        seq.img1.index({(int)t}),
+                        seq.img2.index({(int)t}),
+                        seq.img3.index({(int)t}),
+                        seq.img4.index({(int)t}),
+                        seq.img5.index({(int)t}),
+                        seq.img6.index({(int)t}),
+                        torch::zeros({16, 3, 480, 640}, TensorOptions().device(_device)),
+                        //seq.img7.index({(int) t}),
+                        _lossLevel
+                    };
                     torch::Tensor* inRefs[] = {&in.img0, &in.img1, &in.img2, &in.img3, &in.img4, &in.img5, &in.img6, &in.img7};
                     torch::Tensor* outRefs[] = {&out.img0, &out.img1, &out.img2, &out.img3, &out.img4, &out.img5, &out.img6, &out.img7};
                     for (auto i=0; i<7; ++i) {

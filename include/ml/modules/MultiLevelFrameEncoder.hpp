@@ -27,6 +27,7 @@ public:
 
     // outputs encoding, mask
     std::tuple<torch::Tensor, torch::Tensor> forward(const MultiLevelImage& img);
+    std::tuple<torch::Tensor, torch::Tensor> forwardSeq(const MultiLevelImage& seq, int t);
 
 private:
     // Layers
@@ -48,6 +49,8 @@ private:
     torch::nn::BatchNorm1d      _bn2b;
     torch::nn::Linear           _linear1a;
     torch::nn::Linear           _linear1b;
+
+    std::tuple<torch::Tensor, torch::Tensor> forwardCommon(torch::Tensor& x);
 };
 TORCH_MODULE(MultiLevelFrameEncoder);
 
