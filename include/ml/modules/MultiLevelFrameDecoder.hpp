@@ -49,7 +49,6 @@ private:
     torch::nn::BatchNorm2d          _bnAux;
     torch::nn::Conv2d               _conv_Y;
     torch::nn::Conv2d               _conv_UV;
-    AdaptiveResNetConvBlock         _resConvBlock1;
     MultiLevelDecoderModule         _decoder1;
     MultiLevelDecoderModule         _decoder2;
     MultiLevelDecoderModule         _decoder3;

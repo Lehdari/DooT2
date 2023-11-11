@@ -37,7 +37,6 @@ MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
     _bnAux                  (nn::BatchNorm2dOptions(8)),
     _conv_Y                 (nn::Conv2dOptions(8, 1, {1, 1})),
     _conv_UV                (nn::Conv2dOptions(8, 2, {1, 1})),
-    _resConvBlock1          (512, 1024, 512, 1024, 64, 4, true, 0.0, true),
     _decoder1               (0.0, 512, 512, 1024, 2, 3, 32, 64, 2, 4),
     _decoder2               (1.0, 512, 256, 1024, 2, 1, 16, 32, 2, 4),
     _decoder3               (2.0, 256, 128, 1024, 2, 2, 8, 16, 4, 8),
@@ -65,7 +64,6 @@ MultiLevelFrameDecoderImpl::MultiLevelFrameDecoderImpl() :
     register_module("bnAux", _bnAux);
     register_module("conv_Y", _conv_Y);
     register_module("conv_UV", _conv_UV);
-    register_module("resConvBlock1", _resConvBlock1);
     register_module("decoder1", _decoder1);
     register_module("decoder2", _decoder2);
     register_module("decoder3", _decoder3);
@@ -119,9 +117,6 @@ MultiLevelImage MultiLevelFrameDecoderImpl::forward(torch::Tensor x, double leve
     torch::Tensor y_Y = 0.5f + 0.51f * torch::tanh(_conv_Y(y));
     torch::Tensor y_UV = 0.51f * torch::tanh(_conv_UV(y));
     img.img0 = torch::cat({y_Y, y_UV}, 1);
-
-    // Second residual conv block
-    x = _resConvBlock1(x, context);
 
     // Rest of the decoder layers
     std::tie(x, img.img1) = _decoder1(x, context, level, &img.img0); // 10x15
