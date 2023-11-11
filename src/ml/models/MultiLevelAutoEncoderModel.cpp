@@ -590,6 +590,7 @@ void MultiLevelAutoEncoderModel::init(const Json& experimentConfig)
             stateParams["lossLevelErrorFiltered"];
         if (stateParams.contains("batchPixelDiff")) _batchPixelDiff = stateParams["batchPixelDiff"];
         if (stateParams.contains("batchEncDiff")) _batchEncDiff = stateParams["batchEncDiff"];
+        if (stateParams.contains("spectrumLossWeight")) _spectrumLossWeight = stateParams["spectrumLossWeight"];
     }
 
     // Load frame encoder
@@ -806,6 +807,7 @@ void MultiLevelAutoEncoderModel::save(const fs::path& subdir)
             stateParams["lossLevelErrorFiltered"] = _lossLevelErrorFiltered;
             stateParams["batchPixelDiff"] = _batchPixelDiff;
             stateParams["batchEncDiff"] = _batchEncDiff;
+            stateParams["spectrumLossWeight"] = _spectrumLossWeight;
 
             fs::path stateParamsFilename = _experimentRoot / subdir / "state_params.json";
             printf("Saving model state parameters to %s\n", stateParamsFilename.c_str());

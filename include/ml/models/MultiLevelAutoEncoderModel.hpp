@@ -91,7 +91,6 @@ private:
     bool                                    _useDiscriminator;
     double                                  _discriminationLossWeight;
     int64_t                                 _discriminatorVirtualBatchSize;
-    double                                  _spectrumLossWeight;
     double                                  _spectrumLossFiltering;
     double                                  _targetReconstructionLoss; // when loss is under this value, lossLevel is increased
 
@@ -102,6 +101,7 @@ private:
     double                                  _lossLevelErrorFiltered; // filtered reconstruction loss error required by the D-term of the loss level control
     double                                  _batchPixelDiff; // estimate for average pixel difference between frames from different sequences
     double                                  _batchEncDiff; // estimate for average encoding distance between frames from different sequences
+    double                                  _spectrumLossWeight;
 
     MultiLevelFrameEncoder                  _frameEncoder;
     MultiLevelFrameDecoder                  _frameDecoder;
