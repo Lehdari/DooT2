@@ -12,8 +12,6 @@
 
 #include "ml/MultiLevelImage.hpp"
 #include "ml/modules/AdaptiveConvTranspose2d.hpp"
-#include "ml/modules/AdaptiveResNetConvBlock.hpp"
-#include "ml/modules/AdaptiveResNetFourierConvBlock.hpp"
 
 #include <torch/torch.h>
 
@@ -23,6 +21,7 @@ namespace ml {
 class MultiLevelDecoderModuleImpl : public torch::nn::Module {
 public:
     MultiLevelDecoderModuleImpl(
+        const std::string& resBlockConfig, // Composition of residual blocks. T: transformer, C: convolution, F: fourier convolution
         double level,
         int inputChannels,
         int outputChannels,
@@ -32,7 +31,9 @@ public:
         int upscaleConvGroups = 1,
         int resBlockGroups = 1,
         int resBlockScaling = 1,
-        int filterBankSize = 16
+        int filterBankSize = 16,
+        int transformerHeads = 16,
+        int transformerHeadDim = 32
     );
 
     // outputs tuple of main tensor, auxiliary image
@@ -44,13 +45,13 @@ public:
     );
 
 private:
+    std::string                     _resBlockConfig;
     double                          _level;
     int                             _outputChannels;
     int                             _xUpScale;
     int                             _yUpScale;
     AdaptiveConvTranspose2d         _convTranspose1;
-    AdaptiveResNetFourierConvBlock  _resFourierConvBlock1;
-    AdaptiveResNetFourierConvBlock  _resFourierConvBlock2;
+    torch::nn::ModuleList           _resBlocks;
     torch::nn::Conv2d               _convAux;
     torch::nn::BatchNorm2d          _bnAux;
     torch::nn::Conv2d               _conv_Y;

@@ -16,26 +16,26 @@ using namespace torch;
 
 
 MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl(int featureMultiplier) :
-    _encoder1               (5.5, 3, 8, 2, 2, 1, 4), // 320x240
-    _encoder2               (4.5, 8, 16, 2, 2, 2, 4), // 160x120
-    _encoder3               (3.5, 16, 32, 2, 2, 4, 4), // 80x60
-    _encoder4               (2.5, 32, 64, 2, 2, 8, 4), // 40x30
-    _encoder5               (1.5, 64, 128, 2, 2, 16, 4), // 20x15
-    _encoder6               (0.5, 128, 256, 2, 1, 32, 4), // 10x15
-    _encoder7               (-0.5, 256, 512, 2, 3, 64, 2), // 5x5
-    _bn1                    (nn::BatchNorm2dOptions(512)),
-    _conv1                  (nn::Conv2dOptions(512, 512, {2, 2}).bias(false).groups(512)),
-    _resFourierConvBlock1   (512, 1024, 256, 64, 0.001),
-    _resFourierConvBlock2   (256, 1024, 128, 64, 0.001),
-    _resBlock3a             (2048, 1024, 2048, 0.001),
-    _resBlock3b             (2048, 1024, 2048),
-    _resBlock4              (2048, 2048, 2048),
-    _bn2a                   (nn::BatchNorm1dOptions(2048)),
-    _bn2b                   (nn::BatchNorm1dOptions(2048)),
-    _linear1a               (nn::LinearOptions(2048, 2048)),
-    _linear1b               (nn::LinearOptions(2048, 2048))
+//    _encoder1       (5.5, 3, 8, 2, 2, 1, 4), // 320x240
+    _encoder2       ("", 4.5, 3, 8, 2, 2, 1, 4), // 160x120
+    _encoder3       ("", 3.5, 8, 16, 2, 2, 2, 4), // 80x60
+    _encoder4       ("", 2.5, 16, 32, 2, 2, 4, 4), // 40x30
+    _encoder5       ("", 1.5, 32, 64, 2, 2, 8, 4), // 20x15
+    _encoder6       ("", 0.5, 64, 128, 2, 1, 16, 4), // 10x15
+    _encoder7       ("", -0.5, 128, 256, 2, 3, 32, 2), // 5x5
+    _bn1            (nn::BatchNorm2dOptions(256)),
+    _conv1          (nn::Conv2dOptions(256, 256, {2, 2}).bias(false).groups(64)),
+    _resConvBlock1  (256, 512, 256, 64, 0.001),
+    _resConvBlock2  (256, 512, 128, 64, 0.001),
+    _resBlock3a     (2048, 1024, 2048, 0.001),
+    _resBlock3b     (2048, 1024, 2048),
+    _resBlock4      (2048, 2048, 2048),
+    _bn2a           (nn::BatchNorm1dOptions(2048)),
+    _bn2b           (nn::BatchNorm1dOptions(2048)),
+    _linear1a       (nn::LinearOptions(2048, 2048)),
+    _linear1b       (nn::LinearOptions(2048, 2048))
 {
-    register_module("encoder1", _encoder1);
+//    register_module("encoder1", _encoder1);
     register_module("encoder2", _encoder2);
     register_module("encoder3", _encoder3);
     register_module("encoder4", _encoder4);
@@ -44,8 +44,8 @@ MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl(int featureMultiplier) :
     register_module("encoder7", _encoder7);
     register_module("bn1", _bn1);
     register_module("conv1", _conv1);
-    register_module("resFourierConvBlock1", _resFourierConvBlock1);
-    register_module("resFourierConvBlock2", _resFourierConvBlock2);
+    register_module("resConvBlock1", _resConvBlock1);
+    register_module("resConvBlock2", _resConvBlock2);
     register_module("resBlock3a", _resBlock3a);
     register_module("resBlock3b", _resBlock3b);
     register_module("resBlock4", _resBlock4);
@@ -95,8 +95,8 @@ std::tuple<torch::Tensor, torch::Tensor> MultiLevelFrameEncoderImpl::forwardComm
     int b = x.sizes()[0];
 
     x = _conv1(gelu(_bn1(x), "tanh"));
-    x = _resFourierConvBlock1(x);
-    x = _resFourierConvBlock2(x);
+    x = _resConvBlock1(x);
+    x = _resConvBlock2(x);
     x = torch::reshape(x, {b, x.sizes()[1]*x.sizes()[2]*x.sizes()[3]}); // 2048
 
     // mask probabilities

@@ -31,7 +31,7 @@ public:
 
 private:
     // Layers
-    MultiLevelEncoderModule     _encoder1;
+//    MultiLevelEncoderModule     _encoder1;
     MultiLevelEncoderModule     _encoder2;
     MultiLevelEncoderModule     _encoder3;
     MultiLevelEncoderModule     _encoder4;
@@ -40,8 +40,8 @@ private:
     MultiLevelEncoderModule     _encoder7;
     torch::nn::BatchNorm2d      _bn1;
     torch::nn::Conv2d           _conv1;
-    ResNetFourierConvBlock      _resFourierConvBlock1;
-    ResNetFourierConvBlock      _resFourierConvBlock2;
+    ResNetConvBlock             _resConvBlock1;
+    ResNetConvBlock             _resConvBlock2;
     ResNetLinearBlock           _resBlock3a;
     ResNetLinearBlock           _resBlock3b;
     ResNetLinearBlock           _resBlock4;

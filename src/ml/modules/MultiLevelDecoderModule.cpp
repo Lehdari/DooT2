@@ -9,6 +9,9 @@
 //
 
 #include "ml/modules/MultiLevelDecoderModule.hpp"
+#include "ml/modules/ViTBlock.hpp"
+#include "ml/modules/AdaptiveResNetConvBlock.hpp"
+#include "ml/modules/AdaptiveResNetFourierConvBlock.hpp"
 
 
 using namespace ml;
@@ -17,6 +20,7 @@ namespace tf = torch::nn::functional;
 
 
 MultiLevelDecoderModuleImpl::MultiLevelDecoderModuleImpl(
+    const std::string& resBlockConfig,
     double level,
     int inputChannels,
     int outputChannels,
@@ -26,8 +30,11 @@ MultiLevelDecoderModuleImpl::MultiLevelDecoderModuleImpl(
     int upscaleConvGroups,
     int resBlockGroups,
     int resBlockScaling,
-    int filterBankSize
+    int filterBankSize,
+    int transformerHeads,
+    int transformerHeadDim
 ) :
+    _resBlockConfig         (resBlockConfig),
     _level                  (level),
     _outputChannels         (outputChannels),
     _xUpScale               (xUpscale),
@@ -36,18 +43,36 @@ MultiLevelDecoderModuleImpl::MultiLevelDecoderModuleImpl(
                              std::vector<long>{_yUpScale+2, _xUpScale+2}, upscaleConvGroups, filterBankSize,
                              std::vector<long>{_yUpScale, _xUpScale},
                              std::vector<long>{1,1,1,1}),
-    _resFourierConvBlock1   (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, contextChannels,
-                             resBlockGroups, filterBankSize),
-    _resFourierConvBlock2   (_outputChannels, _outputChannels*resBlockScaling, _outputChannels, contextChannels,
-                             resBlockGroups, filterBankSize),
     _convAux                (nn::Conv2dOptions(outputChannels, 8, {1, 1}).bias(false)),
     _bnAux                  (nn::BatchNorm2dOptions(8)),
     _conv_Y                 (nn::Conv2dOptions(8, 1, {1, 1})),
     _conv_UV                (nn::Conv2dOptions(8, 2, {1, 1}))
 {
+    // setup residual blocks
+    for (const auto& blockType : _resBlockConfig) {
+        switch (blockType) {
+            case 'T': {
+                _resBlocks->push_back(ViTBlock(
+                    _outputChannels, transformerHeads, transformerHeadDim, _outputChannels*resBlockScaling));
+            }   break;
+            case 'C': {
+                _resBlocks->push_back(AdaptiveResNetConvBlock(
+                    _outputChannels, _outputChannels*resBlockScaling,
+                    _outputChannels, contextChannels, resBlockGroups, filterBankSize));
+            }   break;
+            case 'F': {
+                _resBlocks->push_back(AdaptiveResNetFourierConvBlock(
+                    _outputChannels, _outputChannels*resBlockScaling,
+                    _outputChannels, contextChannels, resBlockGroups, filterBankSize));
+            }   break;
+            default: {
+                fprintf(stderr, "Unknown residual block type: %c, omitting...\n", blockType);
+            }   break;
+        }
+    }
+
     register_module("convTranspose1", _convTranspose1);
-    register_module("resFourierConvBlock1", _resFourierConvBlock1);
-    register_module("resFourierConvBlock2", _resFourierConvBlock2);
+    register_module("resBlocks", _resBlocks);
     register_module("convAux", _convAux);
     register_module("bnAux", _bnAux);
     register_module("conv_Y", _conv_Y);
@@ -77,9 +102,26 @@ std::tuple<torch::Tensor, torch::Tensor> MultiLevelDecoderModuleImpl::forward(
 
     torch::Tensor y;
     if (level > _level) {
-        auto originalType = x.scalar_type();
         x = _convTranspose1(x, context);
-        x = _resFourierConvBlock2(_resFourierConvBlock1(x, context), context);
+
+        // call res blocks
+        int resBlockId = 0;
+        for (const auto& resBlock : *_resBlocks) {
+            switch (_resBlockConfig[resBlockId]) {
+                case 'T': {
+                    x = resBlock->as<ViTBlock>()->forward(x);
+                }   break;
+                case 'C': {
+                    x = resBlock->as<AdaptiveResNetConvBlock>()->forward(x, context);
+                }   break;
+                case 'F': {
+                    x = resBlock->as<AdaptiveResNetFourierConvBlock>()->forward(x, context);
+                }   break;
+                default: {
+                }   break;
+            }
+            ++resBlockId;
+        }
 
         // auxiliary image output
         y = gelu(_bnAux(_convAux(x)), "tanh");

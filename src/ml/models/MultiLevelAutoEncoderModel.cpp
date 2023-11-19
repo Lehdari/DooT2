@@ -976,7 +976,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
 
     // Load the whole storage's pixel data to the GPU
     auto seq = scaleSequences(storage);
-
+#if 0
     // Random sample the pixel diff to get an approximation
     if (_useEncodingDistanceLoss) {
         for (int i=0; i<8; ++i) {
@@ -1006,7 +1006,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
             _batchEncDiff = _batchEncDiff*0.95 + 0.05*torch::norm(enc.index({b1})-enc.index({b2})).item<double>();
         }
     }
-
+#endif
     // Set training mode on
     _frameEncoder->train(true);
     _frameDecoder->train(true);
@@ -1417,7 +1417,7 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                         },
                         inImage, torch::kCPU
                     );
-                    _trainingInfo->images["input7"].write()->copyFrom(inImage.img7.data_ptr<float>());
+//                    _trainingInfo->images["input7"].write()->copyFrom(inImage.img7.data_ptr<float>());
                     _trainingInfo->images["input6"].write()->copyFrom(inImage.img6.data_ptr<float>());
                     _trainingInfo->images["input5"].write()->copyFrom(inImage.img5.data_ptr<float>());
                     _trainingInfo->images["input4"].write()->copyFrom(inImage.img4.data_ptr<float>());
@@ -1530,11 +1530,13 @@ void MultiLevelAutoEncoderModel::trainImpl(SequenceStorage& storage)
                             out.img0.index({displaySeqId}), out.img1.index({displaySeqId}),
                             out.img2.index({displaySeqId}), out.img3.index({displaySeqId}),
                             out.img4.index({displaySeqId}), out.img5.index({displaySeqId}),
-                            out.img6.index({displaySeqId}), out.img7.index({displaySeqId}), 0.0
+                            out.img6.index({displaySeqId}),
+                            //out.img7.index({displaySeqId}),
+                            torch::zeros({16, 3, 480, 640}, TensorOptions().device(_device)), 0.0
                         },
                         outImage, torch::kCPU
                     );
-                    _trainingInfo->images["prediction7"].write()->copyFrom(outImage.img7.data_ptr<float>());
+//                    _trainingInfo->images["prediction7"].write()->copyFrom(outImage.img7.data_ptr<float>());
                     _trainingInfo->images["prediction6"].write()->copyFrom(outImage.img6.data_ptr<float>());
                     _trainingInfo->images["prediction5"].write()->copyFrom(outImage.img5.data_ptr<float>());
                     _trainingInfo->images["prediction4"].write()->copyFrom(outImage.img4.data_ptr<float>());
@@ -1959,7 +1961,7 @@ void MultiLevelAutoEncoderModel::scaleDisplayImages(
     image.img6 = tf::interpolate(orig.img6.unsqueeze(0).to(torch::kFloat32), tf::InterpolateFuncOptions()
         .size(std::vector<long>{480, 640}).mode(kNearestExact).align_corners(false))
         .permute({0, 2, 3, 1}).squeeze().contiguous().to(device);
-    image.img7 = orig.img7.permute({1, 2, 0}).contiguous().to(device, torch::kFloat32);
+    //image.img7 = orig.img7.permute({1, 2, 0}).contiguous().to(device, torch::kFloat32);
 }
 
 torch::Tensor MultiLevelAutoEncoderModel::createRandomEncodingInterpolations(const Tensor& enc, double extrapolation)

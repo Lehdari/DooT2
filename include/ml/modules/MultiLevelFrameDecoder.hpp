@@ -18,6 +18,7 @@
 #include "ml/modules/AdaptiveResNetFourierConvBlock.hpp"
 #include "ml/modules/AdaptiveResNetConvBlock.hpp"
 #include "ml/modules/ResNetLinearBlock.hpp"
+#include "ml/modules/ViTBlock.hpp"
 
 
 namespace ml {
@@ -43,8 +44,8 @@ private:
     AdaptiveConvTranspose2d         _convTranspose1b;
     torch::nn::BatchNorm2d          _bn2a;
     torch::nn::BatchNorm2d          _bn2b;
-    AdaptiveResNetFourierConvBlock  _resFourierConvBlock1;
-    AdaptiveResNetFourierConvBlock  _resFourierConvBlock2;
+    AdaptiveResNetConvBlock         _resConvBlock1;
+    ViTBlock                        _vitBlock1;
     torch::nn::Conv2d               _convAux;
     torch::nn::BatchNorm2d          _bnAux;
     torch::nn::Conv2d               _conv_Y;
@@ -55,7 +56,7 @@ private:
     MultiLevelDecoderModule         _decoder4;
     MultiLevelDecoderModule         _decoder5;
     MultiLevelDecoderModule         _decoder6;
-    MultiLevelDecoderModule         _decoder7;
+//    MultiLevelDecoderModule         _decoder7;
 };
 TORCH_MODULE(MultiLevelFrameDecoder);
 
