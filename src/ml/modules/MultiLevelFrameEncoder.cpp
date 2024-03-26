@@ -17,12 +17,12 @@ using namespace torch;
 
 MultiLevelFrameEncoderImpl::MultiLevelFrameEncoderImpl(int featureMultiplier) :
 //    _encoder1       (5.5, 3, 8, 2, 2, 1, 4), // 320x240
-    _encoder2       ("", 4.5, 3, 8, 2, 2, 1, 4), // 160x120
-    _encoder3       ("", 3.5, 8, 16, 2, 2, 2, 4), // 80x60
-    _encoder4       ("", 2.5, 16, 32, 2, 2, 4, 4), // 40x30
-    _encoder5       ("", 1.5, 32, 64, 2, 2, 8, 4), // 20x15
-    _encoder6       ("", 0.5, 64, 128, 2, 1, 16, 4), // 10x15
-    _encoder7       ("", -0.5, 128, 256, 2, 3, 32, 2), // 5x5
+    _encoder2       ("C", 4.5, 3, 8, 2, 2, 1, 4), // 160x120
+    _encoder3       ("C", 3.5, 8, 16, 2, 2, 2, 4), // 80x60
+    _encoder4       ("C", 2.5, 16, 32, 2, 2, 4, 4), // 40x30
+    _encoder5       ("CT", 1.5, 32, 64, 2, 2, 8, 4), // 20x15
+    _encoder6       ("CTC", 0.5, 64, 128, 2, 1, 16, 4), // 10x15
+    _encoder7       ("CTC", -0.5, 128, 256, 2, 3, 32, 2), // 5x5
     _bn1            (nn::BatchNorm2dOptions(256)),
     _conv1          (nn::Conv2dOptions(256, 256, {2, 2}).bias(false).groups(64)),
     _resConvBlock1  (256, 512, 256, 64, 0.001),
