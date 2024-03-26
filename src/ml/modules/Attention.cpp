@@ -58,7 +58,7 @@ torch::Tensor AttentionImpl::forward(torch::Tensor x)
     x = _ln2k(x);
 
     // Dot product attention
-    x = torch::matmul(q, k.transpose(-1, -2)) * _scale;
+    x = torch::matmul(q, k.transpose(-1, -2)) * _scale; // BHSS
     x = _softmax1(x);
 
     // Gather attention-weighed output
