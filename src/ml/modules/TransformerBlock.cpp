@@ -32,7 +32,7 @@ torch::Tensor TransformerBlockImpl::forward(torch::Tensor x)
     // Attention
     x = x + _attention1(x);
     // MLP
-    x = x + _linear2(torch::silu(_linear1(_ln1(x))));
+    x = x + _linear2(torch::gelu(_linear1(_ln1(x)), "tanh"));
 
     return x;
 }
