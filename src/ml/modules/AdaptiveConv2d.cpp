@@ -95,17 +95,17 @@ torch::Tensor AdaptiveConv2dImpl::forward(torch::Tensor x, const torch::Tensor& 
     // Select filters from batch by multiplication-summation:
     // _weight and y are both casted to 6D ("B x F x O x I x Kh x Kw") and summed along F
     // to produce a filter for each entry in the batch.
-    torch::Tensor weight = (_weight.unsqueeze(0) * y.view({b, f, 1, 1, 1, 1})).sum(1);
+    torch::Tensor weight = (_weight.unsqueeze(0) * y.reshape({b, f, 1, 1, 1, 1})).sum(1);
 
     // filter weight modulation along output dimension ("B x O x I x Kh x Kw")
-    weight = weight * z.view({b, o, 1, 1, 1});
+    weight = weight * z.reshape({b, o, 1, 1, 1});
 
     // Batched convolution is not supported so weight and input are both converted so that batch dimensionality
     // is moved to the channels. The batches are kept separate with the groups (hence b*_groups) and casted
     // back to expected batch size and n. of channels after the convolution.
-    weight = weight.view({b*o, _weight.sizes()[2], _weight.sizes()[3], _weight.sizes()[4]});
-    x = tf::conv2d(x.view({1, b*c, x.sizes()[2], x.sizes()[3]}), weight, tf::Conv2dFuncOptions().groups(b*_groups));
-    x = x.view({b, o, x.sizes()[2], x.sizes()[3]});
+    weight = weight.reshape({b*o, _weight.sizes()[2], _weight.sizes()[3], _weight.sizes()[4]});
+    x = tf::conv2d(x.reshape({1, b*c, x.sizes()[2], x.sizes()[3]}), weight, tf::Conv2dFuncOptions().groups(b*_groups));
+    x = x.reshape({b, o, x.sizes()[2], x.sizes()[3]});
 
     return x;
 }
