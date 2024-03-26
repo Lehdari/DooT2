@@ -108,7 +108,7 @@ MultiLevelImage MultiLevelFrameDecoderImpl::forward(torch::Tensor x, double leve
 
     // First residual conv blocks
     x = _resConvBlock1(x, context);
-    //x = _vitBlock1(x);
+    x = _vitBlock1(x);
 
     // 5x5 auxiliary image output
     MultiLevelImage img;
